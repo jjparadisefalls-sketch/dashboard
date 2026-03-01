@@ -1758,6 +1758,18 @@ function InvSection(_ref20) {
     _useState32 = _slicedToArray(_useState31, 2),
     collapsed = _useState32[0],
     setCollapsed = _useState32[1];
+  var _useState31b = useState(null),
+    _useState32b = _slicedToArray(_useState31b, 2),
+    editingValueId = _useState32b[0],
+    setEditingValueId = _useState32b[1];
+  var _useState31c = useState(""),
+    _useState32c = _slicedToArray(_useState31c, 2),
+    editingValueText = _useState32c[0],
+    setEditingValueText = _useState32c[1];
+  var _useState31d = useState("alpha"),
+    _useState32d = _slicedToArray(_useState31d, 2),
+    sortMode = _useState32d[0],
+    setSortMode = _useState32d[1];
 
   // Collate duplicate cards (same name+set+num+grader+grade)
   var collated = React.useMemo(function () {
@@ -1789,8 +1801,12 @@ function InvSection(_ref20) {
     } finally {
       _iterator2.f();
     }
-    return Array.from(map.values());
-  }, [cards]);
+    var arr = Array.from(map.values());
+    if (sortMode === "alpha") arr.sort(function(a,b){ return (a.name||"").localeCompare(b.name||""); });
+    else if (sortMode === "high") arr.sort(function(a,b){ return (b.value||0)-(a.value||0); });
+    else if (sortMode === "low") arr.sort(function(a,b){ return (a.value||0)-(b.value||0); });
+    return arr;
+  }, [cards, sortMode]);
   var totalPaid = cards.reduce(function (s, i) {
     return s + (i.paid || 0);
   }, 0);
@@ -1839,7 +1855,25 @@ function InvSection(_ref20) {
       color: "var(--muted)",
       fontFamily: "var(--mono)"
     }
-  }, cards.length, " cards"), totalPaid > 0 && /*#__PURE__*/React.createElement("span", {
+  }, cards.length, " cards"), /*#__PURE__*/React.createElement("span", {
+    style: { display: "flex", gap: 3, marginLeft: 4 },
+    onClick: function(e){ e.stopPropagation(); }
+  },
+  ["alpha","high","low"].map(function(mode) {
+    var labels = { alpha: "A-Z", high: "$ ↓", low: "$ ↑" };
+    return /*#__PURE__*/React.createElement("button", {
+      key: mode,
+      onClick: function(e){ e.stopPropagation(); setSortMode(mode); },
+      style: {
+        fontSize: 9, fontWeight: 600, padding: "1px 5px", borderRadius: 3,
+        border: "1px solid " + (sortMode === mode ? "var(--pt)" : "var(--border2)"),
+        background: sortMode === mode ? "rgba(79,158,255,0.15)" : "transparent",
+        color: sortMode === mode ? "var(--pt)" : "var(--muted)",
+        cursor: "pointer", fontFamily: "var(--mono)"
+      }
+    }, labels[mode]);
+  })
+), totalPaid > 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: "var(--muted)",
@@ -1950,7 +1984,35 @@ function InvSection(_ref20) {
         fontSize: 11,
         fontWeight: 600
       }
-    }, cur ? "$".concat(Number(cur).toFixed(2)) : "—", cumulBadge && /*#__PURE__*/React.createElement("span", {
+    }, item.status === "sold" && editingValueId === item.id ? /*#__PURE__*/React.createElement("input", {
+      autoFocus: true,
+      type: "number",
+      value: editingValueText,
+      onChange: function onChange(e) { setEditingValueText(e.target.value); },
+      onBlur: function onBlur() {
+        var v = parseFloat(editingValueText);
+        if (!isNaN(v) && v > 0) {
+          (item._ids || [item.id]).forEach(function(id) { update(id, { value: v }); });
+        }
+        setEditingValueId(null); setEditingValueText("");
+      },
+      onKeyDown: function onKeyDown(e) {
+        if (e.key === "Enter") e.target.blur();
+        if (e.key === "Escape") { setEditingValueId(null); setEditingValueText(""); }
+      },
+      style: {
+        width: 70, background: "var(--s3)", border: "1px solid var(--pt)",
+        borderRadius: 4, color: "var(--cards)", fontFamily: "var(--mono)",
+        fontSize: 11, fontWeight: 600, padding: "2px 5px", outline: "none"
+      }
+    }) : /*#__PURE__*/React.createElement("span", {
+      onClick: item.status === "sold" ? function() { setEditingValueId(item.id); setEditingValueText(cur ? String(Number(cur).toFixed(2)) : ""); } : undefined,
+      title: item.status === "sold" ? "Click to set sold price" : undefined,
+      style: {
+        cursor: item.status === "sold" ? "pointer" : "default",
+        borderBottom: item.status === "sold" && !cur ? "1px dashed var(--muted)" : "none"
+      }
+    }, cur ? "$".concat(Number(cur).toFixed(2)) : (item.status === "sold" ? "set price" : "—")), cumulBadge && /*#__PURE__*/React.createElement("span", {
       style: {
         display: "inline-block",
         marginLeft: 5,
