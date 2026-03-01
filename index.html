@@ -2228,10 +2228,18 @@ function InventoryTab(_ref21) {
                       _context.next = 22;
                       break;
                     }
-                    _context.next = 20;
-                    return pdPricing(pdId);
+                    // Skip if fetched within 24h (unless price cache was manually cleared)
+                    var _rfLastFetch = localStorage.getItem("cc:lastfetch:" + pdId);
+                    if (!(_rfLastFetch && Date.now() - Number(_rfLastFetch) < 24 * 3600 * 1000)) {
+                      _context.next = 20;
+                      break;
+                    }
+                    return _context.abrupt("continue", 26);
                   case 20:
-                    pd = _context.sent;
+                    _context.next = 22;
+                    return pdPricing(pdId);
+                  case 22:
+                    // pd may be undefined if we skipped
                     if (pd !== null && pd !== void 0 && pd.pricing) {
                       p = pd.pricing;
                       var _rGrader = (card.grader || "").toUpperCase().trim();
