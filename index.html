@@ -2234,7 +2234,11 @@ function InventoryTab(_ref21) {
                     pd = _context.sent;
                     if (pd !== null && pd !== void 0 && pd.pricing) {
                       p = pd.pricing;
-                      value = ((_p$TCGPlayer = p["TCGPlayer"]) === null || _p$TCGPlayer === void 0 ? void 0 : _p$TCGPlayer.value) || ((_p$eBayRaw = p["eBay Raw"]) === null || _p$eBayRaw === void 0 ? void 0 : _p$eBayRaw.value) || null;
+                      var _rGrader = (card.grader || "").toUpperCase().trim();
+                      var _rGrade = (card.grade || "").toString().trim();
+                      var _rGradedKey = _rGrader && _rGrade ? _rGrader + " " + parseFloat(_rGrade).toFixed(1) : null;
+                      var _rGradedPrice = _rGradedKey && p[_rGradedKey] && p[_rGradedKey].value > 0 ? p[_rGradedKey].value : null;
+                      value = _rGradedPrice || ((_p$TCGPlayer = p["TCGPlayer"]) === null || _p$TCGPlayer === void 0 ? void 0 : _p$TCGPlayer.value) || ((_p$eBayRaw = p["eBay Raw"]) === null || _p$eBayRaw === void 0 ? void 0 : _p$eBayRaw.value) || null;
                       if (value) {
                         // Always stamp lastfetch so we don't re-fetch for 24h
                         localStorage.setItem("cc:lastfetch:" + pdId, String(Date.now()));
@@ -2635,9 +2639,27 @@ function InventoryTab(_ref21) {
                           return _context3.abrupt("return", 1);
                         case 3:
                           _context3.prev = 3;
-                          _context3.next = 6;
-                          return pdSearch(card.name);
+                          // Check search ID cache first
+                          var _sKey = "cc:searchid:" + (card.name||"").toLowerCase().trim() + "|" + (card.set||"").toLowerCase().trim() + "|" + (card.num||"").toLowerCase().trim();
+                          var _cachedMatchId = localStorage.getItem(_sKey);
+                          if (!_cachedMatchId) {
+                            _context3.next = 6;
+                            break;
+                          }
+                          // Have cached ID - check price cache
+                          var _directKey = "cc:lastfetch:" + _cachedMatchId;
+                          var _directFetch = localStorage.getItem(_directKey);
+                          if (!(_directFetch && Date.now() - Number(_directFetch) < 24 * 3600 * 1000)) {
+                            _context3.next = 6;
+                            break;
+                          }
+                          var _directExisting = (inv || []).find(function(x) { return x.pokedataId === _cachedMatchId && x.value; });
+                          updated[idx] = _objectSpread(_objectSpread({}, card), {}, { value: _directExisting ? _directExisting.value : null, pokedataId: _cachedMatchId });
+                          return _context3.abrupt("return", 1);
                         case 6:
+                          _context3.next = 8;
+                          return pdSearch(card.name);
+                        case 8:
                           results = _context3.sent;
                           matches = Array.isArray(results) ? results : [];
                           cardNum = (card.num || "").toLowerCase().trim();
@@ -2653,17 +2675,18 @@ function InventoryTab(_ref21) {
                             break;
                           }
                           // Check 24h cache — skip API if recently fetched
-                          var _csvCacheKey = "cc:lastfetch:" + String(match.id);
+                          // Save search result to cache so future uploads skip pdSearch
+                            localStorage.setItem("cc:searchid:" + (card.name||"").toLowerCase().trim() + "|" + (card.set||"").toLowerCase().trim() + "|" + (card.num||"").toLowerCase().trim(), String(match.id));
+                            var _csvCacheKey = "cc:lastfetch:" + String(match.id);
                           var _csvLastFetch = localStorage.getItem(_csvCacheKey);
                           var _csvCacheHit = _csvLastFetch && (Date.now() - Number(_csvLastFetch) < 24 * 3600 * 1000);
                           if (_csvCacheHit) {
                             // Reuse cached price from existing inventory
                             var _csvExisting = (inv || []).find(function(x) { return x.pokedataId === String(match.id) && x.value; });
-                            if (_csvExisting) {
-                              updated[idx] = _objectSpread(_objectSpread({}, card), {}, { value: _csvExisting.value, pokedataId: String(match.id) });
-                              _context3.next = 16;
-                              break;
-                            }
+                            var _cachedValue = _csvExisting ? _csvExisting.value : null;
+                            updated[idx] = _objectSpread(_objectSpread({}, card), {}, { value: _cachedValue, pokedataId: String(match.id) });
+                            _context3.next = 16;
+                            break;
                           }
                           _context3.next = 14;
                           return pdPricing(match.id);
@@ -2671,7 +2694,11 @@ function InventoryTab(_ref21) {
                           pd = _context3.sent;
                           if (pd !== null && pd !== void 0 && pd.pricing) {
                             p = pd.pricing;
-                            value = ((_p$TCGPlayer2 = p["TCGPlayer"]) === null || _p$TCGPlayer2 === void 0 ? void 0 : _p$TCGPlayer2.value) || ((_p$eBayRaw2 = p["eBay Raw"]) === null || _p$eBayRaw2 === void 0 ? void 0 : _p$eBayRaw2.value) || null;
+                            var _grader = (card.grader || "").toUpperCase().trim();
+                            var _grade = (card.grade || "").toString().trim();
+                            var _gradedKey = _grader && _grade ? _grader + " " + parseFloat(_grade).toFixed(1) : null;
+                            var _gradedPrice = _gradedKey && p[_gradedKey] && p[_gradedKey].value > 0 ? p[_gradedKey].value : null;
+                            value = _gradedPrice || ((_p$TCGPlayer2 = p["TCGPlayer"]) === null || _p$TCGPlayer2 === void 0 ? void 0 : _p$TCGPlayer2.value) || ((_p$eBayRaw2 = p["eBay Raw"]) === null || _p$eBayRaw2 === void 0 ? void 0 : _p$eBayRaw2.value) || null;
                             if (value) {
                               localStorage.setItem(_csvCacheKey, String(Date.now()));
                               if (!getBaseline(String(match.id))) setBaseline(String(match.id), value);
@@ -4205,7 +4232,11 @@ function useAutoSnapshot(wl, inv, setInv) {
                       _pd = _context10.sent;
                       if (_pd !== null && _pd !== void 0 && _pd.pricing) {
                         _p = _pd.pricing;
-                        value = ((_p$TCGPlayer11 = _p["TCGPlayer"]) === null || _p$TCGPlayer11 === void 0 ? void 0 : _p$TCGPlayer11.value) || ((_p$eBayRaw11 = _p["eBay Raw"]) === null || _p$eBayRaw11 === void 0 ? void 0 : _p$eBayRaw11.value) || null;
+                        var _sGrader = (card.grader || "").toUpperCase().trim();
+                        var _sGrade = (card.grade || "").toString().trim();
+                        var _sGradedKey = _sGrader && _sGrade ? _sGrader + " " + parseFloat(_sGrade).toFixed(1) : null;
+                        var _sGradedPrice = _sGradedKey && _p[_sGradedKey] && _p[_sGradedKey].value > 0 ? _p[_sGradedKey].value : null;
+                        value = _sGradedPrice || ((_p$TCGPlayer11 = _p["TCGPlayer"]) === null || _p$TCGPlayer11 === void 0 ? void 0 : _p$TCGPlayer11.value) || ((_p$eBayRaw11 = _p["eBay Raw"]) === null || _p$eBayRaw11 === void 0 ? void 0 : _p$eBayRaw11.value) || null;
                         if (value) {
                           savePriceSnapshot(card.pokedataId, value);
                           // Update value in inventory
