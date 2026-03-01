@@ -4139,7 +4139,7 @@ function useAutoSnapshot(wl, inv, setInv) {
             case 0:
               now = new Date();
               lastRun = localStorage.getItem("cc:lastSnap");
-              todayKey = "".concat(now.toDateString(), "-").concat(now.getHours() < 16 ? "am" : "pm");
+              todayKey = "".concat(now.toDateString(), "-10am");
               if (!(lastRun === todayKey)) {
                 _context11.next = 5;
                 break;
@@ -4267,12 +4267,12 @@ function useAutoSnapshot(wl, inv, setInv) {
     var check = function check() {
       var h = new Date().getHours();
       var m = new Date().getMinutes();
-      if ((h === 6 || h === 16) && m === 0) runSnapshots();
+      if (h === 10 && m === 0) runSnapshots();
     };
 
     // Also run on load if past the snapshot time and not yet run today
     var h = new Date().getHours();
-    if (h >= 6) runSnapshots();
+    if (h >= 10) runSnapshots();
     var interval = setInterval(check, 60000);
     return function () {
       return clearInterval(interval);
