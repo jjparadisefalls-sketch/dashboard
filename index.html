@@ -1819,9 +1819,9 @@ function InvSection(_ref20) {
   }, "No cards here yet") : /*#__PURE__*/React.createElement("table", {
     className: "inv-table"
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Card"), /*#__PURE__*/React.createElement("th", null, "Set"), /*#__PURE__*/React.createElement("th", null, "#"), /*#__PURE__*/React.createElement("th", null, "Grade"), /*#__PURE__*/React.createElement("th", null, "Paid"), /*#__PURE__*/React.createElement("th", null, "Market"), /*#__PURE__*/React.createElement("th", null, "P&L"), /*#__PURE__*/React.createElement("th", null, "1d"), /*#__PURE__*/React.createElement("th", null, "7d"), /*#__PURE__*/React.createElement("th", null, "30d"), /*#__PURE__*/React.createElement("th", null, "Notes"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, collated.map(function (item) {
-    var effectivePaid = item.totalPaid || item.paid || 0;
-    var effectiveValue = (item.value || 0) * (item.qty || 1);
-    var pl = effectiveValue - effectivePaid;
+    var effectivePaid = item.totalPaid ? item.totalPaid / (item.qty || 1) : (item.paid || 0);
+    var effectiveValue = item.value || 0;
+    var pl = (effectiveValue - effectivePaid) * (item.qty || 1);
     var snapId = item.pokedataId || item.id;
     var hist = getPriceHistory(String(snapId));
     var cur = item.value || (hist === null || hist === void 0 ? void 0 : hist.latest);
