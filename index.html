@@ -2626,13 +2626,27 @@ function InventoryTab(_ref21) {
               while (1) switch (_context4.prev = _context4.next) {
                 case 0:
                   updated = [].concat(imported);
+                  // PRE-FLIGHT: resolve cached cards before hitting the API loop
+                  updated = updated.map(function(card) {
+                    if (!card.num || !card.set) return card;
+                    var _sk = "cc:searchid:" + (card.name||"").toLowerCase().trim() + "|" + (card.set||"").toLowerCase().trim() + "|" + (card.num||"").toLowerCase().trim();
+                    var _sid = localStorage.getItem(_sk);
+                    if (!_sid) return card;
+                    var _fk = "cc:lastfetch:" + _sid;
+                    var _ft = localStorage.getItem(_fk);
+                    var _fresh = _ft && (Date.now() - Number(_ft) < 24 * 3600 * 1000);
+                    if (!_fresh) return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid });
+                    var _ex = (inv || []).find(function(x) { return x.pokedataId === _sid && x.value; });
+                    return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid, value: _ex ? _ex.value : card.value, _skipFetch: true });
+                  });
                   _loop2 = /*#__PURE__*/_regeneratorRuntime().mark(function _loop2() {
                     var card, results, matches, cardNum, cardSet, match, pd, _p$TCGPlayer2, _p$eBayRaw2, p, value, toUpdate;
                     return _regeneratorRuntime().wrap(function _loop2$(_context3) {
                       while (1) switch (_context3.prev = _context3.next) {
                         case 0:
                           card = updated[idx];
-                          if (!(!card.num || !card.set)) {
+                          // Skip if pre-flight already resolved this card
+                          if (!card._skipFetch && !(!card.num || !card.set)) {
                             _context3.next = 3;
                             break;
                           }
