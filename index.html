@@ -1565,7 +1565,13 @@ function SealedSection(_ref18) {
       fontFamily: "var(--mono)",
       color: profit >= 0 ? "#34d399" : "#f87171"
     }
-  }, profit >= 0 ? "+" : "", "$", profit.toFixed(2)), /*#__PURE__*/React.createElement("span", {
+  }, profit >= 0 ? "+" : "", "$", profit.toFixed(2)), totalPaid > 0 && totalValue > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      fontFamily: "var(--mono)",
+      color: profit >= 0 ? "#34d399" : "#f87171"
+    }
+  }, "(", (profit / totalPaid * 100).toFixed(1), "%)"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: "var(--muted)"
@@ -1845,7 +1851,13 @@ function InvSection(_ref20) {
       fontFamily: "var(--mono)",
       color: totalProfit >= 0 ? "#34d399" : "#f87171"
     }
-  }, totalProfit >= 0 ? "+" : "", "$", totalProfit.toFixed(2)), /*#__PURE__*/React.createElement("span", {
+  }, totalProfit >= 0 ? "+" : "", "$", totalProfit.toFixed(2)), totalPaid > 0 && totalValue > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      fontFamily: "var(--mono)",
+      color: totalProfit >= 0 ? "#34d399" : "#f87171"
+    }
+  }, "(", (totalProfit / totalPaid * 100).toFixed(1), "%)"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: "var(--muted)"
