@@ -2234,7 +2234,7 @@ function InventoryTab(_ref21) {
                     }
                     // Skip if fetched within 24h (unless price cache was manually cleared)
                     var _rfLastFetch = localStorage.getItem("cc:lastfetch:" + pdId);
-                    if (!(_rfLastFetch && Date.now() - Number(_rfLastFetch) < 24 * 3600 * 1000)) {
+                    if (!(_rfLastFetch && Date.now() - Number(_rfLastFetch) < 144 * 3600 * 1000)) {
                       _context.next = 20;
                       break;
                     }
@@ -2471,8 +2471,14 @@ function InventoryTab(_ref21) {
     onClick: function onClick() {
       var missing = (inv || []).filter(function(x) { return x.sport === activeSport && !x.sealed && !x.value && x.pokedataId; });
       var noId = (inv || []).filter(function(x) { return x.sport === activeSport && !x.sealed && !x.value && !x.pokedataId; });
+      // Clear price cache for cards with ID but no value
       missing.forEach(function(x) { localStorage.removeItem("cc:lastfetch:" + x.pokedataId); });
-      alert("Cleared cache for " + missing.length + " cards with no price. " + (noId.length > 0 ? noId.length + " cards have no pokedata ID yet (re-upload CSV to match them)." : "") + " Now hit Refresh All Prices.");
+      // Clear search cache for cards with no ID so they re-search
+      noId.forEach(function(x) {
+        var sk = "cc:searchid:" + (x.name||"").toLowerCase().trim() + "|" + (x.set||"").toLowerCase().trim() + "|" + (x.num||"").toLowerCase().trim();
+        localStorage.removeItem(sk);
+      });
+      alert("Cleared cache for " + missing.length + " priced cards and " + noId.length + " unmatched cards. Now hit Refresh All Prices.");
     }
   }, "🔄 Fix Missing"), /*#__PURE__*/React.createElement("div", null, STATUSES.map(function (s) {
     return /*#__PURE__*/React.createElement(InvSection, {
@@ -2683,7 +2689,7 @@ function InventoryTab(_ref21) {
                     if (!_sid) return card;
                     var _fk = "cc:lastfetch:" + _sid;
                     var _ft = localStorage.getItem(_fk);
-                    var _fresh = _ft && (Date.now() - Number(_ft) < 24 * 3600 * 1000);
+                    var _fresh = _ft && (Date.now() - Number(_ft) < 144 * 3600 * 1000);
                     if (!_fresh) return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid });
                     var _ex = (inv || []).find(function(x) { return x.pokedataId === _sid && x.value; });
                     return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid, value: _ex ? _ex.value : card.value, _skipFetch: true });
@@ -2712,7 +2718,7 @@ function InventoryTab(_ref21) {
                           // Have cached ID - check price cache
                           var _directKey = "cc:lastfetch:" + _cachedMatchId;
                           var _directFetch = localStorage.getItem(_directKey);
-                          if (!(_directFetch && Date.now() - Number(_directFetch) < 24 * 3600 * 1000)) {
+                          if (!(_directFetch && Date.now() - Number(_directFetch) < 144 * 3600 * 1000)) {
                             _context3.next = 6;
                             break;
                           }
@@ -2743,7 +2749,7 @@ function InventoryTab(_ref21) {
                             localStorage.setItem("cc:searchid:" + (card.name||"").toLowerCase().trim() + "|" + (card.set||"").toLowerCase().trim() + "|" + (card.num||"").toLowerCase().trim(), String(match.id));
                             var _csvCacheKey = "cc:lastfetch:" + String(match.id);
                           var _csvLastFetch = localStorage.getItem(_csvCacheKey);
-                          var _csvCacheHit = _csvLastFetch && (Date.now() - Number(_csvLastFetch) < 24 * 3600 * 1000);
+                          var _csvCacheHit = _csvLastFetch && (Date.now() - Number(_csvLastFetch) < 144 * 3600 * 1000);
                           if (_csvCacheHit) {
                             // Reuse cached price from existing inventory
                             var _csvExisting = (inv || []).find(function(x) { return x.pokedataId === String(match.id) && x.value; });
@@ -4362,12 +4368,17 @@ function useAutoSnapshot(wl, inv, setInv) {
     var check = function check() {
       var h = new Date().getHours();
       var m = new Date().getMinutes();
-      if (h === 10 && m === 0) runSnapshots();
+      // Run every 6 days at 10am
+      var _dayOfYear = Math.floor(Date.now() / (6 * 24 * 3600 * 1000));
+      var _snapKey6 = "cc:lastSnap6:" + _dayOfYear;
+      if (h === 10 && m === 0 && !localStorage.getItem(_snapKey6)) { localStorage.setItem(_snapKey6, "1"); runSnapshots(); }
     };
 
     // Also run on load if past the snapshot time and not yet run today
     var h = new Date().getHours();
-    if (h >= 10) runSnapshots();
+    var _dayOfYear2 = Math.floor(Date.now() / (6 * 24 * 3600 * 1000));
+    var _snapKey62 = "cc:lastSnap6:" + _dayOfYear2;
+    if (h >= 10 && !localStorage.getItem(_snapKey62)) { localStorage.setItem(_snapKey62, "1"); runSnapshots(); }
     var interval = setInterval(check, 60000);
     return function () {
       return clearInterval(interval);
