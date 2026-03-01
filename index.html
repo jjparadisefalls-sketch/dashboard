@@ -2433,7 +2433,25 @@ function InventoryTab(_ref21) {
         setInv((inv || []).filter(function(x) { return x.sport !== activeSport; }));
       }
     }
-  }, "🗑 Clear All"), /*#__PURE__*/React.createElement("div", null, STATUSES.map(function (s) {
+  }, "🗑 Clear All"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      background: "rgba(167,139,250,0.15)",
+      border: "1px solid rgba(167,139,250,0.3)",
+      borderRadius: 7,
+      padding: "7px 14px",
+      color: "#a78bfa",
+      fontSize: 12,
+      fontWeight: 600,
+      cursor: "pointer",
+      marginLeft: 8
+    },
+    onClick: function onClick() {
+      var graded = (inv || []).filter(function(x) { return x.sport === activeSport && x.grader && x.grade && x.pokedataId; });
+      if (graded.length === 0) { alert("No graded cards found."); return; }
+      graded.forEach(function(x) { localStorage.removeItem("cc:lastfetch:" + x.pokedataId); });
+      alert("Cache cleared for " + graded.length + " graded card(s). Now hit Refresh All Prices.");
+    }
+  }, "🏅 Refresh Graded"), /*#__PURE__*/React.createElement("div", null, STATUSES.map(function (s) {
     return /*#__PURE__*/React.createElement(InvSection, {
       key: s.id,
       title: s.label,
