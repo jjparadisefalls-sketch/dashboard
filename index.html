@@ -1254,193 +1254,119 @@ function Notes() {
   }));
 }
 
-// ── Price move threshold helpers ──────────────────────────────────────────
-function getPriceThreshold(price) {
-  if (!price || price < 5)   return 0.25;  // 25% for <$5
-  if (price <= 15)           return 0.10;  // 10% for $5-$15
-  if (price <= 50)           return 0.05;  // 5%  for $15.01-$50
-  if (price <= 250)          return 0.025; // 2.5% for $50.01-$250
-  return 0.015;                            // 1.5% for $250.01+
-}
 
-function getBaseline(pdId) {
-  if (!pdId) return null;
-  try {
-    var raw = localStorage.getItem("cc:baseline:" + pdId);
-    return raw ? JSON.parse(raw) : null;
-  } catch(e) { return null; }
-}
+// ── Price snapshot & history helpers ─────────────────────────────────────
+var SNAP_PFX   = "cc:snap:";
+var FETCH_PFX  = "cc:lastfetch:";
+var SEARCH_PFX = "cc:searchid:";
+var FETCH_CACHE_MS = 24 * 3600 * 1000; // 24 hours
+var DAY_MS = 86400000;
 
-function setBaseline(pdId, price) {
+function saveSnap(pdId, price) {
   if (!pdId || !price) return;
-  try {
-    localStorage.setItem("cc:baseline:" + pdId, JSON.stringify({
-      price: price,
-      date: new Date().toDateString(),
-      ts: Date.now()
-    }));
-  } catch(e) {}
-}
-
-function getCumulativeBadge(pdId, currentPrice) {
-  if (!pdId || !currentPrice) return null;
-  var baseline = getBaseline(pdId);
-  if (!baseline || !baseline.price) return null;
-  var pct = (currentPrice - baseline.price) / baseline.price * 100;
-  var threshold = getPriceThreshold(baseline.price) * 100;
-  // Only show badge if cumulative move exceeds threshold
-  if (Math.abs(pct) < threshold) return null;
-  // Calculate days since baseline was set
-  var days = Math.round((Date.now() - baseline.ts) / 864e5);
-  if (days < 1) days = 1;
-  var sign = pct > 0 ? "+" : "";
-  var color = pct > 0 ? "#34d399" : "#f87171";
-  var bg = pct > 0 ? "rgba(52,211,153,0.12)" : "rgba(248,113,113,0.12)";
-  return { label: days + "d " + sign + pct.toFixed(1) + "%", color: color, bg: bg };
-}
-
-// ── Price snapshot helpers (global) ──────────────────────────────────────
-function savePriceSnapshot(cardId, price) {
-  if (!cardId || !price) return;
-  var key = "cc:snap:" + cardId;
   var snaps = [];
-  try {
-    snaps = JSON.parse(localStorage.getItem(key) || "[]");
-  } catch (e) {}
+  try { snaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
   var today = new Date().toDateString();
-  if (snaps.length === 0 || snaps[snaps.length - 1].date !== today) {
-    snaps.push({
-      date: today,
-      ts: Date.now(),
-      price: price
-    });
-    if (snaps.length > 60) snaps = snaps.slice(-60);
-    localStorage.setItem(key, JSON.stringify(snaps));
+  if (!snaps.length || snaps[snaps.length-1].date !== today) {
+    snaps.push({ date: today, ts: Date.now(), price: price });
+    if (snaps.length > 90) snaps = snaps.slice(-90);
+    try { localStorage.setItem(SNAP_PFX + pdId, JSON.stringify(snaps)); } catch(e) {}
   }
 }
-function getPriceHistory(cardId) {
-  var _snaps;
-  var key = "cc:snap:" + cardId;
+
+function getHistory(pdId) {
+  if (!pdId) return null;
   var snaps = [];
-  try {
-    snaps = JSON.parse(localStorage.getItem(key) || "[]");
-  } catch (e) {}
-  if (snaps.length === 0) return null;
-  var now = Date.now();
-  var day = 864e5;
-  var latest = (_snaps = snaps[snaps.length - 1]) === null || _snaps === void 0 ? void 0 : _snaps.price;
-  var find = function find(daysAgo) {
-    var target = now - day * daysAgo;
-    var closest = null,
-      minDiff = Infinity;
-    var _iterator = _createForOfIteratorHelper(snaps),
-      _step;
-    try {
-      for (_iterator.s(); !(_step = _iterator.n()).done;) {
-        var s = _step.value;
-        var diff = Math.abs(s.ts - target);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closest = s;
-        }
-      }
-    } catch (err) {
-      _iterator.e(err);
-    } finally {
-      _iterator.f();
+  try { snaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
+  if (!snaps.length) return null;
+  var latest = snaps[snaps.length-1].price;
+  var find = function(daysAgo) {
+    var target = Date.now() - DAY_MS * daysAgo;
+    var closest = null, minDiff = Infinity;
+    for (var i = 0; i < snaps.length; i++) {
+      var d = Math.abs(snaps[i].ts - target);
+      if (d < minDiff) { minDiff = d; closest = snaps[i]; }
     }
-    return closest && minDiff < day * 1.5 ? closest.price : null;
+    return (closest && minDiff < DAY_MS * 1.5) ? closest.price : null;
   };
-  return {
-    latest: latest,
-    price1d: find(1),
-    price7d: find(7),
-    price30d: find(30),
-    snapCount: snaps.length
-  };
+  return { latest: latest, p3d: find(3), p7d: find(7), p30d: find(30), count: snaps.length };
 }
 
-// ── Pokémon Market ─────────────────────────────────────────────────────────
-// ── Sport badge helper ────────────────────────────────────────────────────
-var SPORTS_MAP = {
-  pokemon: {
-    label: "Pokémon",
-    emoji: "⚡",
-    color: "#f0c040",
-    bg: "rgba(240,192,64,0.12)"
-  },
-  disney: {
-    label: "Disney",
-    emoji: "✨",
-    color: "#a78bfa",
-    bg: "rgba(167,139,250,0.12)"
-  },
-  baseball: {
-    label: "Baseball",
-    emoji: "⚾",
-    color: "#34d399",
-    bg: "rgba(52,211,153,0.12)"
-  },
-  football: {
-    label: "Football",
-    emoji: "🏈",
-    color: "#f87171",
-    bg: "rgba(248,113,113,0.12)"
-  },
-  basketball: {
-    label: "Basketball",
-    emoji: "🏀",
-    color: "#fb923c",
-    bg: "rgba(251,146,60,0.12)"
+// Extract the best price for a card from PokeData pricing response
+function extractPrice(pricing, grader, grade) {
+  if (!pricing) return null;
+  var g = (grader || "").toUpperCase().trim();
+  var n = (grade  || "").toString().trim();
+  var gradedKey = (g && n) ? g + " " + parseFloat(n).toFixed(1) : null;
+  if (gradedKey && pricing[gradedKey] && pricing[gradedKey].value > 0) return pricing[gradedKey].value;
+  return (pricing["TCGPlayer"] && pricing["TCGPlayer"].value) ||
+         (pricing["eBay Raw"]  && pricing["eBay Raw"].value)  || null;
+}
+
+// Find best matching card from search results
+function findBestMatch(results, card) {
+  var name = (card.name || "").toLowerCase().trim();
+  var num  = (card.num  || "").toLowerCase().trim();
+  var set  = (card.set  || "").toLowerCase().trim();
+  var eng  = results.filter(function(r) { return r.language === "ENGLISH"; });
+  var sameName = function(r) { return (r.name || "").toLowerCase() === name; };
+  var sameNum  = function(r) { return (r.num  || "").toLowerCase() === num; };
+  var sameSet  = function(r) {
+    var sc = (r.set_code || "").toLowerCase();
+    var sn = (r.set_name || "").toLowerCase();
+    return sc === set || sn === set || sc.includes(set) || set.includes(sc);
+  };
+  var m = eng.find(function(r) { return sameName(r) && num && sameNum(r) && set && sameSet(r); });
+  if (!m && num) m = eng.find(function(r) { return sameName(r) && sameNum(r); });
+  if (!m && set) m = eng.find(function(r) { return sameName(r) && sameSet(r); });
+  if (!m)        m = eng.find(function(r) { return sameName(r); });
+  return m || null;
+}
+
+// Fetch/cache price for one card. Reuses cache on re-import.
+async function fetchCardPrice(card) {
+  var pdId = card.pokedataId || null;
+
+  if (!pdId) {
+    var cacheKey = [(card.name||"").toLowerCase().trim(), (card.set||"").toLowerCase().trim(), (card.num||"").toLowerCase().trim()].join("|");
+    pdId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
+    if (!pdId) {
+      var results = await pdSearch(card.name);
+      var match = findBestMatch(Array.isArray(results) ? results : [], card);
+      if (!match) return { pdId: null, value: null };
+      pdId = String(match.id);
+      try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
+    }
   }
-};
-var SPORTS = Object.entries(SPORTS_MAP).map(function (_ref14) {
-  var _ref15 = _slicedToArray(_ref14, 2),
-    id = _ref15[0],
-    s = _ref15[1];
-  return _objectSpread({
-    id: id
-  }, s);
-});
-function SportBadge(_ref16) {
-  var sport = _ref16.sport;
-  var s = SPORTS_MAP[sport] || SPORTS_MAP.pokemon;
-  return /*#__PURE__*/React.createElement("span", {
-    className: "inv-sport",
-    style: {
-      background: s.bg,
-      color: s.color,
-      border: "1px solid ".concat(s.color, "33")
-    }
-  }, s.label);
-}
-function GradeBadge(_ref17) {
-  var grader = _ref17.grader,
-    grade = _ref17.grade;
-  if (!grader || grader === "raw") return /*#__PURE__*/React.createElement("span", {
-    className: "inv-grade grade-raw"
-  }, "Raw");
-  var cls = grader === "PSA" ? "grade-psa" : "grade-bgs";
-  return /*#__PURE__*/React.createElement("span", {
-    className: "inv-grade ".concat(cls)
-  }, grader, " ", grade);
+
+  // Cache hit — reuse existing price, don't call API
+  var lastFetch = localStorage.getItem(FETCH_PFX + pdId);
+  if (lastFetch && Date.now() - Number(lastFetch) < FETCH_CACHE_MS) {
+    return { pdId: pdId, value: card.value || null, cached: true };
+  }
+
+  // Fresh fetch
+  var pd = await pdPricing(pdId);
+  var value = extractPrice(pd && pd.pricing, card.grader, card.grade);
+  if (value) {
+    try { localStorage.setItem(FETCH_PFX + pdId, String(Date.now())); } catch(e) {}
+    saveSnap(pdId, value);
+  }
+  return { pdId: pdId, value: value };
 }
 
-// ── Inventory Tab ──────────────────────────────────────────────────────────
-var STATUSES = [{
-  id: "pc",
-  label: "PC",
-  color: "#60a5fa"
-}, {
-  id: "forsale",
-  label: "For Sale",
-  color: "#34d399"
-}, {
-  id: "sold",
-  label: "Sold",
-  color: "#f87171"
-}];
-var SEALED_TYPES = ["Booster Pack", "Booster Bundle", "Elite Trainer Box", "Booster Box", "Collection Box", "Tin", "Blister", "Other"];
+// ── Backward-compat shims (used by Watchlist/SearchTab code) ─────────────
+var savePriceSnapshot = saveSnap;
+var getPriceHistory   = getHistory;
+
+
+var STATUSES = [
+  { id: "pc",      label: "PC",       color: "#60a5fa" },
+  { id: "forsale", label: "For Sale",  color: "#34d399" },
+  { id: "sold",    label: "Sold",      color: "#f87171" },
+];
+var SEALED_TYPES = ["Booster Pack","Booster Bundle","Elite Trainer Box","Booster Box","Collection Box","Tin","Blister","Other"];
+
 function normalizeStatus(s) {
   if (!s) return "pc";
   var v = s.toLowerCase().trim().replace(/\s+/g, "");
@@ -1448,1478 +1374,550 @@ function normalizeStatus(s) {
   if (v === "sold") return "sold";
   return "pc";
 }
-function SealedSection(_ref18) {
-  var cards = _ref18.cards,
-    del = _ref18.del,
-    update = _ref18.update,
-    activeSport = _ref18.activeSport;
-  var _useState27 = useState(false),
-    _useState28 = _slicedToArray(_useState27, 2),
-    collapsed = _useState28[0],
-    setCollapsed = _useState28[1];
-  var _useState29 = useState({
-      name: "",
-      type: "Elite Trainer Box",
-      paid: "",
-      value: "",
-      qty: 1,
-      notes: ""
-    }),
-    _useState30 = _slicedToArray(_useState29, 2),
-    form = _useState30[0],
-    setForm = _useState30[1];
-  var add = function add() {
-    if (!form.name.trim()) return;
-    update(null, {
-      sealed: [].concat(_toConsumableArray(cards), [{
-        id: Date.now(),
-        name: form.name,
-        type: form.type,
-        paid: parseFloat(form.paid) || 0,
-        value: parseFloat(form.value) || 0,
-        qty: parseInt(form.qty) || 1,
-        notes: form.notes,
-        sport: activeSport
-      }])
-    });
-    setForm({
-      name: "",
-      type: "Elite Trainer Box",
-      paid: "",
-      value: "",
-      qty: 1,
-      notes: ""
-    });
-  };
-  var delSealed = function delSealed(id) {
-    return update(null, {
-      sealed: cards.filter(function (c) {
-        return c.id !== id;
-      })
-    });
-  };
-  var updateSealed = function updateSealed(id, changes) {
-    return update(null, {
-      sealed: cards.map(function (c) {
-        return c.id === id ? _objectSpread(_objectSpread({}, c), changes) : c;
-      })
-    });
-  };
-  var totalPaid = cards.reduce(function (s, c) {
-    return s + (c.paid || 0) * (c.qty || 1);
-  }, 0);
-  var totalValue = cards.reduce(function (s, c) {
-    return s + (c.value || 0) * (c.qty || 1);
-  }, 0);
-  var profit = totalValue - totalPaid;
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      padding: "4px 12px",
-      background: "var(--s2)",
-      borderRadius: 6,
-      cursor: "pointer",
-      marginBottom: 4
-    },
-    onClick: function onClick() {
-      return setCollapsed(function (c) {
-        return !c;
-      });
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 8,
-      height: 8,
-      borderRadius: "50%",
-      background: "#fb923c",
-      flexShrink: 0
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      fontWeight: 600,
-      color: "var(--text)",
-      flex: 1
-    }
-  }, "\uD83D\uDCE6 Sealed"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)",
-      fontFamily: "var(--mono)"
-    }
-  }, cards.length, " items"), totalPaid > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)",
-      fontFamily: "var(--mono)"
-    }
-  }, "paid $", totalPaid.toFixed(2)), totalValue > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      fontFamily: "var(--mono)",
-      color: profit >= 0 ? "#34d399" : "#f87171"
-    }
-  }, profit >= 0 ? "+" : "", "$", profit.toFixed(2)), totalPaid > 0 && totalValue > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      fontFamily: "var(--mono)",
-      color: profit >= 0 ? "#34d399" : "#f87171"
-    }
-  }, "(", (profit / totalPaid * 100).toFixed(1), "%)"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)"
-    }
-  }, collapsed ? "▶" : "▼")), !collapsed && /*#__PURE__*/React.createElement("div", {
-    className: "panel",
-    style: {
-      padding: 0
-    }
-  }, cards.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "8px 12px",
-      fontSize: 11,
-      color: "var(--muted)"
-    }
-  }, "No sealed product yet") : /*#__PURE__*/React.createElement("table", {
-    className: "inv-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Product"), /*#__PURE__*/React.createElement("th", null, "Type"), /*#__PURE__*/React.createElement("th", null, "Qty"), /*#__PURE__*/React.createElement("th", null, "Paid ea."), /*#__PURE__*/React.createElement("th", null, "Value ea."), /*#__PURE__*/React.createElement("th", null, "P&L"), /*#__PURE__*/React.createElement("th", null, "Notes"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, cards.map(function (item) {
-    var avgPaid = item.totalPaid ? item.totalPaid / (item.qty || 1) : (item.paid || 0);
-    var pl = ((item.value || 0) - avgPaid) * (item.qty || 1);
-    return /*#__PURE__*/React.createElement("tr", {
-      key: item.id
-    }, /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontWeight: 500,
-        maxWidth: 160,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap"
-      }
-    }, item.name), /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontSize: 10,
-        color: "var(--muted)"
-      }
-    }, item.type), /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontFamily: "var(--mono)",
-        fontSize: 11
-      }
-    }, item.qty || 1), /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontFamily: "var(--mono)",
-        color: "var(--muted2)",
-        fontSize: 11
-      }
-    }, "$", (item.totalPaid ? (item.totalPaid / (item.qty || 1)) : (item.paid || 0)).toFixed(2)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("input", {
-      type: "number",
-      className: "add-in",
-      style: {
-        width: 70,
-        padding: "1px 4px",
-        fontSize: 11
-      },
-      value: item.value || "",
-      placeholder: "\u2014",
-      onChange: function onChange(e) {
-        return updateSealed(item.id, {
-          value: parseFloat(e.target.value) || 0
-        });
-      }
-    })), /*#__PURE__*/React.createElement("td", {
-      className: pl > 0 ? "profit-pos" : pl < 0 ? "profit-neg" : "profit-neu",
-      style: {
-        fontSize: 11
-      }
-    }, pl !== 0 ? (pl >= 0 ? "+" : "") + "$" + Math.abs(pl).toFixed(2) : "—"), /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontSize: 10,
-        color: "var(--muted)"
-      }
-    }, item.notes), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("button", {
-      className: "row-del",
-      style: {
-        opacity: 1
-      },
-      onClick: function onClick() {
-        return delSealed(item.id);
-      }
-    }, Ico.trash)));
-  }))), /*#__PURE__*/React.createElement("div", {
-    className: "inv-add-form",
-    style: {
-      borderTop: "1px solid var(--border)",
-      padding: "6px 12px"
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    className: "add-in",
-    placeholder: "Product name e.g. 151 Booster Bundle",
-    style: {
-      flex: 2
-    },
-    value: form.name,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        name: e.target.value
-      }));
-    },
-    onKeyDown: function onKeyDown(e) {
-      return e.key === "Enter" && add();
-    }
-  }), /*#__PURE__*/React.createElement("select", {
-    className: "add-select",
-    value: form.type,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        type: e.target.value
-      }));
-    }
-  }, SEALED_TYPES.map(function (t) {
-    return /*#__PURE__*/React.createElement("option", {
-      key: t,
-      value: t
-    }, t);
-  })), /*#__PURE__*/React.createElement("input", {
-    className: "add-in",
-    placeholder: "Qty",
-    type: "number",
-    style: {
-      width: 55
-    },
-    value: form.qty,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        qty: e.target.value
-      }));
-    }
-  }), /*#__PURE__*/React.createElement("input", {
-    className: "add-in",
-    placeholder: "Paid $",
-    type: "number",
-    style: {
-      width: 80
-    },
-    value: form.paid,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        paid: e.target.value
-      }));
-    }
-  }), /*#__PURE__*/React.createElement("input", {
-    className: "add-in",
-    placeholder: "Value $",
-    type: "number",
-    style: {
-      width: 80
-    },
-    value: form.value,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        value: e.target.value
-      }));
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "add-submit",
-    onClick: add
-  }, Ico.plus, " Add"))));
-}
-function StatusBadge(_ref19) {
-  var status = _ref19.status;
-  var s = STATUSES.find(function (x) {
-    return x.id === status;
-  }) || STATUSES[0];
-  return /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9,
-      fontWeight: 600,
-      padding: "1px 5px",
-      borderRadius: 3,
-      background: s.color + "22",
-      color: s.color,
-      border: "1px solid ".concat(s.color, "44"),
-      fontFamily: "var(--mono)"
-    }
-  }, s.label);
-}
-function InvSection(_ref20) {
-  var title = _ref20.title,
-    color = _ref20.color,
-    cards = _ref20.cards,
-    del = _ref20.del,
-    update = _ref20.update,
-    clearSection = _ref20.clearSection;
-  var _useState31 = useState(false),
-    _useState32 = _slicedToArray(_useState31, 2),
-    collapsed = _useState32[0],
-    setCollapsed = _useState32[1];
-  var _useState31b = useState(null),
-    _useState32b = _slicedToArray(_useState31b, 2),
-    editingValueId = _useState32b[0],
-    setEditingValueId = _useState32b[1];
-  var _useState31c = useState(""),
-    _useState32c = _slicedToArray(_useState31c, 2),
-    editingValueText = _useState32c[0],
-    setEditingValueText = _useState32c[1];
-  var _useState31d = useState("alpha"),
-    _useState32d = _slicedToArray(_useState31d, 2),
-    sortMode = _useState32d[0],
-    setSortMode = _useState32d[1];
 
-  // Collate duplicate cards (same name+set+num+grader+grade)
-  var collated = React.useMemo(function () {
-    var map = new Map();
-    var _iterator2 = _createForOfIteratorHelper(cards),
-      _step2;
-    try {
-      for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
-        var card = _step2.value;
-        var key = "".concat((card.name || "").toLowerCase().trim(), "|").concat((card.set || "").toLowerCase().trim(), "|").concat((card.num || "").toLowerCase().trim(), "|").concat((card.grader || "raw").toLowerCase(), "|").concat((card.grade || "").toLowerCase());
-        if (map.has(key)) {
-          var existing = map.get(key);
-          existing.qty = (existing.qty || 1) + 1;
-          existing.totalPaid = (existing.totalPaid || 0) + (card.paid || 0);
-          existing._ids.push(card.id);
-          // Use pokedataId if available
-          if (card.pokedataId && !existing.pokedataId) existing.pokedataId = card.pokedataId;
-          if (card.value && !existing.value) existing.value = card.value;
-        } else {
-          map.set(key, _objectSpread(_objectSpread({}, card), {}, {
-            qty: 1,
-            totalPaid: card.paid || 0,
-            _ids: [card.id]
-          }));
-        }
-      }
-    } catch (err) {
-      _iterator2.e(err);
-    } finally {
-      _iterator2.f();
-    }
-    var arr = Array.from(map.values());
-    if (sortMode === "alpha") arr.sort(function(a,b){ return (a.name||"").localeCompare(b.name||""); });
-    else if (sortMode === "high") arr.sort(function(a,b){ return (b.value||0)-(a.value||0); });
-    else if (sortMode === "low") arr.sort(function(a,b){ return (a.value||0)-(b.value||0); });
-    return arr;
-  }, [cards, sortMode]);
-  var _pricedOnly = cards.filter(function(i) { return i.value && i.value > 0; });
-  var totalPaid = _pricedOnly.reduce(function (s, i) { return s + (i.paid || 0); }, 0);
-  var totalValue = collated.filter(function(i) { return i.value && i.value > 0; }).reduce(function (s, i) { return s + (i.value || 0) * (i.qty || 1); }, 0);
-  var totalProfit = totalPaid > 0 ? totalValue - totalPaid : 0;
-  return /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      padding: "4px 12px",
-      background: "var(--s2)",
-      borderRadius: 6,
-      cursor: "pointer",
-      marginBottom: 4
-    },
-    onClick: function onClick() {
-      return setCollapsed(function (c) {
-        return !c;
-      });
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 8,
-      height: 8,
-      borderRadius: "50%",
-      background: color,
-      flexShrink: 0
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      fontWeight: 600,
-      color: "var(--text)",
-      flex: 1
-    }
-  }, title), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)",
-      fontFamily: "var(--mono)"
-    }
-  }, cards.length, " cards"), /*#__PURE__*/React.createElement("span", {
-    style: { display: "flex", gap: 3, marginLeft: 4 },
-    onClick: function(e){ e.stopPropagation(); }
-  },
-  ["alpha","high","low"].map(function(mode) {
-    var labels = { alpha: "A-Z", high: "$ ↓", low: "$ ↑" };
-    return /*#__PURE__*/React.createElement("button", {
-      key: mode,
-      onClick: function(e){ e.stopPropagation(); setSortMode(mode); },
-      style: {
-        fontSize: 9, fontWeight: 600, padding: "1px 5px", borderRadius: 3,
-        border: "1px solid " + (sortMode === mode ? "var(--pt)" : "var(--border2)"),
-        background: sortMode === mode ? "rgba(79,158,255,0.15)" : "transparent",
-        color: sortMode === mode ? "var(--pt)" : "var(--muted)",
-        cursor: "pointer", fontFamily: "var(--mono)"
-      }
-    }, labels[mode]);
-  })
-), totalPaid > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)",
-      fontFamily: "var(--mono)"
-    }
-  }, "paid $", totalPaid.toFixed(2)), totalValue > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      fontFamily: "var(--mono)",
-      color: totalProfit >= 0 ? "#34d399" : "#f87171"
-    }
-  }, totalProfit >= 0 ? "+" : "", "$", totalProfit.toFixed(2)), totalPaid > 0 && totalValue > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      fontFamily: "var(--mono)",
-      color: totalProfit >= 0 ? "#34d399" : "#f87171"
-    }
-  }, "(", (totalProfit / totalPaid * 100).toFixed(1), "%)"), clearSection && /*#__PURE__*/React.createElement("button", {
-    onClick: function(e) {
-      e.stopPropagation();
-      if (window.confirm("Clear all " + title + " cards? This cannot be undone.")) clearSection();
-    },
-    title: "Clear " + title + " section",
-    style: {
-      fontSize: 10, padding: "1px 6px", borderRadius: 4, border: "1px solid rgba(248,113,113,0.3)",
-      background: "rgba(248,113,113,0.1)", color: "#f87171", cursor: "pointer", marginLeft: 2,
-      fontFamily: "var(--mono)"
-    }
-  }, "🗑"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)"
-    }
-  }, collapsed ? "▶" : "▼")), !collapsed && /*#__PURE__*/React.createElement("div", {
-    className: "panel",
-    style: {
-      padding: 0
-    }
-  }, cards.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "8px 12px",
-      fontSize: 11,
-      color: "var(--muted)"
-    }
-  }, "No cards here yet") : /*#__PURE__*/React.createElement("table", {
-    className: "inv-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Card"), /*#__PURE__*/React.createElement("th", null, "Set"), /*#__PURE__*/React.createElement("th", null, "#"), /*#__PURE__*/React.createElement("th", null, "Grade"), /*#__PURE__*/React.createElement("th", null, "Paid"), /*#__PURE__*/React.createElement("th", null, "Market"), /*#__PURE__*/React.createElement("th", null, "P&L"), /*#__PURE__*/React.createElement("th", null, "1d"), /*#__PURE__*/React.createElement("th", null, "7d"), /*#__PURE__*/React.createElement("th", null, "30d"), /*#__PURE__*/React.createElement("th", null, "Notes"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, collated.map(function (item) {
-    var effectivePaid = item.totalPaid ? item.totalPaid / (item.qty || 1) : (item.paid || 0);
-    var effectiveValue = item.value || 0;
-    var hasPrice = !!(item.value && item.value > 0);
-    var pl = hasPrice ? (effectiveValue - effectivePaid) * (item.qty || 1) : null;
-    var snapId = item.pokedataId || item.id;
-    var hist = getPriceHistory(String(snapId));
-    var cur = item.value || (hist === null || hist === void 0 ? void 0 : hist.latest);
-    var cumulBadge = getCumulativeBadge(String(snapId), cur);
-    var fmtMove = function fmtMove(cur, old) {
-      if (!cur || !old) return /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: "var(--muted)"
-        }
-      }, "\u2014");
-      var pct = (cur - old) / old * 100;
-      var color = pct > 1 ? "#34d399" : pct < -1 ? "#f87171" : "var(--muted)";
-      var sign = pct > 0 ? "+" : "";
-      return /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: color,
-          fontFamily: "var(--mono)",
-          fontSize: 10
-        }
-      }, sign, pct.toFixed(1), "%");
-    };
-    return /*#__PURE__*/React.createElement("tr", {
-      key: item.id
-    }, /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontWeight: 500,
-        maxWidth: 140,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap"
-      }
-    }, item.name, (item.qty || 1) > 1 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 10,
-        color: "var(--muted)",
-        fontFamily: "var(--mono)",
-        marginLeft: 4
-      }
-    }, "\xD7", item.qty)), /*#__PURE__*/React.createElement("td", {
-      style: {
-        color: "var(--muted)",
-        fontSize: 10,
-        maxWidth: 70,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap"
-      }
-    }, item.set), /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontFamily: "var(--mono)",
-        fontSize: 10,
-        color: "var(--muted2)",
-        width: 45,
-        maxWidth: 45
-      }
-    }, item.num), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(GradeBadge, {
-      grader: item.grader,
-      grade: item.grade
-    })), /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontFamily: "var(--mono)",
-        color: "var(--muted2)",
-        fontSize: 11
-      }
-    }, "$", effectivePaid.toFixed(2)), /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontFamily: "var(--mono)",
-        color: "var(--cards)",
-        fontSize: 11,
-        fontWeight: 600
-      }
-    }, item.status === "sold" && editingValueId === item.id ? /*#__PURE__*/React.createElement("input", {
-      autoFocus: true,
-      type: "number",
-      value: editingValueText,
-      onChange: function onChange(e) { setEditingValueText(e.target.value); },
-      onBlur: function onBlur() {
-        var v = parseFloat(editingValueText);
-        if (!isNaN(v) && v > 0) {
-          (item._ids || [item.id]).forEach(function(id) { update(id, { value: v }); });
-        }
-        setEditingValueId(null); setEditingValueText("");
-      },
-      onKeyDown: function onKeyDown(e) {
-        if (e.key === "Enter") e.target.blur();
-        if (e.key === "Escape") { setEditingValueId(null); setEditingValueText(""); }
-      },
-      style: {
-        width: 70, background: "var(--s3)", border: "1px solid var(--pt)",
-        borderRadius: 4, color: "var(--cards)", fontFamily: "var(--mono)",
-        fontSize: 11, fontWeight: 600, padding: "2px 5px", outline: "none"
-      }
-    }) : /*#__PURE__*/React.createElement("span", {
-      onClick: item.status === "sold" ? function() { setEditingValueId(item.id); setEditingValueText(cur ? String(Number(cur).toFixed(2)) : ""); } : undefined,
-      title: item.status === "sold" ? "Click to set sold price" : undefined,
-      style: {
-        cursor: item.status === "sold" ? "pointer" : "default",
-        borderBottom: item.status === "sold" && !cur ? "1px dashed var(--muted)" : "none"
-      }
-    }, cur ? "$".concat(Number(cur).toFixed(2)) : (item.status === "sold" ? "set price" : "—")), cumulBadge && /*#__PURE__*/React.createElement("span", {
-      style: {
-        display: "inline-block",
-        marginLeft: 5,
-        fontSize: 9,
-        fontWeight: 700,
-        padding: "1px 5px",
-        borderRadius: 4,
-        background: cumulBadge.bg,
-        color: cumulBadge.color,
-        fontFamily: "var(--mono)",
-        verticalAlign: "middle"
-      }
-    }, cumulBadge.label)), /*#__PURE__*/React.createElement("td", {
-      className: pl > 0 ? "profit-pos" : pl < 0 ? "profit-neg" : "profit-neu",
-      style: {
-        fontSize: 11
-      }
-    }, pl !== null ? (pl >= 0 ? "+" : "") + "$" + Math.abs(pl).toFixed(2) : "—"), /*#__PURE__*/React.createElement("td", null, fmtMove(cur, hist === null || hist === void 0 ? void 0 : hist.price1d)), /*#__PURE__*/React.createElement("td", null, fmtMove(cur, hist === null || hist === void 0 ? void 0 : hist.price7d)), /*#__PURE__*/React.createElement("td", null, fmtMove(cur, hist === null || hist === void 0 ? void 0 : hist.price30d)), /*#__PURE__*/React.createElement("td", {
-      style: {
-        fontSize: 10,
-        color: "var(--muted)",
-        maxWidth: 100,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap"
-      }
-    }, item.notes), /*#__PURE__*/React.createElement("td", {
-      style: {
-        display: "flex",
-        gap: 4,
-        alignItems: "center"
-      }
-    }, /*#__PURE__*/React.createElement("select", {
-      style: {
-        fontSize: 10,
-        background: "var(--s2)",
-        border: "1px solid var(--border)",
-        borderRadius: 4,
-        color: "var(--muted)",
-        padding: "1px 2px"
-      },
-      value: item.status || "pc",
-      onChange: function onChange(e) {
-        (item._ids || [item.id]).forEach(function (id) {
-          return update(id, {
-            status: e.target.value
-          });
-        });
-      }
-    }, STATUSES.map(function (s) {
-      return /*#__PURE__*/React.createElement("option", {
-        key: s.id,
-        value: s.id
-      }, s.label);
-    })), /*#__PURE__*/React.createElement("button", {
-      title: "Clear price cache & re-fetch",
-      style: {background:"none",border:"none",color:"var(--muted)",cursor:"pointer",padding:"3px",fontSize:10,opacity:1},
-      onClick: function onClick() {
-        var snapId = item.pokedataId || String(item._ids ? item._ids[0] : item.id);
-        Object.keys(localStorage).filter(function(k){return k.startsWith("cc:snap:"+snapId);}).forEach(function(k){return localStorage.removeItem(k);});
-        localStorage.removeItem("cc:lastfetch:"+snapId);
-        (item._ids || [item.id]).forEach(function(id){return update(id,{pokedataId:null,value:0});});
-      }
-    }, "\u21BB"), /*#__PURE__*/React.createElement("button", {
-      className: "row-del",
-      style: {
-        opacity: 1
-      },
-      onClick: function onClick() {
-        (item._ids || [item.id]).forEach(function (id) {
-          return del(id);
-        });
-      }
-    }, Ico.trash)));
-  })))));
+function MovePill(_ref) {
+  var current = _ref.current, prev = _ref.prev;
+  if (!current || !prev) return React.createElement("span", { style: { color: "var(--muted)" } }, "—");
+  var diff = current - prev;
+  var pct  = diff / prev * 100;
+  var sign = diff >= 0 ? "+" : "";
+  var style;
+  if (diff >  0.005) style = { fontSize:10, fontWeight:600, padding:"1px 5px", borderRadius:3, fontFamily:"var(--mono)", background:"rgba(52,211,153,0.15)", color:"var(--green)" };
+  else if (diff < -0.005) style = { fontSize:10, fontWeight:600, padding:"1px 5px", borderRadius:3, fontFamily:"var(--mono)", background:"rgba(248,113,113,0.15)", color:"var(--red)" };
+  else style = { fontSize:10, color:"var(--muted)", fontFamily:"var(--mono)" };
+  return React.createElement("span", { style: style }, sign + pct.toFixed(1) + "%");
 }
-function InventoryTab(_ref21) {
-  var inv = _ref21.inv,
-    setInv = _ref21.setInv,
-    invReady = _ref21.invReady,
-    _ref21$activeSport = _ref21.activeSport,
-    activeSport = _ref21$activeSport === void 0 ? "pokemon" : _ref21$activeSport,
-    setActiveSport = _ref21.setActiveSport;
-  var setActive = setActiveSport || function () {};
-  var _useState33 = useState({
-      name: "",
-      sport: activeSport,
-      grader: "raw",
-      grade: "",
-      paid: "",
-      value: "",
-      status: "pc"
-    }),
-    _useState34 = _slicedToArray(_useState33, 2),
-    form = _useState34[0],
-    setForm = _useState34[1];
-  var add = function add() {
+
+function GradeBadge(_ref) {
+  var grader = _ref.grader, grade = _ref.grade;
+  if (!grader || grader === "raw") {
+    return React.createElement("span", { style: { fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:3, background:"rgba(255,255,255,0.08)", color:"var(--muted2)", fontFamily:"var(--mono)" } }, "Raw");
+  }
+  var colors = { PSA: { bg:"rgba(96,165,250,0.15)", color:"#60a5fa" }, BGS: { bg:"rgba(52,211,153,0.15)", color:"#34d399" }, CGC: { bg:"rgba(251,146,60,0.15)", color:"#fb923c" } };
+  var c = colors[grader] || colors.PSA;
+  return React.createElement("span", { style: { fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:3, background:c.bg, color:c.color, fontFamily:"var(--mono)" } }, grader + " " + grade);
+}
+
+function StatusBadge(_ref) {
+  var status = _ref.status;
+  var s = STATUSES.find(function(x) { return x.id === status; }) || STATUSES[0];
+  return React.createElement("span", { style: { fontSize:9, fontWeight:600, padding:"1px 5px", borderRadius:3, background:s.color+"22", color:s.color, border:"1px solid "+s.color+"44", fontFamily:"var(--mono)" } }, s.label);
+}
+
+// ── CSV parser helper ─────────────────────────────────────────────────────
+function parseCSVLine(line) {
+  var cols = [], cur = "", inQ = false;
+  for (var i = 0; i < line.length; i++) {
+    var ch = line[i];
+    if (ch === '"') { inQ = !inQ; }
+    else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ""; }
+    else cur += ch;
+  }
+  cols.push(cur.trim());
+  return cols;
+}
+
+// ── Sealed Section ────────────────────────────────────────────────────────
+function SealedSection(_ref18) {
+  var cards = _ref18.cards, del = _ref18.del, update = _ref18.update, activeSport = _ref18.activeSport, clearSection = _ref18.clearSection;
+  var _s = useState(false); var collapsed = _s[0]; var setCollapsed = _s[1];
+  var blank = { name:"", type:"Elite Trainer Box", paid:"", value:"", qty:1, notes:"" };
+  var _f = useState(blank); var form = _f[0]; var setForm = _f[1];
+  var setField = function(k,v) { setForm(function(f) { return Object.assign({},f,_defineProperty({},k,v)); }); };
+
+  var add = function() {
     if (!form.name.trim()) return;
-    setInv([].concat(_toConsumableArray(inv || []), [_objectSpread(_objectSpread({
-      id: Date.now()
-    }, form), {}, {
-      sport: activeSport,
-      paid: parseFloat(form.paid) || 0,
-      value: parseFloat(form.value) || 0
-    })]));
-    setForm({
-      name: "",
-      sport: activeSport,
-      grader: "raw",
-      grade: "",
-      paid: "",
-      value: "",
-      status: "pc"
+    update(null, { sealed: cards.concat([{
+      id: Date.now(), name: form.name, type: form.type,
+      paid: parseFloat(form.paid)||0, value: parseFloat(form.value)||0,
+      qty: parseInt(form.qty)||1, notes: form.notes,
+      sealed: true, sport: activeSport
+    }])});
+    setForm(blank);
+  };
+  var delSealed    = function(id) { update(null, { sealed: cards.filter(function(c){return c.id!==id;}) }); };
+  var updateSealed = function(id, changes) { update(null, { sealed: cards.map(function(c){return c.id===id?Object.assign({},c,changes):c;}) }); };
+
+  var totalPaid  = cards.reduce(function(s,c){return s+(c.paid||0)*(c.qty||1);},0);
+  var totalValue = cards.reduce(function(s,c){return s+(c.value||0)*(c.qty||1);},0);
+  var profit = totalValue - totalPaid;
+
+  var hdrStyle = { display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background:"var(--s2)", borderRadius:6, cursor:"pointer", marginBottom:4, userSelect:"none" };
+
+  return React.createElement("div", { style:{ marginBottom:12 } },
+    React.createElement("div", { style: hdrStyle, onClick: function(){ setCollapsed(function(c){return!c;}); } },
+      React.createElement("span", { style:{ width:8,height:8,borderRadius:"50%",background:"#fb923c",flexShrink:0 } }),
+      React.createElement("span", { style:{ fontSize:12,fontWeight:600,color:"var(--text)",flex:1 } }, "📦 Sealed"),
+      React.createElement("span", { style:{ fontSize:10,color:"var(--muted)",fontFamily:"var(--mono)" } }, cards.length+" items"),
+      totalPaid>0 && React.createElement("span", { style:{ fontSize:10,color:"var(--muted)",fontFamily:"var(--mono)" } }, "paid $"+totalPaid.toFixed(2)),
+      totalValue>0 && React.createElement("span", { style:{ fontSize:10,fontFamily:"var(--mono)",color:profit>=0?"var(--green)":"var(--red)" } }, (profit>=0?"+":"")+"$"+profit.toFixed(2)),
+      totalPaid>0&&totalValue>0 && React.createElement("span", { style:{ fontSize:10,fontFamily:"var(--mono)",color:profit>=0?"var(--green)":"var(--red)" } }, "("+((profit/totalPaid)*100).toFixed(1)+"%)"),
+      clearSection && React.createElement("button", { style:{ fontSize:10,padding:"2px 8px",borderRadius:4,border:"1px solid rgba(248,113,113,0.3)",background:"none",color:"var(--red)",cursor:"pointer" }, onClick:function(ev){ev.stopPropagation();if(confirm("Clear all Sealed?"))clearSection();} }, "Clear"),
+      React.createElement("span", { style:{ fontSize:10,color:"var(--muted)" } }, collapsed?"▶":"▼")
+    ),
+    !collapsed && React.createElement("div", { className:"panel", style:{ padding:0 } },
+      cards.length===0
+        ? React.createElement("div", { style:{ padding:"8px 12px",fontSize:11,color:"var(--muted)" } }, "No sealed product yet")
+        : React.createElement("table", { className:"inv-table" },
+            React.createElement("thead", null,
+              React.createElement("tr", null,
+                React.createElement("th", null, "Product"),
+                React.createElement("th", null, "Type"),
+                React.createElement("th", null, "Qty"),
+                React.createElement("th", null, "Paid ea."),
+                React.createElement("th", null, "Value ea."),
+                React.createElement("th", null, "P&L"),
+                React.createElement("th", null, "Notes"),
+                React.createElement("th", null)
+              )
+            ),
+            React.createElement("tbody", null,
+              cards.map(function(item) {
+                var pl = ((item.value||0)-(item.paid||0))*(item.qty||1);
+                return React.createElement("tr", { key:item.id },
+                  React.createElement("td", { style:{ fontWeight:500,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" } }, item.name),
+                  React.createElement("td", { style:{ fontSize:10,color:"var(--muted)" } }, item.type),
+                  React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:11 } }, item.qty||1),
+                  React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--muted2)",fontSize:11 } }, "$"+((item.paid)||0).toFixed(2)),
+                  React.createElement("td", null,
+                    React.createElement("input", { type:"number", className:"add-in", style:{ width:70,padding:"1px 4px",fontSize:11 }, value:item.value||"", placeholder:"—", onChange:function(ev){updateSealed(item.id,{value:parseFloat(ev.target.value)||0});} })
+                  ),
+                  React.createElement("td", { className:pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu", style:{ fontSize:11 } }, pl!==0?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"—"),
+                  React.createElement("td", { style:{ fontSize:10,color:"var(--muted)" } }, item.notes),
+                  React.createElement("td", null,
+                    React.createElement("button", { className:"row-del", style:{ opacity:1 }, onClick:function(){ delSealed(item.id); } }, Ico.trash)
+                  )
+                );
+              })
+            )
+          ),
+      React.createElement("div", { className:"inv-add-form", style:{ borderTop:"1px solid var(--border)",padding:"6px 12px" } },
+        React.createElement("input", { className:"add-in", placeholder:"Product name e.g. 151 Booster Bundle", style:{ flex:2 }, value:form.name, onChange:function(ev){setField("name",ev.target.value);}, onKeyDown:function(ev){if(ev.key==="Enter")add();} }),
+        React.createElement("select", { className:"add-select", value:form.type, onChange:function(ev){setField("type",ev.target.value);} },
+          SEALED_TYPES.map(function(t){ return React.createElement("option",{key:t,value:t},t); })
+        ),
+        React.createElement("input", { className:"add-in", placeholder:"Qty", type:"number", style:{ width:55 }, value:form.qty, onChange:function(ev){setField("qty",ev.target.value);} }),
+        React.createElement("input", { className:"add-in", placeholder:"Paid $", type:"number", style:{ width:80 }, value:form.paid, onChange:function(ev){setField("paid",ev.target.value);} }),
+        React.createElement("input", { className:"add-in", placeholder:"Value $", type:"number", style:{ width:80 }, value:form.value, onChange:function(ev){setField("value",ev.target.value);} }),
+        React.createElement("button", { className:"add-submit", onClick:add }, Ico.plus, " Add")
+      )
+    )
+  );
+}
+
+// ── InvSection (one status group) ────────────────────────────────────────
+function InvSection(_ref20) {
+  var title = _ref20.title, color = _ref20.color, cards = _ref20.cards, del = _ref20.del, update = _ref20.update, clearSection = _ref20.clearSection;
+  var _c = useState(false); var collapsed = _c[0]; var setCollapsed = _c[1];
+  var _ev = useState(null); var editingValueId = _ev[0]; var setEditingValueId = _ev[1];
+  var _et = useState(""); var editingValueText = _et[0]; var setEditingValueText = _et[1];
+  var _sm = useState("alpha"); var sortMode = _sm[0]; var setSortMode = _sm[1];
+
+  // Collate duplicates (same name+set+num+grader+grade)
+  var collated = React.useMemo(function() {
+    var map = new Map();
+    for (var i = 0; i < cards.length; i++) {
+      var card = cards[i];
+      var key = [(card.name||"").toLowerCase().trim(),(card.set||"").toLowerCase().trim(),(card.num||"").toLowerCase().trim(),(card.grader||"raw").toLowerCase(),(card.grade||"").toLowerCase()].join("|");
+      if (map.has(key)) {
+        var ex = map.get(key);
+        ex.qty = (ex.qty||1)+1;
+        ex.totalPaid = (ex.totalPaid||0)+(card.paid||0);
+        ex._ids.push(card.id);
+        if (card.pokedataId && !ex.pokedataId) ex.pokedataId = card.pokedataId;
+        if (card.value && !ex.value) ex.value = card.value;
+      } else {
+        map.set(key, Object.assign({},card,{qty:1,totalPaid:card.paid||0,_ids:[card.id]}));
+      }
+    }
+    return Array.from(map.values());
+  }, [cards]);
+
+  var sorted = React.useMemo(function() {
+    return collated.slice().sort(function(a,b) {
+      if (sortMode === "alpha")  return (a.name||"").localeCompare(b.name||"");
+      if (sortMode === "value")  return (b.value||0)-(a.value||0);
+      if (sortMode === "pl") {
+        var pa = (a.value||0)-(a.totalPaid/(a.qty||1));
+        var pb = (b.value||0)-(b.totalPaid/(b.qty||1));
+        return pb-pa;
+      }
+      return 0;
     });
+  }, [collated, sortMode]);
+
+  var totalPaid  = cards.reduce(function(s,c){return s+(c.paid||0);},0);
+  var totalValue = cards.reduce(function(s,c){return s+(c.value||0);},0);
+  var totalPL    = totalValue-totalPaid;
+
+  var fmtMove = function(cur, prev) {
+    return React.createElement(MovePill, { current: cur, prev: prev });
   };
-  var _useState35 = useState(false),
-    _useState36 = _slicedToArray(_useState35, 2),
-    refreshingAll = _useState36[0],
-    setRefreshingAll = _useState36[1];
-  var _useState37 = useState(""),
-    _useState38 = _slicedToArray(_useState37, 2),
-    refreshProgress = _useState38[0],
-    setRefreshProgress = _useState38[1];
-  var del = function del(id) {
-    return setInv((inv || []).filter(function (x) {
-      return x.id !== id;
-    }));
-  };
-  var update = function update(id, changes) {
-    return setInv((inv || []).map(function (x) {
-      return x.id === id ? _objectSpread(_objectSpread({}, x), changes) : x;
-    }));
-  };
-  var refreshAllPrices = /*#__PURE__*/function () {
-    var _ref22 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee() {
-      var toRefresh, updated, _loop, idx;
-      return _regeneratorRuntime().wrap(function _callee$(_context2) {
-        while (1) switch (_context2.prev = _context2.next) {
-          case 0:
-            toRefresh = (inv || []).filter(function (i) {
-              return i.sport === activeSport && !i.sealed;
-            });
-            if (!(toRefresh.length === 0)) {
-              _context2.next = 3;
-              break;
-            }
-            return _context2.abrupt("return");
-          case 3:
-            setRefreshingAll(true);
-            updated = _toConsumableArray(inv || []);
-            _loop = /*#__PURE__*/_regeneratorRuntime().mark(function _loop() {
-              var card, pdId, results, matches, cardNum, cardSet, sameName, match, pd, _p$TCGPlayer, _p$eBayRaw, p, value;
-              return _regeneratorRuntime().wrap(function _loop$(_context) {
-                while (1) switch (_context.prev = _context.next) {
-                  case 0:
-                    card = toRefresh[idx];
-                    setRefreshProgress("".concat(idx + 1, "/").concat(toRefresh.length));
-                    _context.prev = 2;
-                    // If we already have a pokedataId use it, otherwise search
-                    pdId = card.pokedataId;
-                    if (pdId) {
-                      _context.next = 17;
-                      break;
-                    }
-                    _context.next = 7;
-                    return pdSearch(card.name);
-                  case 7:
-                    results = _context.sent;
-                    matches = Array.isArray(results) ? results.filter(function (r) {
-                      return r.language === "ENGLISH";
-                    }) : [];
-                    cardNum = (card.num || "").toLowerCase().trim();
-                    cardSet = (card.set || "").toLowerCase().trim();
-                    sameName = function sameName(r) {
-                      var _r$name, _card$name;
-                      return ((_r$name = r.name) === null || _r$name === void 0 ? void 0 : _r$name.toLowerCase()) === ((_card$name = card.name) === null || _card$name === void 0 ? void 0 : _card$name.toLowerCase());
-                    }; // Strict match: name + number + set
-                    match = matches.find(function (r) {
-                      var _r$set_code, _r$set_name, _r$set_code2, _r$set_code3;
-                      return sameName(r) && cardNum && (r.num || "").toLowerCase() === cardNum && cardSet && (((_r$set_code = r.set_code) === null || _r$set_code === void 0 ? void 0 : _r$set_code.toLowerCase()) === cardSet || ((_r$set_name = r.set_name) === null || _r$set_name === void 0 ? void 0 : _r$set_name.toLowerCase()) === cardSet || ((_r$set_code2 = r.set_code) === null || _r$set_code2 === void 0 ? void 0 : _r$set_code2.toLowerCase().includes(cardSet)) || cardSet.includes((_r$set_code3 = r.set_code) === null || _r$set_code3 === void 0 ? void 0 : _r$set_code3.toLowerCase()));
-                    }); // Fallback 1: name + number only
-                    if (!match && cardNum) {
-                      match = matches.find(function (r) {
-                        return sameName(r) && (r.num || "").toLowerCase() === cardNum;
-                      });
-                    }
-                    // Fallback 2: name + set only
-                    if (!match && cardSet) {
-                      match = matches.find(function (r) {
-                        var _r$set_code4, _r$set_name2, _r$set_code5, _r$set_code6;
-                        return sameName(r) && (((_r$set_code4 = r.set_code) === null || _r$set_code4 === void 0 ? void 0 : _r$set_code4.toLowerCase()) === cardSet || ((_r$set_name2 = r.set_name) === null || _r$set_name2 === void 0 ? void 0 : _r$set_name2.toLowerCase()) === cardSet || ((_r$set_code5 = r.set_code) === null || _r$set_code5 === void 0 ? void 0 : _r$set_code5.toLowerCase().includes(cardSet)) || cardSet.includes((_r$set_code6 = r.set_code) === null || _r$set_code6 === void 0 ? void 0 : _r$set_code6.toLowerCase()));
-                      });
-                    }
-                    // Fallback 3: exact name match, take first result
-                    if (!match) match = matches.find(function (r) {
-                      return sameName(r);
-                    });
-                    if (match) pdId = String(match.id);
-                  case 17:
-                    if (!pdId) {
-                      _context.next = 22;
-                      break;
-                    }
-                    // Skip if fetched within 24h (unless price cache was manually cleared)
-                    var _rfLastFetch = localStorage.getItem("cc:lastfetch:" + pdId);
-                    if (!(_rfLastFetch && Date.now() - Number(_rfLastFetch) < 144 * 3600 * 1000)) {
-                      _context.next = 20;
-                      break;
-                    }
-                    return _context.abrupt("continue", 26);
-                  case 20:
-                    _context.next = 22;
-                    return pdPricing(pdId);
-                  case 22:
-                    // pd may be undefined if we skipped
-                    if (pd !== null && pd !== void 0 && pd.pricing) {
-                      p = pd.pricing;
-                      var _rGrader = (card.grader || "").toUpperCase().trim();
-                      var _rGrade = (card.grade || "").toString().trim();
-                      var _rGradedKey = _rGrader && _rGrade ? _rGrader + " " + parseFloat(_rGrade).toFixed(1) : null;
-                      var _rGradedPrice = _rGradedKey && p[_rGradedKey] && p[_rGradedKey].value > 0 ? p[_rGradedKey].value : null;
-                      value = _rGradedPrice || ((_p$TCGPlayer = p["TCGPlayer"]) === null || _p$TCGPlayer === void 0 ? void 0 : _p$TCGPlayer.value) || ((_p$eBayRaw = p["eBay Raw"]) === null || _p$eBayRaw === void 0 ? void 0 : _p$eBayRaw.value) || null;
-                      if (value) {
-                        // Always stamp lastfetch so we don't re-fetch for 24h
-                        localStorage.setItem("cc:lastfetch:" + pdId, String(Date.now()));
-                        // Compare new price against baseline (not last displayed price)
-                        var _baseline = getBaseline(pdId);
-                        var _baselinePrice = _baseline ? _baseline.price : (card.value || 0);
-                        var _threshold = getPriceThreshold(_baselinePrice || value);
-                        var _pctChange = _baselinePrice ? Math.abs((value - _baselinePrice) / _baselinePrice) : 1;
-                        if (!_baseline) {
-                          // First time — set baseline
-                          setBaseline(pdId, value);
+
+  var hdrStyle = { display:"flex",alignItems:"center",gap:8,padding:"4px 12px",background:"var(--s2)",borderRadius:6,cursor:"pointer",marginBottom:4,userSelect:"none" };
+
+  return React.createElement("div", { style:{ marginBottom:12 } },
+    React.createElement("div", { style:hdrStyle, onClick:function(){setCollapsed(function(c){return!c;});} },
+      React.createElement("span", { style:{ width:8,height:8,borderRadius:"50%",background:color,flexShrink:0 } }),
+      React.createElement("span", { style:{ fontSize:12,fontWeight:600,color:"var(--text)",flex:1 } }, title),
+      React.createElement("span", { style:{ fontSize:10,color:"var(--muted)",fontFamily:"var(--mono)",display:"flex",gap:10,alignItems:"center" } },
+        React.createElement("span", null, cards.length+" cards"),
+        totalPaid>0 && React.createElement("span", null, "paid $"+totalPaid.toFixed(2)),
+        totalValue>0 && React.createElement("span", { style:{ color:totalPL>=0?"var(--green)":"var(--red)" } }, (totalPL>=0?"+":"")+"$"+totalPL.toFixed(2)+(totalPaid>0?" ("+(totalPL/totalPaid*100).toFixed(1)+"%)":"")),
+        clearSection && React.createElement("button", { style:{ fontSize:10,padding:"2px 8px",borderRadius:4,border:"1px solid rgba(248,113,113,0.3)",background:"none",color:"var(--red)",cursor:"pointer" }, onClick:function(ev){ev.stopPropagation();if(confirm("Clear all \""+title+"\" cards?"))clearSection();} }, "Clear"),
+        React.createElement("span", { style:{ fontSize:10,color:"var(--muted)" } }, collapsed?"▶":"▼")
+      )
+    ),
+    !collapsed && React.createElement("div", { className:"panel", style:{ padding:0 } },
+      sorted.length===0
+        ? React.createElement("div", { style:{ padding:"8px 12px",fontSize:11,color:"var(--muted)" } }, "No cards in this section.")
+        : React.createElement("table", { className:"inv-table" },
+            React.createElement("thead", null,
+              React.createElement("tr", null,
+                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("alpha");} }, "Card"+(sortMode==="alpha"?" ▲":"")),
+                React.createElement("th", null, "Set"),
+                React.createElement("th", null, "#"),
+                React.createElement("th", null, "Grade"),
+                React.createElement("th", null, "Qty"),
+                React.createElement("th", null, "Paid"),
+                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("value");} }, "Market"+(sortMode==="value"?" ▼":"")),
+                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("pl");} }, "P&L"+(sortMode==="pl"?" ▼":"")),
+                React.createElement("th", null, "3D"),
+                React.createElement("th", null, "7D"),
+                React.createElement("th", null, "30D"),
+                React.createElement("th", null, "Status"),
+                React.createElement("th", null, "")
+              )
+            ),
+            React.createElement("tbody", null,
+              sorted.map(function(item) {
+                var avgPaid = item.totalPaid/(item.qty||1);
+                var pl = item.value!=null ? (item.value-avgPaid)*(item.qty||1) : null;
+                var plClass = pl==null?"profit-neu":pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu";
+                var h = getHistory(item.pokedataId);
+                var cur = item.value || null;
+
+                return React.createElement("tr", { key:item.id },
+                  React.createElement("td", { style:{ fontWeight:600,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" } },
+                    item.name,
+                    item.qty>1 && React.createElement("span", { style:{ color:"var(--muted)",fontSize:10,marginLeft:4 } }, "×"+item.qty)
+                  ),
+                  React.createElement("td", { style:{ fontSize:10,color:"var(--muted)" } }, item.set||"—"),
+                  React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:10,color:"var(--muted2)" } }, item.num||"—"),
+                  React.createElement("td", null, React.createElement(GradeBadge, { grader:item.grader, grade:item.grade })),
+                  React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:11 } }, item.qty||1),
+                  React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--muted2)",fontSize:11 } }, avgPaid?"$"+avgPaid.toFixed(2):"—"),
+                  React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--cards)",fontSize:11 } },
+                    item.fetchingPrice
+                      ? React.createElement("span", { style:{ color:"var(--muted)",fontStyle:"italic" } }, "…")
+                      : cur ? "$"+cur.toFixed(2) : "—"
+                  ),
+                  React.createElement("td", { className:plClass, style:{ fontSize:11 } },
+                    pl!=null?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"—"
+                  ),
+                  React.createElement("td", null, h ? fmtMove(h.latest, h.p3d)  : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
+                  React.createElement("td", null, h ? fmtMove(h.latest, h.p7d)  : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
+                  React.createElement("td", null, h ? fmtMove(h.latest, h.p30d) : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
+                  React.createElement("td", null,
+                    React.createElement("select", {
+                      style:{ fontSize:10,background:"var(--s2)",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"1px 2px" },
+                      value:item.status||"pc",
+                      onChange:function(ev){ (item._ids||[item.id]).forEach(function(id){update(id,{status:ev.target.value});}); }
+                    },
+                      STATUSES.map(function(s){ return React.createElement("option",{key:s.id,value:s.id},s.label); })
+                    )
+                  ),
+                  React.createElement("td", { style:{ display:"flex",gap:4,alignItems:"center" } },
+                    // Reset price cache button
+                    React.createElement("button", {
+                      title:"Clear price cache & re-fetch on next Refresh",
+                      style:{ background:"none",border:"none",color:"var(--muted)",cursor:"pointer",padding:"3px",fontSize:10 },
+                      onClick:function() {
+                        if (item.pokedataId) {
+                          localStorage.removeItem(FETCH_PFX + item.pokedataId);
                         }
-                        // Always write value+pokedataId back so P&L is always correct
-                        updated = updated.map(function (x) {
-                          return x.id === card.id ? _objectSpread(_objectSpread({}, x), {}, {
-                            value: value,
-                            pokedataId: pdId
-                          }) : x;
-                        });
-                        if (_pctChange >= _threshold || !card.value) {
-                          // Significant move — reset baseline and save snapshot
-                          setBaseline(pdId, value);
-                          savePriceSnapshot(pdId, value);
-                        }
-                        // lastfetch is already stamped above so we won't re-check for 24h
+                        (item._ids||[item.id]).forEach(function(id){ update(id,{pokedataId:null,value:null}); });
                       }
-                    }
-                  case 22:
-                    _context.next = 26;
-                    break;
-                  case 24:
-                    _context.prev = 24;
-                    _context.t0 = _context["catch"](2);
-                  case 26:
-                    // Progress update without setInv (avoid stale closure overwriting values)
-                    if (idx % 3 === 2) setRefreshProgress((idx+1) + "/" + toRefresh.length);
-                  case 27:
-                  case "end":
-                    return _context.stop();
-                }
-              }, _loop, null, [[2, 24]]);
-            });
-            idx = 0;
-          case 7:
-            if (!(idx < toRefresh.length)) {
-              _context2.next = 12;
-              break;
-            }
-            return _context2.delegateYield(_loop(), "t0", 9);
-          case 9:
-            idx++;
-            _context2.next = 7;
-            break;
-          case 12:
-            setInv(_toConsumableArray(updated));
-            setRefreshingAll(false);
-            setRefreshProgress("");
-          case 15:
-          case "end":
-            return _context2.stop();
-        }
-      }, _callee);
-    }));
-    return function refreshAllPrices() {
-      return _ref22.apply(this, arguments);
-    };
-  }();
-  var filtered = (inv || []).filter(function (i) {
-    return i.sport === activeSport;
-  });
-  var totalPaid = (inv || []).reduce(function (s, i) {
-    return s + (i.paid || 0);
-  }, 0);
-  var totalValue = (inv || []).reduce(function (s, i) {
-    return s + (i.value || 0);
-  }, 0);
-  var totalProfit = totalValue - totalPaid;
-  if (!invReady) return /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: 20,
-      color: "var(--muted)",
-      fontSize: 12
-    }
-  }, "Loading\u2026");
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "stats-row"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Total Cards"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-value"
-  }, (inv || []).length), /*#__PURE__*/React.createElement("div", {
-    className: "stat-sub"
-  }, "all sports")), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Total Paid"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-value",
-    style: {
-      color: "var(--muted2)"
-    }
-  }, "$", totalPaid.toFixed(2)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-sub"
-  }, "cost basis")), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Current Value"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-value",
-    style: {
-      color: "var(--cards)"
-    }
-  }, "$", totalValue.toFixed(2)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-sub"
-  }, "market value")), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Unrealized P&L"), /*#__PURE__*/React.createElement("div", {
-    className: "stat-value ".concat(totalProfit >= 0 ? "profit-pos" : "profit-neg")
-  }, totalProfit >= 0 ? "+" : "", "$", totalProfit.toFixed(2)), /*#__PURE__*/React.createElement("div", {
-    className: "stat-sub"
-  }, totalPaid > 0 ? (totalProfit / totalPaid * 100).toFixed(1) + "% return" : "—"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 16,
-      flexWrap: "wrap"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "market-tabs",
-    style: {
-      margin: 0,
-      flex: 1
-    }
-  }, SPORTS.map(function (s) {
-    var sid = s.id;
-    var count = (inv || []).filter(function (i) {
-      return i.sport === sid;
-    }).length;
-    return /*#__PURE__*/React.createElement("button", {
-      key: s.id,
-      className: "market-tab ".concat(activeSport === s.id ? "active" : ""),
-      onClick: function onClick() {
-        setActive(sid);
-        setForm(function (f) {
-          return _objectSpread(_objectSpread({}, f), {}, {
-            sport: sid
-          });
+                    }, "↺"),
+                    React.createElement("button", {
+                      className:"row-del", style:{ opacity:1 },
+                      onClick:function(){ (item._ids||[item.id]).forEach(function(id){ del(id); }); }
+                    }, Ico.trash)
+                  )
+                );
+              })
+            )
+          )
+    )
+  );
+}
+
+// ── Inventory Tab ─────────────────────────────────────────────────────────
+function InventoryTab(_ref21) {
+  var inv = _ref21.inv, setInv = _ref21.setInv, invReady = _ref21.invReady,
+      activeSport = _ref21.activeSport || "pokemon", setActiveSport = _ref21.setActiveSport;
+  var setActive = setActiveSport || function(){};
+
+  var blank = { name:"",sport:activeSport,grader:"raw",grade:"",paid:"",value:"",status:"pc" };
+  var _form = useState(blank); var form = _form[0]; var setForm = _form[1];
+  var setField = function(k,v){ setForm(function(f){ return Object.assign({},f,_defineProperty({},k,v)); }); };
+
+  var _ra = useState(false); var refreshingAll = _ra[0]; var setRefreshingAll = _ra[1];
+  var _rp = useState(""); var refreshProgress = _rp[0]; var setRefreshProgress = _rp[1];
+
+  var del    = function(id){ setInv((inv||[]).filter(function(x){return x.id!==id;})); };
+  var update = function(id,changes){ setInv((inv||[]).map(function(x){return x.id===id?Object.assign({},x,changes):x;})); };
+
+  var add = function() {
+    if (!form.name.trim()) return;
+    setInv((inv||[]).concat([Object.assign({id:Date.now()},form,{sport:activeSport,paid:parseFloat(form.paid)||0,value:parseFloat(form.value)||0})]));
+    setForm(blank);
+  };
+
+  // ── Refresh all prices (manual) ─────────────────────────────────────────
+  var refreshAllPrices = async function() {
+    var toRefresh = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed; });
+    if (!toRefresh.length) return;
+    setRefreshingAll(true);
+    var updated = (inv||[]).slice();
+
+    for (var idx = 0; idx < toRefresh.length; idx++) {
+      var card = toRefresh[idx];
+      setRefreshProgress((idx+1)+"/"+toRefresh.length);
+      try {
+        // Mark as fetching in UI
+        updated = updated.map(function(x){ return x.id===card.id ? Object.assign({},x,{fetchingPrice:true}) : x; });
+        if (idx % 3 === 0) setInv(updated.slice());
+
+        var result = await fetchCardPrice(card);
+        updated = updated.map(function(x) {
+          if (x.id !== card.id) return x;
+          var changes = { fetchingPrice: false };
+          if (result.pdId)   changes.pokedataId = result.pdId;
+          if (result.value != null) changes.value = result.value;
+          return Object.assign({},x,changes);
         });
+      } catch(e) {
+        updated = updated.map(function(x){ return x.id===card.id ? Object.assign({},x,{fetchingPrice:false}) : x; });
       }
-    }, s.emoji, " ", s.label, " ", count > 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 10,
-        opacity: 0.6,
-        marginLeft: 3
-      }
-    }, "(", count, ")"));
-  })), /*#__PURE__*/React.createElement("button", {
-    className: "add-submit",
-    style: {
-      whiteSpace: "nowrap",
-      opacity: refreshingAll ? 0.6 : 1
-    },
-    disabled: refreshingAll,
-    onClick: refreshAllPrices
-  }, refreshingAll ? "\u21BB ".concat(refreshProgress, "\u2026") : "↻ Refresh All Prices")), /*#__PURE__*/React.createElement("button", {
-    style: {
-      background: "rgba(248,113,113,0.15)",
-      border: "1px solid rgba(248,113,113,0.3)",
-      borderRadius: 7,
-      padding: "7px 14px",
-      color: "#f87171",
-      fontSize: 12,
-      fontWeight: 600,
-      cursor: "pointer",
-      marginLeft: 8
-    },
-    onClick: function onClick() {
-      if (window.confirm("Clear all " + activeSport + " inventory? This cannot be undone.")) {
-        setInv((inv || []).filter(function(x) { return x.sport !== activeSport; }));
-      }
+      // Flush every 5 cards
+      if (idx % 5 === 4) setInv(updated.slice());
+      await new Promise(function(r){ setTimeout(r, 200); });
     }
-  }, "🗑 Clear All"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      background: "rgba(167,139,250,0.15)",
-      border: "1px solid rgba(167,139,250,0.3)",
-      borderRadius: 7,
-      padding: "7px 14px",
-      color: "#a78bfa",
-      fontSize: 12,
-      fontWeight: 600,
-      cursor: "pointer",
-      marginLeft: 8
-    },
-    onClick: function onClick() {
-      var graded = (inv || []).filter(function(x) { return x.sport === activeSport && x.grader && x.grade && x.pokedataId; });
-      if (graded.length === 0) { alert("No graded cards found."); return; }
-      graded.forEach(function(x) { localStorage.removeItem("cc:lastfetch:" + x.pokedataId); });
-      alert("Cache cleared for " + graded.length + " graded card(s). Now hit Refresh All Prices.");
-    }
-  }, "🏅 Refresh Graded"), /*#__PURE__*/React.createElement("button", {
-    style: { background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 7, padding: "7px 14px", color: "#fbbf24", fontSize: 12, fontWeight: 600, cursor: "pointer", marginLeft: 8 },
-    onClick: function onClick() {
-      var missing = (inv || []).filter(function(x) { return x.sport === activeSport && !x.sealed && !x.value && x.pokedataId; });
-      var noId = (inv || []).filter(function(x) { return x.sport === activeSport && !x.sealed && !x.value && !x.pokedataId; });
-      missing.forEach(function(x) { localStorage.removeItem("cc:lastfetch:" + x.pokedataId); });
-      noId.forEach(function(x) {
-        var sk = "cc:searchid:" + (x.name||"").toLowerCase().trim() + "|" + (x.set||"").toLowerCase().trim() + "|" + (x.num||"").toLowerCase().trim();
-        localStorage.removeItem(sk);
-      });
-      alert("Cache cleared for " + missing.length + " unpriced + " + noId.length + " unmatched cards. Now hit Refresh All Prices.");
-    }
-  }, "🔄 Fix Missing"), /*#__PURE__*/React.createElement("div", null, STATUSES.map(function (s) {
-    return /*#__PURE__*/React.createElement(InvSection, {
-      key: s.id,
-      title: s.label,
-      color: s.color,
-      cards: filtered.filter(function (i) {
-        return !i.sealed && (i.status || "pc") === s.id;
-      }),
-      del: del,
-      update: update,
-      clearSection: function() {
-        setInv((inv || []).filter(function(x) {
-          return !(x.sport === activeSport && !x.sealed && (x.status || "pc") === s.id);
-        }));
-      }
-    });
-  }), /*#__PURE__*/React.createElement(SealedSection, {
-    cards: (inv || []).filter(function (i) {
-      return i.sport === activeSport && i.sealed;
-    }),
-    activeSport: activeSport,
-    del: del,
-    update: function update(id, changes) {
-      if (changes.sealed) {
-        var others = (inv || []).filter(function (i) {
-          return !(i.sport === activeSport && i.sealed);
-        });
-        setInv([].concat(_toConsumableArray(others), _toConsumableArray(changes.sealed.map(function (s) {
-          return _objectSpread(_objectSpread({}, s), {}, {
-            sealed: true,
-            sport: activeSport
-          });
-        }))));
-      }
-    }
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "inv-add-form"
-  }, /*#__PURE__*/React.createElement("input", {
-    className: "add-in",
-    placeholder: "Card name e.g. ".concat(activeSport === "pokemon" ? "Charizard Base Set" : activeSport === "baseball" ? "Mike Trout 2011 Topps" : activeSport === "disney" ? "Elsa Topps Chrome" : "Patrick Mahomes Rookie"),
-    value: form.name,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        name: e.target.value
-      }));
-    },
-    onKeyDown: function onKeyDown(e) {
-      return e.key === "Enter" && add();
-    },
-    style: {
-      flex: 2
-    }
-  }), /*#__PURE__*/React.createElement("select", {
-    className: "add-select",
-    value: form.grader,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        grader: e.target.value
-      }));
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: "raw"
-  }, "Raw"), /*#__PURE__*/React.createElement("option", {
-    value: "PSA"
-  }, "PSA"), /*#__PURE__*/React.createElement("option", {
-    value: "BGS"
-  }, "BGS"), /*#__PURE__*/React.createElement("option", {
-    value: "CGC"
-  }, "CGC")), /*#__PURE__*/React.createElement("input", {
-    className: "add-in",
-    placeholder: "Grade",
-    style: {
-      width: 70
-    },
-    value: form.grade,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        grade: e.target.value
-      }));
-    },
-    disabled: form.grader === "raw"
-  }), /*#__PURE__*/React.createElement("input", {
-    className: "add-in",
-    placeholder: "Paid $",
-    type: "number",
-    style: {
-      width: 90
-    },
-    value: form.paid,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        paid: e.target.value
-      }));
-    }
-  }), /*#__PURE__*/React.createElement("input", {
-    className: "add-in",
-    placeholder: "Value $",
-    type: "number",
-    style: {
-      width: 90
-    },
-    value: form.value,
-    onChange: function onChange(e) {
-      return setForm(_objectSpread(_objectSpread({}, form), {}, {
-        value: e.target.value
-      }));
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "add-submit",
-    onClick: add
-  }, Ico.plus, " Add")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderTop: "1px solid var(--border)",
-      marginTop: 8,
-      paddingTop: 8,
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: "8px 16px"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: "var(--muted)"
-    }
-  }, "Import CSV:"), /*#__PURE__*/React.createElement("input", {
-    type: "file",
-    accept: ".csv",
-    id: "csv-import",
-    style: {
-      display: "none"
-    },
-    onChange: function onChange(e) {
-      var file = e.target.files[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function (ev) {
-        var lines = ev.target.result.split("\n").filter(function (l) {
-          return l.trim();
-        });
-        // Skip header row if present
-        var start = lines[0].toLowerCase().includes("card") ? 1 : 0;
-        var imported = [];
-        for (var i = start; i < lines.length; i++) {
-          // Proper CSV parse — handles quoted fields with commas inside
-          var cols = [];
-          var cur = "",
-            inQ = false;
-          for (var ci = 0; ci < lines[i].length; ci++) {
-            var ch = lines[i][ci];
-            if (ch === '"') {
-              inQ = !inQ;
-            } else if (ch === ',' && !inQ) {
-              cols.push(cur.trim());
-              cur = "";
-            } else {
-              cur += ch;
+
+    setInv(updated.slice());
+    setRefreshingAll(false);
+    setRefreshProgress("");
+  };
+
+  // ── CSV import singles ──────────────────────────────────────────────────
+  var handleCSVImport = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var lines = ev.target.result.split("\n").filter(function(l){return l.trim();});
+      var start = lines[0].toLowerCase().includes("card") ? 1 : 0;
+      var imported = [];
+      for (var i = start; i < lines.length; i++) {
+        var cols = parseCSVLine(lines[i]);
+        var cn=cols[0], sn=cols[1], num=cols[2], grader=cols[3], grade=cols[4], paid=cols[5], qty=cols[6], notes=cols[7], status=cols[8];
+        if (!cn) continue;
+        var count = parseInt(qty)||1;
+        for (var q = 0; q < count; q++) {
+          // Re-import cache check: look up existing pokedataId from search cache
+          var cacheKey = [(cn||"").toLowerCase().trim(),(sn||"").toLowerCase().trim(),(num||"").toLowerCase().trim()].join("|");
+          var cachedPdId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
+          // If we have a cached pdId, look up existing value from snap history
+          var cachedValue = null;
+          if (cachedPdId) {
+            var lastFetch = localStorage.getItem(FETCH_PFX + cachedPdId);
+            if (lastFetch && Date.now()-Number(lastFetch) < FETCH_CACHE_MS) {
+              var h = getHistory(cachedPdId);
+              if (h && h.latest) cachedValue = h.latest;
             }
           }
-          cols.push(cur.trim());
-          var card_name = cols[0],
-            set_name = cols[1],
-            card_number = cols[2],
-            grader = cols[3],
-            grade = cols[4],
-            price_paid = cols[5],
-            quantity = cols[6],
-            notes = cols[7],
-            status = cols[8];
-          if (!card_name) continue;
-          var qty = parseInt(quantity) || 1;
-          var graderVal = !grader || grader.toLowerCase() === "raw" || grader === "" ? "raw" : grader;
-          for (var q = 0; q < qty; q++) {
-            imported.push({
-              id: Date.now() + i * 100 + q,
-              name: card_name,
-              set: set_name || "",
-              num: card_number || "",
-              sport: activeSport,
-              grader: graderVal,
-              grade: graderVal === "raw" ? "" : grade || "",
-              paid: parseFloat(price_paid) || 0,
-              value: 0,
-              notes: notes || "",
-              status: normalizeStatus(status)
-            });
-          }
-        }
-        if (imported.length > 0) {
-          var _SPORTS_MAP$activeSpo;
-          setInv(function (prev) {
-            return [].concat(_toConsumableArray(prev || []), imported);
-          });
-          alert("\u2705 Imported ".concat(imported.length, " cards into ").concat((_SPORTS_MAP$activeSpo = SPORTS_MAP[activeSport]) === null || _SPORTS_MAP$activeSpo === void 0 ? void 0 : _SPORTS_MAP$activeSpo.label, "! Fetching prices in background\u2026"));
-          // Auto-fetch prices from PokeData for each card
-          _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee2() {
-            var updated, _loop2, idx;
-            return _regeneratorRuntime().wrap(function _callee2$(_context4) {
-              while (1) switch (_context4.prev = _context4.next) {
-                case 0:
-                  updated = [].concat(imported);
-                  // PRE-FLIGHT: resolve cached cards before hitting the API loop
-                  updated = updated.map(function(card) {
-                    if (!card.num || !card.set) return card;
-                    var _sk = "cc:searchid:" + (card.name||"").toLowerCase().trim() + "|" + (card.set||"").toLowerCase().trim() + "|" + (card.num||"").toLowerCase().trim();
-                    var _sid = localStorage.getItem(_sk);
-                    if (!_sid) return card;
-                    var _fk = "cc:lastfetch:" + _sid;
-                    var _ft = localStorage.getItem(_fk);
-                    var _fresh = _ft && (Date.now() - Number(_ft) < 144 * 3600 * 1000);
-                    if (!_fresh) return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid });
-                    var _ex = (inv || []).find(function(x) { return x.pokedataId === _sid && x.value; });
-                    // Only skip fetch if we actually have a good cached value
-                    if (!_ex) return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid });
-                    return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid, value: _ex.value, _skipFetch: true });
-                  });
-                  _loop2 = /*#__PURE__*/_regeneratorRuntime().mark(function _loop2() {
-                    var card, results, matches, cardNum, cardSet, match, pd, _p$TCGPlayer2, _p$eBayRaw2, p, value, toUpdate;
-                    return _regeneratorRuntime().wrap(function _loop2$(_context3) {
-                      while (1) switch (_context3.prev = _context3.next) {
-                        case 0:
-                          card = updated[idx];
-                          // Skip if pre-flight already resolved this card
-                          if (!card._skipFetch && !(!card.num || !card.set)) {
-                            _context3.next = 3;
-                            break;
-                          }
-                          return _context3.abrupt("return", 1);
-                        case 3:
-                          _context3.prev = 3;
-                          // Check search ID cache first
-                          var _sKey = "cc:searchid:" + (card.name||"").toLowerCase().trim() + "|" + (card.set||"").toLowerCase().trim() + "|" + (card.num||"").toLowerCase().trim();
-                          var _cachedMatchId = localStorage.getItem(_sKey);
-                          if (!_cachedMatchId) {
-                            _context3.next = 6;
-                            break;
-                          }
-                          // Have cached ID - check price cache
-                          var _directKey = "cc:lastfetch:" + _cachedMatchId;
-                          var _directFetch = localStorage.getItem(_directKey);
-                          if (!(_directFetch && Date.now() - Number(_directFetch) < 144 * 3600 * 1000)) {
-                            _context3.next = 6;
-                            break;
-                          }
-                          var _directExisting = (inv || []).find(function(x) { return x.pokedataId === _cachedMatchId && x.value; });
-                          updated[idx] = _objectSpread(_objectSpread({}, card), {}, { value: _directExisting ? _directExisting.value : null, pokedataId: _cachedMatchId });
-                          return _context3.abrupt("return", 1);
-                        case 6:
-                          _context3.next = 8;
-                          return pdSearch(card.name);
-                        case 8:
-                          results = _context3.sent;
-                          matches = Array.isArray(results) ? results : [];
-                          cardNum = (card.num || "").toLowerCase().trim();
-                          cardSet = (card.set || "").toLowerCase().trim();
-                          match = results.filter(function (r) {
-                            return r.language === "ENGLISH";
-                          }).find(function (r) {
-                            var _r$name2, _card$name2, _r$set_code7, _r$set_name3, _r$set_code8, _r$set_code9;
-                            return ((_r$name2 = r.name) === null || _r$name2 === void 0 ? void 0 : _r$name2.toLowerCase()) === ((_card$name2 = card.name) === null || _card$name2 === void 0 ? void 0 : _card$name2.toLowerCase()) && (r.num || "").toLowerCase() === cardNum && (((_r$set_code7 = r.set_code) === null || _r$set_code7 === void 0 ? void 0 : _r$set_code7.toLowerCase()) === cardSet || ((_r$set_name3 = r.set_name) === null || _r$set_name3 === void 0 ? void 0 : _r$set_name3.toLowerCase()) === cardSet || ((_r$set_code8 = r.set_code) === null || _r$set_code8 === void 0 ? void 0 : _r$set_code8.toLowerCase().includes(cardSet)) || cardSet.includes((_r$set_code9 = r.set_code) === null || _r$set_code9 === void 0 ? void 0 : _r$set_code9.toLowerCase()));
-                          });
-                          if (!match) {
-                            _context3.next = 16;
-                            break;
-                          }
-                          // Check 24h cache — skip API if recently fetched
-                          // Save search result to cache so future uploads skip pdSearch
-                            localStorage.setItem("cc:searchid:" + (card.name||"").toLowerCase().trim() + "|" + (card.set||"").toLowerCase().trim() + "|" + (card.num||"").toLowerCase().trim(), String(match.id));
-                            var _csvCacheKey = "cc:lastfetch:" + String(match.id);
-                          var _csvLastFetch = localStorage.getItem(_csvCacheKey);
-                          var _csvCacheHit = _csvLastFetch && (Date.now() - Number(_csvLastFetch) < 144 * 3600 * 1000);
-                          if (_csvCacheHit) {
-                            // Reuse cached price from existing inventory
-                            var _csvExisting = (inv || []).find(function(x) { return x.pokedataId === String(match.id) && x.value; });
-                            var _cachedValue = _csvExisting ? _csvExisting.value : null;
-                            updated[idx] = _objectSpread(_objectSpread({}, card), {}, { value: _cachedValue, pokedataId: String(match.id) });
-                            _context3.next = 16;
-                            break;
-                          }
-                          _context3.next = 14;
-                          return pdPricing(match.id);
-                        case 14:
-                          pd = _context3.sent;
-                          if (pd !== null && pd !== void 0 && pd.pricing) {
-                            p = pd.pricing;
-                            var _grader = (card.grader || "").toUpperCase().trim();
-                            var _grade = (card.grade || "").toString().trim();
-                            var _gradedKey = _grader && _grade ? _grader + " " + parseFloat(_grade).toFixed(1) : null;
-                            var _gradedPrice = _gradedKey && p[_gradedKey] && p[_gradedKey].value > 0 ? p[_gradedKey].value : null;
-                            value = _gradedPrice || ((_p$TCGPlayer2 = p["TCGPlayer"]) === null || _p$TCGPlayer2 === void 0 ? void 0 : _p$TCGPlayer2.value) || ((_p$eBayRaw2 = p["eBay Raw"]) === null || _p$eBayRaw2 === void 0 ? void 0 : _p$eBayRaw2.value) || null;
-                            if (value) {
-                              localStorage.setItem(_csvCacheKey, String(Date.now()));
-                              if (!getBaseline(String(match.id))) setBaseline(String(match.id), value);
-                              updated[idx] = _objectSpread(_objectSpread({}, card), {}, {
-                                value: value,
-                                pokedataId: String(match.id)
-                              });
-                              savePriceSnapshot(String(match.id), value);
-                            }
-                          }
-                        case 16:
-                          _context3.next = 20;
-                          break;
-                        case 18:
-                          _context3.prev = 18;
-                          _context3.t0 = _context3["catch"](3);
-                        case 20:
-                          // Update inv every 10 cards so user sees progress
-                          if (idx % 10 === 0) {
-                            toUpdate = _toConsumableArray(updated);
-                            setInv(function (prev) {
-                              var ids = new Set(toUpdate.map(function (c) {
-                                return c.id;
-                              }));
-                              return [].concat(_toConsumableArray(prev.filter(function (x) {
-                                return !ids.has(x.id);
-                              })), _toConsumableArray(toUpdate));
-                            });
-                          }
-                        case 21:
-                        case "end":
-                          return _context3.stop();
-                      }
-                    }, _loop2, null, [[3, 18]]);
-                  });
-                  idx = 0;
-                case 3:
-                  if (!(idx < updated.length)) {
-                    _context4.next = 10;
-                    break;
-                  }
-                  return _context4.delegateYield(_loop2(), "t0", 5);
-                case 5:
-                  if (!_context4.t0) {
-                    _context4.next = 7;
-                    break;
-                  }
-                  return _context4.abrupt("continue", 7);
-                case 7:
-                  idx++;
-                  _context4.next = 3;
-                  break;
-                case 10:
-                  // Final update
-                  setInv(function (prev) {
-                    var ids = new Set(updated.map(function (c) {
-                      return c.id;
-                    }));
-                    return [].concat(_toConsumableArray(prev.filter(function (x) {
-                      return !ids.has(x.id);
-                    })), _toConsumableArray(updated));
-                  });
-                case 11:
-                case "end":
-                  return _context4.stop();
-              }
-            }, _callee2);
-          }))();
-        }
-        e.target.value = "";
-      };
-      reader.readAsText(file);
-    }
-  }), /*#__PURE__*/React.createElement("label", {
-    htmlFor: "csv-import",
-    className: "add-submit",
-    style: {
-      cursor: "pointer",
-      margin: 0
-    }
-  }, "\uD83D\uDCC2 Import CSV"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)"
-    }
-  }, "Singles: card_name, set_name, card_number, grader, grade, price_paid, quantity, notes, status"), /*#__PURE__*/React.createElement("input", {
-    type: "file",
-    accept: ".csv",
-    id: "csv-sealed-import",
-    style: {
-      display: "none"
-    },
-    onChange: function onChange(e) {
-      var file = e.target.files[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function (ev) {
-        var lines = ev.target.result.split("\n").filter(function (l) {
-          return l.trim();
-        });
-        var start = lines[0].toLowerCase().includes("product") ? 1 : 0;
-        var imported = [];
-        for (var i = start; i < lines.length; i++) {
-          // Proper CSV parse — handles quoted fields with commas inside
-          var cols = [];
-          var cur = "",
-            inQ = false;
-          for (var ci = 0; ci < lines[i].length; ci++) {
-            var ch = lines[i][ci];
-            if (ch === '"') {
-              inQ = !inQ;
-            } else if (ch === ',' && !inQ) {
-              cols.push(cur.trim());
-              cur = "";
-            } else {
-              cur += ch;
-            }
-          }
-          cols.push(cur.trim());
-          var product_name = cols[0],
-            set_name = cols[1],
-            type = cols[2],
-            price_paid = cols[3],
-            quantity = cols[4],
-            notes = cols[5];
-          if (!product_name) continue;
           imported.push({
-            id: Date.now() + i * 100,
-            name: product_name,
-            set: set_name || "",
-            type: type || "Other",
-            paid: parseFloat(price_paid) || 0,
-            value: 0,
-            qty: parseInt(quantity) || 1,
-            notes: notes || "",
-            sealed: true,
-            sport: activeSport
+            id: Date.now()+i*100+q,
+            name: cn, set: sn||"", num: num||"",
+            grader: grader||"raw", grade: grade||"",
+            paid: parseFloat(paid)||0,
+            value: cachedValue,          // reuse cached price if available
+            pokedataId: cachedPdId,      // reuse cached id if available
+            status: normalizeStatus(status),
+            notes: notes||"", sport: activeSport
           });
         }
-        if (imported.length > 0) {
-          var others = (inv || []).filter(function (i) {
-            return !(i.sport === activeSport && i.sealed);
-          });
-          var existing = (inv || []).filter(function (i) {
-            return i.sport === activeSport && i.sealed;
-          });
-          setInv([].concat(_toConsumableArray(others), _toConsumableArray(existing), imported));
-          alert("\u2705 Imported ".concat(imported.length, " sealed items!"));
+      }
+      if (imported.length) {
+        setInv((inv||[]).concat(imported));
+        alert("✅ Imported "+imported.length+" cards."+(imported.filter(function(c){return c.value;}).length>0?" ("+imported.filter(function(c){return c.value;}).length+" prices reused from cache)":""));
+      }
+      e.target.value = "";
+    };
+    reader.readAsText(file);
+  };
+
+  // ── CSV import sealed ───────────────────────────────────────────────────
+  var handleSealedCSVImport = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var lines = ev.target.result.split("\n").filter(function(l){return l.trim();});
+      var start = lines[0].toLowerCase().includes("product") ? 1 : 0;
+      var imported = [];
+      for (var i = start; i < lines.length; i++) {
+        var cols = parseCSVLine(lines[i]);
+        var name=cols[0], type=cols[2], paid=cols[3], qty=cols[4], notes=cols[5];
+        if (!name) continue;
+        imported.push({ id:Date.now()+i*100, name:name, type:type||"Other", paid:parseFloat(paid)||0, value:0, qty:parseInt(qty)||1, notes:notes||"", sealed:true, sport:activeSport });
+      }
+      if (imported.length) {
+        var others   = (inv||[]).filter(function(i){return !(i.sport===activeSport&&i.sealed);});
+        var existing = (inv||[]).filter(function(i){return i.sport===activeSport&&i.sealed;});
+        setInv(others.concat(existing).concat(imported));
+        alert("✅ Imported "+imported.length+" sealed items!");
+      }
+      e.target.value = "";
+    };
+    reader.readAsText(file);
+  };
+
+  var filtered = (inv||[]).filter(function(i){return i.sport===activeSport;});
+  var singles  = filtered.filter(function(i){return !i.sealed;});
+  var totalPaid  = singles.reduce(function(s,i){return s+(i.paid||0);},0);
+  var totalValue = singles.reduce(function(s,i){return s+(i.value||0);},0);
+  var totalProfit = totalValue-totalPaid;
+
+  if (!invReady) return React.createElement("div", { style:{padding:20,color:"var(--muted)",fontSize:12} }, "Loading…");
+
+  var lastSnapDate = localStorage.getItem("cc:lastSnapDate");
+  var snapToday = lastSnapDate === new Date().toDateString();
+
+  return React.createElement("div", null,
+    // Stats row
+    React.createElement("div", { className:"stats-row" },
+      React.createElement("div", { className:"stat-card" },
+        React.createElement("div", { className:"stat-label" }, "Total Cards"),
+        React.createElement("div", { className:"stat-value" }, singles.length),
+        React.createElement("div", { className:"stat-sub" }, "singles")
+      ),
+      React.createElement("div", { className:"stat-card" },
+        React.createElement("div", { className:"stat-label" }, "Total Paid"),
+        React.createElement("div", { className:"stat-value", style:{color:"var(--muted2)"} }, "$"+totalPaid.toFixed(2)),
+        React.createElement("div", { className:"stat-sub" }, "cost basis")
+      ),
+      React.createElement("div", { className:"stat-card" },
+        React.createElement("div", { className:"stat-label" }, "Current Value"),
+        React.createElement("div", { className:"stat-value", style:{color:"var(--cards)"} }, "$"+totalValue.toFixed(2)),
+        React.createElement("div", { className:"stat-sub" }, "market value")
+      ),
+      React.createElement("div", { className:"stat-card" },
+        React.createElement("div", { className:"stat-label" }, "Unrealized P&L"),
+        React.createElement("div", { className:"stat-value "+(totalProfit>=0?"profit-pos":"profit-neg") }, (totalProfit>=0?"+":"")+"$"+totalProfit.toFixed(2)),
+        React.createElement("div", { className:"stat-sub" }, totalPaid>0?(totalProfit/totalPaid*100).toFixed(1)+"% return":"—")
+      ),
+      React.createElement("div", { className:"stat-card", style:{minWidth:120} },
+        React.createElement("div", { className:"stat-label" }, "Daily Snapshot"),
+        React.createElement("div", { className:"stat-value", style:{fontSize:12,color:snapToday?"var(--green)":"var(--muted)"} }, snapToday?"✓ Done today":"Pending"),
+        React.createElement("div", { className:"stat-sub" }, "auto by 10pm")
+      )
+    ),
+
+    // Action toolbar
+    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px"} },
+      // Sport tabs
+      React.createElement("div", { className:"market-tabs" },
+        [{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"},{id:"disney",label:"✨ Disney"}].map(function(sp){
+          return React.createElement("button", { key:sp.id, className:"market-tab"+(activeSport===sp.id?" active":""), onClick:function(){setActive(sp.id);} }, sp.label);
+        })
+      ),
+
+      // Refresh
+      React.createElement("button", {
+        style:{background:refreshingAll?"rgba(240,192,64,0.05)":"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--cards)",fontSize:12,fontWeight:600,cursor:refreshingAll?"not-allowed":"pointer"},
+        disabled: refreshingAll,
+        onClick: refreshAllPrices
+      }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
+
+      // Fix missing
+      React.createElement("button", {
+        style:{background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:7,padding:"7px 14px",color:"#fbbf24",fontSize:12,fontWeight:600,cursor:"pointer"},
+        onClick:function(){
+          var missing = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed&&!x.value&&x.pokedataId;});
+          var noId    = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed&&!x.value&&!x.pokedataId;});
+          missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
+          noId.forEach(function(x){ localStorage.removeItem(SEARCH_PFX+[(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),(x.num||"").toLowerCase().trim()].join("|")); });
+          alert("Cache cleared for "+missing.length+" unpriced + "+noId.length+" unmatched. Hit Refresh All Prices.");
         }
-        e.target.value = "";
-      };
-      reader.readAsText(file);
-    }
-  }), /*#__PURE__*/React.createElement("label", {
-    htmlFor: "csv-sealed-import",
-    className: "add-submit",
-    style: {
-      cursor: "pointer",
-      margin: 0,
-      background: "rgba(251,146,60,0.15)",
-      borderColor: "rgba(251,146,60,0.3)",
-      color: "#fb923c"
-    }
-  }, "\uD83D\uDCE6 Import Sealed CSV"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)"
-    }
-  }, "Sealed: product_name, set_name, type, price_paid, quantity, notes")));
+      }, "🔧 Fix Missing"),
+
+      // Clear all
+      React.createElement("button", {
+        style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:8},
+        onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
+      }, "🗑 Clear All")
+    ),
+
+    // Sections
+    React.createElement("div", null,
+      STATUSES.map(function(s) {
+        return React.createElement(InvSection, {
+          key: s.id,
+          title: s.label,
+          color: s.color,
+          cards: filtered.filter(function(i){ return !i.sealed && (i.status||"pc")===s.id; }),
+          del: del,
+          update: update,
+          clearSection: function() {
+            setInv((inv||[]).filter(function(x){ return !(x.sport===activeSport&&!x.sealed&&(x.status||"pc")===s.id); }));
+          }
+        });
+      }),
+      React.createElement(SealedSection, {
+        cards: filtered.filter(function(i){ return i.sealed; }),
+        activeSport: activeSport,
+        del: del,
+        update: function(id, changes) {
+          if (changes.sealed) {
+            var others = (inv||[]).filter(function(i){ return !(i.sport===activeSport&&i.sealed); });
+            setInv(others.concat(changes.sealed.map(function(s){ return Object.assign({},s,{sealed:true,sport:activeSport}); })));
+          }
+        },
+        clearSection: function() {
+          setInv((inv||[]).filter(function(x){ return !(x.sport===activeSport&&x.sealed); }));
+        }
+      })
+    ),
+
+    // Add single card form
+    React.createElement("div", { className:"inv-add-form" },
+      React.createElement("input", { className:"add-in", placeholder:"Card name e.g. Charizard Base Set", value:form.name, onChange:function(ev){setField("name",ev.target.value);}, onKeyDown:function(ev){if(ev.key==="Enter")add();}, style:{flex:2} }),
+      React.createElement("input", { className:"add-in", placeholder:"Set", style:{width:90}, value:form.set||"", onChange:function(ev){setField("set",ev.target.value);} }),
+      React.createElement("input", { className:"add-in", placeholder:"#", style:{width:60}, value:form.num||"", onChange:function(ev){setField("num",ev.target.value);} }),
+      React.createElement("select", { className:"add-select", value:form.grader, onChange:function(ev){setField("grader",ev.target.value);if(ev.target.value==="raw")setField("grade","");} },
+        React.createElement("option",{value:"raw"},"Raw"),React.createElement("option",{value:"PSA"},"PSA"),React.createElement("option",{value:"BGS"},"BGS"),React.createElement("option",{value:"CGC"},"CGC")
+      ),
+      React.createElement("input", { className:"add-in", placeholder:"Grade", style:{width:70}, value:form.grade||"", disabled:form.grader==="raw", onChange:function(ev){setField("grade",ev.target.value);} }),
+      React.createElement("input", { className:"add-in", placeholder:"Paid $", type:"number", style:{width:90}, value:form.paid, onChange:function(ev){setField("paid",ev.target.value);} }),
+      React.createElement("select", { className:"add-select", value:form.status, onChange:function(ev){setField("status",ev.target.value);} },
+        STATUSES.map(function(s){ return React.createElement("option",{key:s.id,value:s.id},s.label); })
+      ),
+      React.createElement("button", { className:"add-submit", onClick:add }, Ico.plus, " Add")
+    ),
+
+    // CSV import row
+    React.createElement("div", { style:{borderTop:"1px solid var(--border)",marginTop:8,paddingTop:8,display:"flex",alignItems:"center",gap:10,padding:"8px 16px",flexWrap:"wrap"} },
+      React.createElement("span", { style:{fontSize:11,color:"var(--muted)"} }, "Import CSV:"),
+      React.createElement("input", { type:"file", accept:".csv", id:"csv-import", onChange:handleCSVImport }),
+      React.createElement("label", { htmlFor:"csv-import", className:"add-submit", style:{cursor:"pointer",margin:0} }, "📂 Import Singles CSV"),
+      React.createElement("span", { style:{fontSize:10,color:"var(--muted)"} }, "card_name, set_name, card_number, grader, grade, price_paid, quantity, notes, status"),
+      React.createElement("input", { type:"file", accept:".csv", id:"csv-sealed-import", onChange:handleSealedCSVImport }),
+      React.createElement("label", { htmlFor:"csv-sealed-import", className:"add-submit", style:{cursor:"pointer",margin:0,background:"rgba(251,146,60,0.15)",borderColor:"rgba(251,146,60,0.3)",color:"#fb923c"} }, "📦 Import Sealed CSV"),
+      React.createElement("span", { style:{fontSize:10,color:"var(--muted)"} }, "product_name, set_name, type, price_paid, quantity, notes")
+    )
+  );
 }
 
 // ── Search Tab ─────────────────────────────────────────────────────────────
@@ -3857,10 +2855,10 @@ function DashboardWatchlist(_ref30) {
       }
     }, /*#__PURE__*/React.createElement("span", {
       className: "wl-price"
-    }, card.fetchingPrice ? "…" : card.price ? "$".concat(Number(card.price).toFixed(2)) : "—"), (hist === null || hist === void 0 ? void 0 : hist.snapCount) > 1 && function () {
+    }, card.fetchingPrice ? "…" : card.price ? "$".concat(Number(card.price).toFixed(2)) : "—"), (hist === null || hist === void 0 ? void 0 : hist.count) > 1 && function () {
       var cur = hist.latest;
-      var w1 = hist.price7d;
-      var m1 = hist.price30d;
+      var w1 = hist.p7d;
+      var m1 = hist.p30d;
       var fmt = function fmt(cur, old) {
         if (!old || !cur) return null;
         if (changeMode === "pct") {
@@ -3898,7 +2896,7 @@ function DashboardWatchlist(_ref30) {
           marginLeft: 2
         }
       }, "1m ") : null, fmt(cur, m1));
-    }(), (hist === null || hist === void 0 ? void 0 : hist.snapCount) <= 1 && /*#__PURE__*/React.createElement("span", {
+    }(), (hist === null || hist === void 0 ? void 0 : hist.count) <= 1 && /*#__PURE__*/React.createElement("span", {
       className: "move-pill move-na",
       style: {
         fontSize: 9
@@ -4208,175 +3206,73 @@ function DashboardWatchlist(_ref30) {
 }
 
 // ── Auto-snapshot scheduler (6am + 4pm) ───────────────────────────────────
+
+// ── Auto-snapshot scheduler ───────────────────────────────────────────────
+// Runs once per day (between 10am–10pm) to store price history.
+// Does NOT fire if the page was already refreshed today.
 function useAutoSnapshot(wl, inv, setInv) {
-  useEffect(function () {
-    var runSnapshots = /*#__PURE__*/function () {
-      var _ref34 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee8() {
-        var now, lastRun, todayKey, _iterator3, _step3, _card, pd, _p$TCGPlayer10, _p$eBayRaw10, p, price, invWithId, _iterator4, _step4, _loop3;
-        return _regeneratorRuntime().wrap(function _callee8$(_context11) {
-          while (1) switch (_context11.prev = _context11.next) {
-            case 0:
-              now = new Date();
-              lastRun = localStorage.getItem("cc:lastSnap");
-              todayKey = "".concat(now.toDateString(), "-10am");
-              if (!(lastRun === todayKey)) {
-                _context11.next = 5;
-                break;
-              }
-              return _context11.abrupt("return");
-            case 5:
-              // Snapshot + refresh watchlist cards
-              _iterator3 = _createForOfIteratorHelper(wl || []);
-              _context11.prev = 6;
-              _iterator3.s();
-            case 8:
-              if ((_step3 = _iterator3.n()).done) {
-                _context11.next = 21;
-                break;
-              }
-              _card = _step3.value;
-              _context11.prev = 10;
-              _context11.next = 13;
-              return pdPricing(_card.id);
-            case 13:
-              pd = _context11.sent;
-              if (pd !== null && pd !== void 0 && pd.pricing) {
-                p = pd.pricing;
-                price = ((_p$TCGPlayer10 = p["TCGPlayer"]) === null || _p$TCGPlayer10 === void 0 ? void 0 : _p$TCGPlayer10.value) || ((_p$eBayRaw10 = p["eBay Raw"]) === null || _p$eBayRaw10 === void 0 ? void 0 : _p$eBayRaw10.value) || null;
-                if (price) savePriceSnapshot(_card.id, price);
-              }
-              _context11.next = 19;
-              break;
-            case 17:
-              _context11.prev = 17;
-              _context11.t0 = _context11["catch"](10);
-            case 19:
-              _context11.next = 8;
-              break;
-            case 21:
-              _context11.next = 26;
-              break;
-            case 23:
-              _context11.prev = 23;
-              _context11.t1 = _context11["catch"](6);
-              _iterator3.e(_context11.t1);
-            case 26:
-              _context11.prev = 26;
-              _iterator3.f();
-              return _context11.finish(26);
-            case 29:
-              // Snapshot + refresh inventory cards that have a pokedataId
-              invWithId = (inv || []).filter(function (c) {
-                return c.pokedataId && !c.sealed;
-              });
-              _iterator4 = _createForOfIteratorHelper(invWithId);
-              _context11.prev = 31;
-              _loop3 = /*#__PURE__*/_regeneratorRuntime().mark(function _loop3() {
-                var card, _pd, _p$TCGPlayer11, _p$eBayRaw11, _p, value;
-                return _regeneratorRuntime().wrap(function _loop3$(_context10) {
-                  while (1) switch (_context10.prev = _context10.next) {
-                    case 0:
-                      card = _step4.value;
-                      _context10.prev = 1;
-                      _context10.next = 4;
-                      return pdPricing(card.pokedataId);
-                    case 4:
-                      _pd = _context10.sent;
-                      if (_pd !== null && _pd !== void 0 && _pd.pricing) {
-                        _p = _pd.pricing;
-                        var _sGrader = (card.grader || "").toUpperCase().trim();
-                        var _sGrade = (card.grade || "").toString().trim();
-                        var _sGradedKey = _sGrader && _sGrade ? _sGrader + " " + parseFloat(_sGrade).toFixed(1) : null;
-                        var _sGradedPrice = _sGradedKey && _p[_sGradedKey] && _p[_sGradedKey].value > 0 ? _p[_sGradedKey].value : null;
-                        value = _sGradedPrice || ((_p$TCGPlayer11 = _p["TCGPlayer"]) === null || _p$TCGPlayer11 === void 0 ? void 0 : _p$TCGPlayer11.value) || ((_p$eBayRaw11 = _p["eBay Raw"]) === null || _p$eBayRaw11 === void 0 ? void 0 : _p$eBayRaw11.value) || null;
-                        if (value) {
-                          savePriceSnapshot(card.pokedataId, value);
-                          // Update value in inventory
-                          if (setInv) setInv(function (prev) {
-                            return prev.map(function (x) {
-                              return x.id === card.id ? _objectSpread(_objectSpread({}, x), {}, {
-                                value: value
-                              }) : x;
-                            });
-                          });
-                        }
-                      }
-                      _context10.next = 10;
-                      break;
-                    case 8:
-                      _context10.prev = 8;
-                      _context10.t0 = _context10["catch"](1);
-                    case 10:
-                    case "end":
-                      return _context10.stop();
-                  }
-                }, _loop3, null, [[1, 8]]);
-              });
-              _iterator4.s();
-            case 34:
-              if ((_step4 = _iterator4.n()).done) {
-                _context11.next = 38;
-                break;
-              }
-              return _context11.delegateYield(_loop3(), "t2", 36);
-            case 36:
-              _context11.next = 34;
-              break;
-            case 38:
-              _context11.next = 43;
-              break;
-            case 40:
-              _context11.prev = 40;
-              _context11.t3 = _context11["catch"](31);
-              _iterator4.e(_context11.t3);
-            case 43:
-              _context11.prev = 43;
-              _iterator4.f();
-              return _context11.finish(43);
-            case 46:
-              localStorage.setItem("cc:lastSnap", todayKey);
-            case 47:
-            case "end":
-              return _context11.stop();
+  useEffect(function() {
+    var runSnapshots = async function() {
+      var today = new Date().toDateString();
+      var lastRun = localStorage.getItem("cc:lastSnapDate");
+      if (lastRun === today) return; // already ran today
+
+      var now = new Date();
+      var h = now.getHours();
+      if (h < 10 || h >= 22) return; // only run 10am–10pm
+
+      // Snapshot inventory cards that already have a pokedataId
+      var invCards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed; });
+      for (var i = 0; i < invCards.length; i++) {
+        var card = invCards[i];
+        try {
+          var pd = await pdPricing(card.pokedataId);
+          if (pd && pd.pricing) {
+            var value = extractPrice(pd.pricing, card.grader, card.grade);
+            if (value) {
+              saveSnap(card.pokedataId, value);
+              try { localStorage.setItem(FETCH_PFX + card.pokedataId, String(Date.now())); } catch(e){}
+              if (setInv) setInv(function(prev){ return prev.map(function(x){ return x.id===card.id?Object.assign({},x,{value:value}):x; }); });
+            }
           }
-        }, _callee8, null, [[6, 23, 26, 29], [10, 17], [31, 40, 43, 46]]);
-      }));
-      return function runSnapshots() {
-        return _ref34.apply(this, arguments);
-      };
-    }();
+        } catch(e) {}
+        await new Promise(function(r){ setTimeout(r, 300); }); // gentle pacing
+      }
 
-    // Check every minute if it's time to run
-    var check = function check() {
+      // Snapshot watchlist cards too
+      for (var j = 0; j < (wl||[]).length; j++) {
+        var wcard = wl[j];
+        try {
+          var wpd = await pdPricing(wcard.id);
+          if (wpd && wpd.pricing) {
+            var wprice = (wpd.pricing["TCGPlayer"]&&wpd.pricing["TCGPlayer"].value) || (wpd.pricing["eBay Raw"]&&wpd.pricing["eBay Raw"].value) || null;
+            if (wprice) saveSnap(wcard.id, wprice);
+          }
+        } catch(e) {}
+        await new Promise(function(r){ setTimeout(r, 300); });
+      }
+
+      try { localStorage.setItem("cc:lastSnapDate", today); } catch(e) {}
+    };
+
+    var check = function() {
       var h = new Date().getHours();
-      var m = new Date().getMinutes();
-      if (h === 10 && m === 0) runSnapshots();
+      if (h >= 10 && h < 22) runSnapshots();
     };
 
-    // Also run on load if past the snapshot time and not yet run today
-    var h = new Date().getHours();
-    if (h >= 10) runSnapshots();
-    var interval = setInterval(check, 60000);
-    return function () {
-      return clearInterval(interval);
-    };
-  }, [wl === null || wl === void 0 ? void 0 : wl.length, inv === null || inv === void 0 ? void 0 : inv.length]);
+    check(); // check on mount
+    var interval = setInterval(check, 3600000); // re-check hourly
+    return function() { clearInterval(interval); };
+  }, []); // intentionally run once on mount only
 }
 
 // ── Inventory Page (full sidebar view) ────────────────────────────────────
 function InventoryPage(_ref35) {
-  var inv = _ref35.inv,
-    setInv = _ref35.setInv,
-    invReady = _ref35.invReady,
-    activeSport = _ref35.activeSport,
-    setActiveSport = _ref35.setActiveSport;
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(InventoryTab, {
-    inv: inv,
-    setInv: setInv,
-    invReady: invReady,
-    activeSport: activeSport,
-    setActiveSport: setActiveSport
-  }));
+  var inv = _ref35.inv, setInv = _ref35.setInv, invReady = _ref35.invReady,
+      activeSport = _ref35.activeSport, setActiveSport = _ref35.setActiveSport;
+  return React.createElement("div", null,
+    React.createElement(InventoryTab, { inv:inv, setInv:setInv, invReady:invReady, activeSport:activeSport, setActiveSport:setActiveSport })
+  );
 }
 
 // ── Error Boundary ────────────────────────────────────────────────────────
