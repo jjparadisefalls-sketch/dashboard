@@ -1300,47 +1300,90 @@ function extractPrice(pricing, grader, grade) {
   var isGraded = g && g !== "RAW" && n;
 
   if (isGraded) {
-    // Try "PSA 10.0" format
-    var k1 = g + " " + parseFloat(n).toFixed(1);
-    if (pricing[k1] && pricing[k1].value > 0) return pricing[k1].value;
-    // Try "PSA 10" format
-    var k2 = g + " " + n;
-    if (pricing[k2] && pricing[k2].value > 0) return pricing[k2].value;
-    // Scan all keys for grader prefix + grade number match
-    var keys = Object.keys(pricing);
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
-      if (k.toUpperCase().startsWith(g) && k.indexOf(n) !== -1 && pricing[k].value > 0) return pricing[k].value;
+    var nFloat = parseFloat(n);
+    // All key formats to try for graded cards
+    var attempts = [
+      g + " " + nFloat.toFixed(1),           // "PSA 10.0"
+      g + " " + String(nFloat),              // "PSA 10"
+      g + " " + n,                           // "PSA 10" (raw string)
+      g + "-" + nFloat.toFixed(1),           // "PSA-10.0"
+      g.charAt(0).toUpperCase() + g.slice(1).toLowerCase() + " " + nFloat.toFixed(1), // "Psa 10.0"
+    ];
+    for (var i = 0; i < attempts.length; i++) {
+      if (pricing[attempts[i]] && pricing[attempts[i]].value > 0) return pricing[attempts[i]].value;
     }
-    // No graded price found — log available keys so we can debug
-    console.warn("[PCT] No graded price for", g, n, "- available keys:", Object.keys(pricing));
+    // Broad scan — any key containing the grader and grade
+    var keys = Object.keys(pricing);
+    for (var j = 0; j < keys.length; j++) {
+      var k = keys[j].toUpperCase();
+      if (k.indexOf(g) !== -1 && k.indexOf(String(nFloat)) !== -1 && pricing[keys[j]].value > 0) {
+        console.log("[PCT] Graded key found via scan:", keys[j], pricing[keys[j]].value);
+        return pricing[keys[j]].value;
+      }
+    }
+    // Nothing found — log so we can fix the key format
+    console.warn("[PCT] No graded price for", g, n, "| Available keys:", JSON.stringify(Object.keys(pricing)));
     return null;
   }
 
-  // Raw card
-  return (pricing["TCGPlayer"]   && pricing["TCGPlayer"].value   > 0 ? pricing["TCGPlayer"].value   : null) ||
-         (pricing["eBay Raw"]    && pricing["eBay Raw"].value    > 0 ? pricing["eBay Raw"].value    : null) ||
+  // Raw card — prefer TCGPlayer, fall back through sources
+  return (pricing["TCGPlayer"]    && pricing["TCGPlayer"].value    > 0 ? pricing["TCGPlayer"].value    : null) ||
+         (pricing["eBay Raw"]     && pricing["eBay Raw"].value     > 0 ? pricing["eBay Raw"].value     : null) ||
          (pricing["Pokedata Raw"] && pricing["Pokedata Raw"].value > 0 ? pricing["Pokedata Raw"].value : null) ||
          null;
 }
 
 // Find best matching card from search results
+// Normalize set name for fuzzy matching against PokeData set_code / set_name
+function normalizeSet(s) {
+  return (s || "").toLowerCase().trim()
+    .replace(/scarlet\s*&\s*violet\s*promos?/i, "svp")
+    .replace(/scarlet\s*and\s*violet\s*promos?/i, "svp")
+    .replace(/scarlet\s*&\s*violet/i, "sv")
+    .replace(/shrouded\s*fable/i, "sfa")
+    .replace(/black\s*&\s*white/i, "bw")
+    .replace(/black\s*and\s*white/i, "bw")
+    .replace(/sun\s*&\s*moon/i, "sm")
+    .replace(/sun\s*and\s*moon/i, "sm")
+    .replace(/sword\s*&\s*shield/i, "swsh")
+    .replace(/sword\s*and\s*shield/i, "swsh")
+    .replace(/\s+/g, " ");
+}
+
+function setsMatch(r, setInput) {
+  if (!setInput) return false;
+  var norm = normalizeSet(setInput);
+  var sc = (r.set_code || "").toLowerCase().trim();
+  var sn = (r.set_name || "").toLowerCase().trim();
+  var scNorm = normalizeSet(sc);
+  var snNorm = normalizeSet(sn);
+  return sc === norm || sn === norm ||
+         scNorm === norm || snNorm === norm ||
+         sc.includes(norm) || norm.includes(sc) ||
+         sn.includes(norm) || norm.includes(sn) ||
+         scNorm.includes(norm) || norm.includes(scNorm);
+}
+
 function findBestMatch(results, card) {
   var name = (card.name || "").toLowerCase().trim();
   var num  = (card.num  || "").toLowerCase().trim();
   var set  = (card.set  || "").toLowerCase().trim();
   var eng  = results.filter(function(r) { return r.language === "ENGLISH"; });
+
   var sameName = function(r) { return (r.name || "").toLowerCase() === name; };
-  var sameNum  = function(r) { return (r.num  || "").toLowerCase() === num; };
-  var sameSet  = function(r) {
-    var sc = (r.set_code || "").toLowerCase();
-    var sn = (r.set_name || "").toLowerCase();
-    return sc === set || sn === set || sc.includes(set) || set.includes(sc);
-  };
-  var m = eng.find(function(r) { return sameName(r) && num && sameNum(r) && set && sameSet(r); });
+  var sameNum  = function(r) { return num && (r.num || "").toLowerCase() === num; };
+  var sameSet  = function(r) { return set && setsMatch(r, set); };
+
+  // Priority 1: name + number + set (most specific)
+  var m = eng.find(function(r) { return sameName(r) && sameNum(r) && sameSet(r); });
+  // Priority 2: name + number only (number is a strong signal — use before set)
   if (!m && num) m = eng.find(function(r) { return sameName(r) && sameNum(r); });
+  // Priority 3: name + set only
   if (!m && set) m = eng.find(function(r) { return sameName(r) && sameSet(r); });
-  if (!m)        m = eng.find(function(r) { return sameName(r); });
+  // Priority 4: name only — first result
+  if (!m) m = eng.find(function(r) { return sameName(r); });
+
+  if (m) console.log("[PCT] Matched:", card.name, card.num, card.set, "->", m.name, m.num, m.set_code, "id:", m.id);
   return m || null;
 }
 
@@ -1352,7 +1395,13 @@ async function fetchCardPrice(card) {
     var cacheKey = [(card.name||"").toLowerCase().trim(), (card.set||"").toLowerCase().trim(), (card.num||"").toLowerCase().trim()].join("|");
     pdId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
     if (!pdId) {
-      var results = await pdSearch(card.name);
+      // Include number in search query to help PokeData disambiguate cards with same name
+      var searchQuery = card.name + (card.num ? " " + card.num : "");
+      var results = await pdSearch(searchQuery);
+      // If number search returns nothing, fall back to name only
+      if (!Array.isArray(results) || results.length === 0) {
+        results = await pdSearch(card.name);
+      }
       var match = findBestMatch(Array.isArray(results) ? results : [], card);
       if (!match) { console.warn("[PCT] No match for:", card.name, card.set, card.num); return { pdId: null, value: null }; }
       pdId = String(match.id);
@@ -1893,7 +1942,30 @@ function InventoryTab(_ref21) {
       React.createElement("button", {
         style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:8},
         onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
-      }, "🗑 Clear All")
+      }, "🗑 Clear All"),
+
+      // Nuke all search+fetch caches — forces fresh match+price on next Refresh
+      React.createElement("button", {
+        style:{background:"rgba(167,139,250,0.12)",border:"1px solid rgba(167,139,250,0.3)",borderRadius:7,padding:"7px 14px",color:"#a78bfa",fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:8},
+        onClick:function(){
+          if(!confirm("Clear ALL price caches for "+activeSport+"? Every card will re-fetch on next Refresh.")) return;
+          var allKeys = Object.keys(localStorage);
+          var cleared = 0;
+          // Clear search ID cache for all inventory cards in this sport
+          (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;}).forEach(function(c){
+            var ck = [(c.name||"").toLowerCase().trim(),(c.set||"").toLowerCase().trim(),(c.num||"").toLowerCase().trim()].join("|");
+            localStorage.removeItem(SEARCH_PFX + ck);
+            if (c.pokedataId) localStorage.removeItem(FETCH_PFX + c.pokedataId);
+            cleared++;
+          });
+          // Also wipe pokedataId and value from inventory so they re-match fresh
+          setInv((inv||[]).map(function(x){
+            if (x.sport!==activeSport||x.sealed) return x;
+            return Object.assign({},x,{pokedataId:null,value:null});
+          }));
+          alert("Cleared caches for "+cleared+" cards. Hit Refresh All Prices to re-fetch everything.");
+        }
+      }, "🔄 Re-Match All")
     ),
 
     // Sections
