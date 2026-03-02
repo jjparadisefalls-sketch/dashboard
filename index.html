@@ -1665,8 +1665,8 @@ function InvSection(_ref_inv) {
     if (sortMode==="alpha") return (a.name||"").localeCompare(b.name||"");
     if (sortMode==="value") return (b.value||0)-(a.value||0);
     if (sortMode==="pl") {
-      var pa=(b.value!=null&&b.value>0)?(b.value-(b.totalPaid/(b.qty||1)))*(b.qty||1):null;
-      var pb=(a.value!=null&&a.value>0)?(a.value-(a.totalPaid/(a.qty||1)))*(a.qty||1):null;
+      var pa=(b.value!=null&&b.value>0)?(b.value-(b.paid||0))*(b.qty||1):null;
+      var pb=(a.value!=null&&a.value>0)?(a.value-(a.paid||0))*(a.qty||1):null;
       return (pa||0)-(pb||0);
     }
     return 0;
@@ -1709,7 +1709,7 @@ function InvSection(_ref_inv) {
             ),
             React.createElement("tbody", null,
               sorted.map(function(item) {
-                var avgPaid = item.totalPaid/(item.qty||1);
+                var avgPaid = item.paid||0;
                 var pl = (item.value != null && item.value > 0) ? (item.value - avgPaid) * (item.qty||1) : null;
                 var plClass = pl==null?"profit-neu":pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu";
                 var h = getHistory(item.pokedataId, item.grader, item.grade);
@@ -1722,7 +1722,7 @@ function InvSection(_ref_inv) {
                   ),
                   React.createElement("td", { style:{ fontSize:10,color:"var(--muted)" } }, item.set||"—"),
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:10,color:"var(--muted2)" } }, item.num||"—"),
-                  React.createElement("td", null, React.createElement(GradeBadge, { grader:item.grader, grade:item.grade })),
+                  React.createElement("td", { style:{ whiteSpace:"nowrap" } }, React.createElement(GradeBadge, { grader:item.grader, grade:item.grade })),
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:11 } }, item.qty||1),
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--muted2)",fontSize:11 } }, avgPaid?"$"+avgPaid.toFixed(2):"—"),
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--cards)",fontSize:11 } },
