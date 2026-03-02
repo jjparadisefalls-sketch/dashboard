@@ -1657,16 +1657,34 @@ function InvSection(_ref_inv) {
   var _s = useState(false); var collapsed = _s[0]; var setCollapsed = _s[1];
   var _sm = useState("value"); var sortMode = _sm[0]; var setSortMode = _sm[1];
 
-  var totalPaid  = cards.reduce(function(s,c){return s+(c.totalPaid||c.paid||0);},0);
-  var totalValue = cards.reduce(function(s,c){return s+(c.value||0)*(c.qty||1);},0);
+  // Group duplicate cards (same name+set+num+grader+grade) into single rows
+  var grouped = (function() {
+    var map = {}, order = [];
+    cards.forEach(function(c) {
+      var key = [c.name, c.set, c.num, (c.grader||'raw').toLowerCase(), c.grade||''].join('|');
+      if (!map[key]) {
+        map[key] = Object.assign({}, c, { qty:0, totalPaid:0, _ids:[] });
+        order.push(key);
+      }
+      map[key].qty       += (c.qty||1);
+      map[key].totalPaid += (c.paid||0) * (c.qty||1);
+      map[key]._ids.push(c.id);
+      if (c.pokedataId && !map[key].pokedataId) map[key].pokedataId = c.pokedataId;
+      if (c.value       && !map[key].value)      map[key].value      = c.value;
+    });
+    return order.map(function(k){ return map[k]; });
+  })();
+
+  var totalPaid  = grouped.reduce(function(s,c){return s+c.totalPaid;},0);
+  var totalValue = grouped.reduce(function(s,c){return s+(c.value||0)*c.qty;},0);
   var profit = totalValue - totalPaid;
 
-  var sorted = cards.slice().sort(function(a,b){
+  var sorted = grouped.slice().sort(function(a,b){
     if (sortMode==="alpha") return (a.name||"").localeCompare(b.name||"");
     if (sortMode==="value") return (b.value||0)-(a.value||0);
     if (sortMode==="pl") {
-      var pa=(b.value!=null&&b.value>0)?(b.value-(b.paid||0))*(b.qty||1):null;
-      var pb=(a.value!=null&&a.value>0)?(a.value-(a.paid||0))*(a.qty||1):null;
+      var pa=(b.value!=null&&b.value>0)?(b.value-(b.totalPaid/b.qty))*(b.qty):null;
+      var pb=(a.value!=null&&a.value>0)?(a.value-(a.totalPaid/a.qty))*(a.qty):null;
       return (pa||0)-(pb||0);
     }
     return 0;
@@ -1709,7 +1727,7 @@ function InvSection(_ref_inv) {
             ),
             React.createElement("tbody", null,
               sorted.map(function(item) {
-                var avgPaid = item.paid||0;
+                var avgPaid = item.totalPaid ? item.totalPaid/item.qty : (item.paid||0);
                 var pl = (item.value != null && item.value > 0) ? (item.value - avgPaid) * (item.qty||1) : null;
                 var plClass = pl==null?"profit-neu":pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu";
                 var h = getHistory(item.pokedataId, item.grader, item.grade);
@@ -1863,30 +1881,30 @@ function InventoryTab(_ref21) {
         var cn=cols[0], sn=cols[1], num=cols[2], grader=cols[3], grade=cols[4], paid=cols[5], qty=cols[6], notes=cols[7], status=cols[8];
         if (!cn) continue;
         var count = parseInt(qty)||1;
-        for (var q = 0; q < count; q++) {
-          // Re-import cache check: look up existing pokedataId from search cache
-          var cacheKey = [(cn||"").toLowerCase().trim(),(sn||"").toLowerCase().trim(),(num||"").toLowerCase().trim()].join("|");
-          var cachedPdId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
-          // If we have a cached pdId, look up existing value from snap history
-          var cachedValue = null;
-          if (cachedPdId) {
-            var lastFetch = localStorage.getItem(FETCH_PFX + cachedPdId);
-            if (lastFetch && Date.now()-Number(lastFetch) < FETCH_CACHE_MS) {
-              var h = getHistory(cachedPdId, grader, grade);
-              if (h && h.latest) cachedValue = h.latest;
-            }
+        // Re-import cache check: look up existing pokedataId from search cache
+        var cacheKey = [(cn||"").toLowerCase().trim(),(sn||"").toLowerCase().trim(),(num||"").toLowerCase().trim()].join("|");
+        var cachedPdId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
+        // If we have a cached pdId, look up existing value from snap history
+        var cachedValue = null;
+        if (cachedPdId) {
+          var lastFetch = localStorage.getItem(FETCH_PFX + cachedPdId);
+          if (lastFetch && Date.now()-Number(lastFetch) < FETCH_CACHE_MS) {
+            var h = getHistory(cachedPdId, grader, grade);
+            if (h && h.latest) cachedValue = h.latest;
           }
-          imported.push({
-            id: Date.now()+i*100+q,
-            name: cn, set: sn||"", num: num||"",
-            grader: grader||"raw", grade: grade||"",
-            paid: parseFloat(paid)||0,
-            value: cachedValue,          // reuse cached price if available
-            pokedataId: cachedPdId,      // reuse cached id if available
-            status: normalizeStatus(status),
-            notes: notes||"", sport: activeSport
-          });
         }
+        // Store one record per CSV row with qty — grouping display handles collation
+        imported.push({
+          id: Date.now()+i*100,
+          name: cn, set: sn||"", num: num||"",
+          grader: grader||"raw", grade: grade||"",
+          paid: parseFloat(paid)||0,
+          qty: count,
+          value: cachedValue,          // reuse cached price if available
+          pokedataId: cachedPdId,      // reuse cached id if available
+          status: normalizeStatus(status),
+          notes: notes||"", sport: activeSport
+        });
       }
       if (imported.length) {
         setInv((inv||[]).concat(imported));
