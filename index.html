@@ -2279,8 +2279,8 @@ function InventoryTab(_ref21) {
                     _context.prev = 24;
                     _context.t0 = _context["catch"](2);
                   case 26:
-                    // Update every 3 cards so user sees progress
-                    if (idx % 3 === 2) setInv(_toConsumableArray(updated));
+                    // Progress update without setInv (avoid stale closure overwriting values)
+                    if (idx % 3 === 2) setRefreshProgress((idx+1) + "/" + toRefresh.length);
                   case 27:
                   case "end":
                     return _context.stop();
@@ -2673,7 +2673,9 @@ function InventoryTab(_ref21) {
                     var _fresh = _ft && (Date.now() - Number(_ft) < 144 * 3600 * 1000);
                     if (!_fresh) return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid });
                     var _ex = (inv || []).find(function(x) { return x.pokedataId === _sid && x.value; });
-                    return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid, value: _ex ? _ex.value : card.value, _skipFetch: true });
+                    // Only skip fetch if we actually have a good cached value
+                    if (!_ex) return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid });
+                    return _objectSpread(_objectSpread({}, card), {}, { pokedataId: _sid, value: _ex.value, _skipFetch: true });
                   });
                   _loop2 = /*#__PURE__*/_regeneratorRuntime().mark(function _loop2() {
                     var card, results, matches, cardNum, cardSet, match, pd, _p$TCGPlayer2, _p$eBayRaw2, p, value, toUpdate;
