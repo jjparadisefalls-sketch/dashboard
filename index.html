@@ -1402,9 +1402,17 @@ function findBestMatch(results, card) {
   var sameName = function(r) {
     var rn = (r.name || "").toLowerCase();
     if (rn === name) return true;
-    // Normalise "ex"/"EX"/"Ex" suffix so "mew ex" matches "mew ex"
-    var norm = function(s) { return s.replace(/\s+/g, " ").replace(/\bex\b/gi, "ex").trim(); };
-    return norm(rn) === norm(name);
+    // Normalise whitespace and "ex"/"EX"/"Ex" suffix variants
+    var norm = function(s) {
+      return s.replace(/\s+/g, " ")
+               .replace(/\bex\b/gi, "ex")
+               .replace(/\bv\b/gi, "v")
+               .trim();
+    };
+    if (norm(rn) === norm(name)) return true;
+    // "Mega Charizard X" and "Mega Charizard EX" are the same card in common usage
+    var alias = function(s) { return s.replace(/\bmega (\w+) ex\b/gi, "mega $1 x").replace(/\bmega (\w+) x\b/gi, "mega $1 ex"); };
+    return alias(norm(rn)) === norm(name) || norm(rn) === alias(norm(name));
   };
   var sameNum  = function(r) {
     if (!num) return false;
@@ -1455,10 +1463,29 @@ async function fetchCardPrice(card) {
     try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
   }
 
-  // Cache hit — reuse existing price, don't call API
+  var isGraded = card.grader && card.grader.toUpperCase() !== "RAW" && card.grade;
+
+  // Check fetch cache
   var lastFetch = localStorage.getItem(FETCH_PFX + pdId);
-  if (lastFetch && Date.now() - Number(lastFetch) < FETCH_CACHE_MS) {
-    return { pdId: pdId, value: card.value || null, cached: true };
+  var cacheAge = lastFetch ? (Date.now() - Number(lastFetch)) : Infinity;
+  var cacheValid = cacheAge < FETCH_CACHE_MS;
+
+  if (cacheValid) {
+    // Cache hit — but verify the snap price is appropriate for this card's grade.
+    // Problem: a card may have been fetched raw first, then grading was added.
+    // The snap holds the raw price; we need the graded price. Detect this by
+    // re-extracting price from snap is impossible, so we use a simpler heuristic:
+    // if card is graded AND card.value is null or 0, force a fresh fetch regardless.
+    var snapHistory = getHistory(pdId);
+    var snapPrice = snapHistory ? snapHistory.latest : null;
+
+    if (isGraded && !snapPrice && !card.value) {
+      // Graded card with no price yet — force fresh fetch even if cache is recent
+      cacheValid = false;
+    } else {
+      // Normal cache hit — return snap price (more reliable than card.value)
+      return { pdId: pdId, value: snapPrice || card.value || null, cached: true };
+    }
   }
 
   // Fresh fetch
@@ -1466,7 +1493,19 @@ async function fetchCardPrice(card) {
   var value = extractPrice(pd && pd.pricing, card.grader, card.grade);
   if (value) {
     try { localStorage.setItem(FETCH_PFX + pdId, String(Date.now())); } catch(e) {}
-    saveSnap(pdId, value);
+    // For graded cards, update snap with graded price (overwrite today's raw snap if needed)
+    if (isGraded) {
+      var existingSnaps = [];
+      try { existingSnaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
+      var today = new Date().toDateString();
+      // Replace today's snap if it exists (was raw price), or append
+      var filtered = existingSnaps.filter(function(s){ return s.date !== today; });
+      filtered.push({ date: today, ts: Date.now(), price: value });
+      if (filtered.length > 90) filtered = filtered.slice(-90);
+      try { localStorage.setItem(SNAP_PFX + pdId, JSON.stringify(filtered)); } catch(e) {}
+    } else {
+      saveSnap(pdId, value);
+    }
   }
   return { pdId: pdId, value: value };
 }
