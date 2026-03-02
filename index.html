@@ -1286,9 +1286,7 @@ function getHistory(pdId, grader, grade) {
   var key = gradeSnapKey(pdId, grader, grade);
   var snaps = [];
   try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
-  if (!snaps.length) {
-    try { snaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
-  }
+  // NOTE: no legacy fallback — raw and graded snaps are intentionally isolated
   if (!snaps.length) return null;
   var latest = snaps[snaps.length-1].price;
   var find = function(daysAgo) {
