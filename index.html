@@ -1355,6 +1355,21 @@ async function fetchCardPrice(card) {
   return { pdId: pdId, value: value };
 }
 
+// ── Sport map (used by App and InventoryTab) ──────────────────────────────
+var SPORTS_MAP = {
+  pokemon:    { label: "Pokémon",    emoji: "⚡", color: "#f0c040", bg: "rgba(240,192,64,0.12)" },
+  disney:     { label: "Disney",     emoji: "✨", color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
+  baseball:   { label: "Baseball",   emoji: "⚾", color: "#34d399", bg: "rgba(52,211,153,0.12)" },
+  football:   { label: "Football",   emoji: "🏈", color: "#f87171", bg: "rgba(248,113,113,0.12)" },
+  basketball: { label: "Basketball", emoji: "🏀", color: "#fb923c", bg: "rgba(251,146,60,0.12)" }
+};
+var SPORTS = Object.entries(SPORTS_MAP).map(function(e) { return Object.assign({ id: e[0] }, e[1]); });
+function SportBadge(_ref16) {
+  var sport = _ref16.sport;
+  var s = SPORTS_MAP[sport] || SPORTS_MAP.pokemon;
+  return React.createElement("span", { className: "inv-sport", style: { background: s.bg, color: s.color, border: "1px solid " + s.color + "33" } }, s.label);
+}
+
 // ── Backward-compat shims (used by Watchlist/SearchTab code) ─────────────
 var savePriceSnapshot = saveSnap;
 var getPriceHistory   = getHistory;
