@@ -1262,22 +1262,36 @@ var SEARCH_PFX = "cc:searchid:";
 var FETCH_CACHE_MS = 24 * 3600 * 1000; // 24 hours
 var DAY_MS = 86400000;
 
-function saveSnap(pdId, price) {
-  if (!pdId || !price) return;
-  var snaps = [];
-  try { snaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
-  var today = new Date().toDateString();
-  if (!snaps.length || snaps[snaps.length-1].date !== today) {
-    snaps.push({ date: today, ts: Date.now(), price: price });
-    if (snaps.length > 90) snaps = snaps.slice(-90);
-    try { localStorage.setItem(SNAP_PFX + pdId, JSON.stringify(snaps)); } catch(e) {}
-  }
+function snapKey(pdId, grader, grade) {
+  // Grader-aware snap key: raw and graded prices stored separately.
+  // Prevents a raw fetch from contaminating a graded card's price history.
+  var g = (grader || "").toUpperCase().trim();
+  var isGraded = g && g !== "RAW" && grade;
+  return isGraded ? (SNAP_PFX + pdId + ":" + g.toLowerCase() + String(grade).replace(".","")) : (SNAP_PFX + pdId + ":raw");
 }
 
-function getHistory(pdId) {
-  if (!pdId) return null;
+function saveSnap(pdId, price, grader, grade) {
+  if (!pdId || !price) return;
+  var key = snapKey(pdId, grader, grade);
   var snaps = [];
-  try { snaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
+  try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
+  var today = new Date().toDateString();
+  // Always overwrite today's entry so graded price replaces any stale raw value
+  var filtered = snaps.filter(function(s){ return s.date !== today; });
+  filtered.push({ date: today, ts: Date.now(), price: price });
+  if (filtered.length > 90) filtered = filtered.slice(-90);
+  try { localStorage.setItem(key, JSON.stringify(filtered)); } catch(e) {}
+}
+
+function getHistory(pdId, grader, grade) {
+  if (!pdId) return null;
+  var key = snapKey(pdId, grader, grade);
+  var snaps = [];
+  try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
+  // Fallback: also check legacy key (cc:snap:pdId) for backwards compatibility
+  if (!snaps.length) {
+    try { snaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
+  }
   if (!snaps.length) return null;
   var latest = snaps[snaps.length-1].price;
   var find = function(daysAgo) {
@@ -1471,19 +1485,14 @@ async function fetchCardPrice(card) {
   var cacheValid = cacheAge < FETCH_CACHE_MS;
 
   if (cacheValid) {
-    // Cache hit — but verify the snap price is appropriate for this card's grade.
-    // Problem: a card may have been fetched raw first, then grading was added.
-    // The snap holds the raw price; we need the graded price. Detect this by
-    // re-extracting price from snap is impossible, so we use a simpler heuristic:
-    // if card is graded AND card.value is null or 0, force a fresh fetch regardless.
-    var snapHistory = getHistory(pdId);
+    // Cache hit — read from the grader-aware snap key.
+    // Raw and graded fetches are stored separately so they never contaminate each other.
+    var snapHistory = getHistory(pdId, card.grader, card.grade);
     var snapPrice = snapHistory ? snapHistory.latest : null;
-
-    if (isGraded && !snapPrice && !card.value) {
-      // Graded card with no price yet — force fresh fetch even if cache is recent
+    if (isGraded && !snapPrice) {
+      // Graded card has no graded snap yet — force a fresh fetch to get PSA/BGS price
       cacheValid = false;
     } else {
-      // Normal cache hit — return snap price (more reliable than card.value)
       return { pdId: pdId, value: snapPrice || card.value || null, cached: true };
     }
   }
@@ -1493,19 +1502,7 @@ async function fetchCardPrice(card) {
   var value = extractPrice(pd && pd.pricing, card.grader, card.grade);
   if (value) {
     try { localStorage.setItem(FETCH_PFX + pdId, String(Date.now())); } catch(e) {}
-    // For graded cards, update snap with graded price (overwrite today's raw snap if needed)
-    if (isGraded) {
-      var existingSnaps = [];
-      try { existingSnaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
-      var today = new Date().toDateString();
-      // Replace today's snap if it exists (was raw price), or append
-      var filtered = existingSnaps.filter(function(s){ return s.date !== today; });
-      filtered.push({ date: today, ts: Date.now(), price: value });
-      if (filtered.length > 90) filtered = filtered.slice(-90);
-      try { localStorage.setItem(SNAP_PFX + pdId, JSON.stringify(filtered)); } catch(e) {}
-    } else {
-      saveSnap(pdId, value);
-    }
+    saveSnap(pdId, value, card.grader, card.grade);
   }
   return { pdId: pdId, value: value };
 }
@@ -1764,7 +1761,7 @@ function InvSection(_ref20) {
                 var avgPaid = item.totalPaid/(item.qty||1);
                 var pl = (item.value != null && item.value > 0) ? (item.value - avgPaid) * (item.qty||1) : null;
                 var plClass = pl==null?"profit-neu":pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu";
-                var h = getHistory(item.pokedataId);
+                var h = getHistory(item.pokedataId, item.grader, item.grade);
                 var cur = (item.value != null && item.value > 0) ? item.value : null;
 
                 return React.createElement("tr", { key:item.id },
@@ -1905,7 +1902,7 @@ function InventoryTab(_ref21) {
           if (cachedPdId) {
             var lastFetch = localStorage.getItem(FETCH_PFX + cachedPdId);
             if (lastFetch && Date.now()-Number(lastFetch) < FETCH_CACHE_MS) {
-              var h = getHistory(cachedPdId);
+              var h = getHistory(cachedPdId, grader, grade);
               if (h && h.latest) cachedValue = h.latest;
             }
           }
@@ -3408,7 +3405,7 @@ function useAutoSnapshot(wl, inv, setInv) {
           if (pd && pd.pricing) {
             var value = extractPrice(pd.pricing, card.grader, card.grade);
             if (value) {
-              saveSnap(card.pokedataId, value);
+              saveSnap(card.pokedataId, value, card.grader, card.grade);
               try { localStorage.setItem(FETCH_PFX + card.pokedataId, String(Date.now())); } catch(e){}
               if (setInv) setInv(function(prev){ return prev.map(function(x){ return x.id===card.id?Object.assign({},x,{value:value}):x; }); });
             }
