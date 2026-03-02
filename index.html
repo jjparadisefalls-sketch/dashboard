@@ -1297,10 +1297,31 @@ function extractPrice(pricing, grader, grade) {
   if (!pricing) return null;
   var g = (grader || "").toUpperCase().trim();
   var n = (grade  || "").toString().trim();
-  var gradedKey = (g && n) ? g + " " + parseFloat(n).toFixed(1) : null;
-  if (gradedKey && pricing[gradedKey] && pricing[gradedKey].value > 0) return pricing[gradedKey].value;
-  return (pricing["TCGPlayer"] && pricing["TCGPlayer"].value) ||
-         (pricing["eBay Raw"]  && pricing["eBay Raw"].value)  || null;
+  var isGraded = g && g !== "RAW" && n;
+
+  if (isGraded) {
+    // Try "PSA 10.0" format
+    var k1 = g + " " + parseFloat(n).toFixed(1);
+    if (pricing[k1] && pricing[k1].value > 0) return pricing[k1].value;
+    // Try "PSA 10" format
+    var k2 = g + " " + n;
+    if (pricing[k2] && pricing[k2].value > 0) return pricing[k2].value;
+    // Scan all keys for grader prefix + grade number match
+    var keys = Object.keys(pricing);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k.toUpperCase().startsWith(g) && k.indexOf(n) !== -1 && pricing[k].value > 0) return pricing[k].value;
+    }
+    // No graded price found — log available keys so we can debug
+    console.warn("[PCT] No graded price for", g, n, "- available keys:", Object.keys(pricing));
+    return null;
+  }
+
+  // Raw card
+  return (pricing["TCGPlayer"]   && pricing["TCGPlayer"].value   > 0 ? pricing["TCGPlayer"].value   : null) ||
+         (pricing["eBay Raw"]    && pricing["eBay Raw"].value    > 0 ? pricing["eBay Raw"].value    : null) ||
+         (pricing["Pokedata Raw"] && pricing["Pokedata Raw"].value > 0 ? pricing["Pokedata Raw"].value : null) ||
+         null;
 }
 
 // Find best matching card from search results
@@ -1333,7 +1354,7 @@ async function fetchCardPrice(card) {
     if (!pdId) {
       var results = await pdSearch(card.name);
       var match = findBestMatch(Array.isArray(results) ? results : [], card);
-      if (!match) return { pdId: null, value: null };
+      if (!match) { console.warn("[PCT] No match for:", card.name, card.set, card.num); return { pdId: null, value: null }; }
       pdId = String(match.id);
       try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
     }
@@ -1607,10 +1628,10 @@ function InvSection(_ref20) {
             React.createElement("tbody", null,
               sorted.map(function(item) {
                 var avgPaid = item.totalPaid/(item.qty||1);
-                var pl = item.value!=null ? (item.value-avgPaid)*(item.qty||1) : null;
+                var pl = (item.value != null && item.value > 0) ? (item.value - avgPaid) * (item.qty||1) : null;
                 var plClass = pl==null?"profit-neu":pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu";
                 var h = getHistory(item.pokedataId);
-                var cur = item.value || null;
+                var cur = (item.value != null && item.value > 0) ? item.value : null;
 
                 return React.createElement("tr", { key:item.id },
                   React.createElement("td", { style:{ fontWeight:600,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" } },
