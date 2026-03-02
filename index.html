@@ -1262,22 +1262,20 @@ var SEARCH_PFX = "cc:searchid:";
 var FETCH_CACHE_MS = 24 * 3600 * 1000; // 24 hours
 var DAY_MS = 86400000;
 
-function snapKey(pdId, grader, grade) {
-  // Grader-aware snap key: raw and graded prices stored separately.
-  // Prevents a raw fetch from contaminating a graded card's price history.
+function gradeSnapKey(pdId, grader, grade) {
   var g = (grader || "").toUpperCase().trim();
   var isGraded = g && g !== "RAW" && grade;
-  return isGraded ? (SNAP_PFX + pdId + ":" + g.toLowerCase() + String(grade).replace(".","")) : (SNAP_PFX + pdId + ":raw");
+  var suffix = isGraded ? (":" + g.toLowerCase() + String(grade).replace(".", "")) : ":raw";
+  return SNAP_PFX + pdId + suffix;
 }
 
 function saveSnap(pdId, price, grader, grade) {
   if (!pdId || !price) return;
-  var key = snapKey(pdId, grader, grade);
+  var key = gradeSnapKey(pdId, grader, grade);
   var snaps = [];
   try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
   var today = new Date().toDateString();
-  // Always overwrite today's entry so graded price replaces any stale raw value
-  var filtered = snaps.filter(function(s){ return s.date !== today; });
+  var filtered = snaps.filter(function(s) { return s.date !== today; });
   filtered.push({ date: today, ts: Date.now(), price: price });
   if (filtered.length > 90) filtered = filtered.slice(-90);
   try { localStorage.setItem(key, JSON.stringify(filtered)); } catch(e) {}
@@ -1285,10 +1283,9 @@ function saveSnap(pdId, price, grader, grade) {
 
 function getHistory(pdId, grader, grade) {
   if (!pdId) return null;
-  var key = snapKey(pdId, grader, grade);
+  var key = gradeSnapKey(pdId, grader, grade);
   var snaps = [];
   try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
-  // Fallback: also check legacy key (cc:snap:pdId) for backwards compatibility
   if (!snaps.length) {
     try { snaps = JSON.parse(localStorage.getItem(SNAP_PFX + pdId) || "[]"); } catch(e) {}
   }
@@ -1351,45 +1348,43 @@ function extractPrice(pricing, grader, grade) {
 // Normalize set name for fuzzy matching against PokeData set_code / set_name
 function normalizeSet(s) {
   var t = (s || "").toLowerCase().trim();
-  // Long names first so they don't partially match shorter replacements
-  var replacements = [
+  var reps = [
     [/scarlet\s*[&and]+\s*violet\s*promos?/i, "svp"],
-    [/scarlet\s*[&and]+\s*violet/i,            "sv"],
-    [/shrouded\s*fable/i,                       "sfa"],
-    [/stellar\s*crown/i,                        "scr"],
-    [/pok[eé]mon\s*card\s*151/i,              "mew"],
-    [/black\s*[&and]+\s*white\s*promos?/i,   "bwp"],
+    [/scarlet\s*[&and]+\s*violet/i,           "sv"],
+    [/shrouded\s*fable/i,                     "sfa"],
+    [/stellar\s*crown/i,                      "scr"],
+    [/pok[eé]mon\s*card\s*151/i,         "mew"],
+    [/black\s*[&and]+\s*white\s*promos?/i,    "bwp"],
     [/black\s*[&and]+\s*white/i,              "bw"],
-    [/sun\s*[&and]+\s*moon\s*promos?/i,      "smp"],
+    [/sun\s*[&and]+\s*moon\s*promos?/i,       "smp"],
     [/sun\s*[&and]+\s*moon/i,                 "sm"],
-    [/sword\s*[&and]+\s*shield\s*promos?/i,  "swshp"],
+    [/sword\s*[&and]+\s*shield\s*promos?/i,   "swshp"],
     [/sword\s*[&and]+\s*shield/i,             "swsh"],
-    [/x[yx]\s*black\s*star\s*promos?/i,      "xyp"],
-    [/crown\s*zenith/i,                         "crz"],
-    [/lost\s*origin/i,                          "lor"],
-    [/paldea\s*evolved/i,                       "pal"],
-    [/obsidian\s*flames/i,                      "obf"],
-    [/twilight\s*masquerade/i,                  "twm"],
-    [/temporal\s*forces/i,                      "tef"],
-    [/paradox\s*rift/i,                         "par"],
-    [/paldean\s*fates/i,                        "paf"],
-    [/fusion\s*strike/i,                        "fst"],
-    [/silver\s*tempest/i,                       "sit"],
-    [/brilliant\s*stars/i,                      "brs"],
-    [/astral\s*radiance/i,                      "asr"],
-    [/chilling\s*reign/i,                       "cre"],
-    [/battle\s*styles/i,                        "bst"],
-    [/vivid\s*voltage/i,                        "viv"],
-    [/darkness\s*ablaze/i,                      "dab"],
-    [/rebel\s*clash/i,                          "rch"],
-    [/destined\s*rivals/i,                      "dri"],
-    [/journey\s*together/i,                     "jtg"],
-    [/mega\s*evolution\s*promos?/i,            "mep"],
-    [/miscellaneous\s*promos?/i,                "mis"],
+    [/x[yx]\s*black\s*star\s*promos?/i,       "xyp"],
+    [/crown\s*zenith/i,                       "crz"],
+    [/lost\s*origin/i,                        "lor"],
+    [/paldea\s*evolved/i,                     "pal"],
+    [/obsidian\s*flames/i,                    "obf"],
+    [/twilight\s*masquerade/i,                "twm"],
+    [/temporal\s*forces/i,                    "tef"],
+    [/paradox\s*rift/i,                       "par"],
+    [/paldean\s*fates/i,                      "paf"],
+    [/fusion\s*strike/i,                      "fst"],
+    [/silver\s*tempest/i,                     "sit"],
+    [/brilliant\s*stars/i,                    "brs"],
+    [/astral\s*radiance/i,                    "asr"],
+    [/chilling\s*reign/i,                     "cre"],
+    [/battle\s*styles/i,                      "bst"],
+    [/darkness\s*ablaze/i,                    "dab"],
+    [/vivid\s*voltage/i,                      "viv"],
+    [/rebel\s*clash/i,                        "rch"],
+    [/destined\s*rivals/i,                    "dri"],
+    [/journey\s*together/i,                   "jtg"],
+    [/phantasmal\s*flames/i,                  "pfl"],
+    [/mega\s*evolution\s*promos?/i,           "mep"],
+    [/miscellaneous\s*promos?/i,              "mis"],
   ];
-  for (var i = 0; i < replacements.length; i++) {
-    t = t.replace(replacements[i][0], replacements[i][1]);
-  }
+  for (var i = 0; i < reps.length; i++) t = t.replace(reps[i][0], reps[i][1]);
   return t.replace(/\s+/g, " ").trim();
 }
 
@@ -1416,61 +1411,47 @@ function findBestMatch(results, card) {
   var sameName = function(r) {
     var rn = (r.name || "").toLowerCase();
     if (rn === name) return true;
-    // Normalise whitespace and "ex"/"EX"/"Ex" suffix variants
-    var norm = function(s) {
-      return s.replace(/\s+/g, " ")
-               .replace(/\bex\b/gi, "ex")
-               .replace(/\bv\b/gi, "v")
-               .trim();
-    };
+    var norm = function(s) { return s.replace(/\s+/g, " ").replace(/ex/gi, "ex").trim(); };
     if (norm(rn) === norm(name)) return true;
-    // "Mega Charizard X" and "Mega Charizard EX" are the same card in common usage
-    var alias = function(s) { return s.replace(/\bmega (\w+) ex\b/gi, "mega $1 x").replace(/\bmega (\w+) x\b/gi, "mega $1 ex"); };
-    return alias(norm(rn)) === norm(name) || norm(rn) === alias(norm(name));
+    // "Mega Charizard X" and "Mega Charizard EX" are same card in common usage
+    var deex = function(s) { return norm(s).replace(/mega (\w+) ex/, "mega $1 x").replace(/mega (\w+) x/, "mega $1 ex"); };
+    return deex(rn) === norm(name) || norm(rn) === deex(name);
   };
-  var sameNum  = function(r) {
+
+  var sameNum = function(r) {
     if (!num) return false;
     var rn = (r.num || "").toLowerCase();
     if (rn === num) return true;
-    // Strip leading zeros: "076" == "76", "011" == "11"
     var ni = parseInt(num, 10), rni = parseInt(rn, 10);
     return !isNaN(ni) && !isNaN(rni) && ni === rni;
   };
-  var sameSet  = function(r) { return set && setsMatch(r, set); };
 
-  // Priority 1: name + number + set (most specific)
+  var sameSet = function(r) { return set && setsMatch(r, set); };
+
   var m = eng.find(function(r) { return sameName(r) && sameNum(r) && sameSet(r); });
-  // Priority 2: name + number only (number is a strong signal — use before set)
   if (!m && num) m = eng.find(function(r) { return sameName(r) && sameNum(r); });
-  // Priority 3: name + set only
   if (!m && set) m = eng.find(function(r) { return sameName(r) && sameSet(r); });
-  // Priority 4: name only — first result
   if (!m) m = eng.find(function(r) { return sameName(r); });
 
-  if (m) console.log("[PCT] Matched:", card.name, card.num, card.set, "->", m.name, m.num, m.set_code, "id:", m.id);
+  if (m) console.log("[PCT] Matched:", card.name, card.num, card.set, "->", m.name, m.num, m.set_name, "id:", m.id);
   return m || null;
 }
 
 // Fetch/cache price for one card. Reuses cache on re-import.
 async function fetchCardPrice(card) {
-  // Build normalised cache key — strips leading zeros so "11"=="011" always match
-  var _rawNum = (card.num||"").toLowerCase().trim();
-  var _normNum = (!isNaN(parseInt(_rawNum,10)) && !/[a-z]/i.test(_rawNum)) ? String(parseInt(_rawNum,10)) : _rawNum;
-  var cacheKey = [(card.name||"").toLowerCase().trim(), (card.set||"").toLowerCase().trim(), _normNum].join("|");
+  // Normalise num in cache key: strip leading zeros so "11"=="011", "76"=="076"
+  var rawNum = (card.num || "").toLowerCase().trim();
+  var normNum = (!isNaN(parseInt(rawNum, 10)) && !/[a-z]/i.test(rawNum)) ? String(parseInt(rawNum, 10)) : rawNum;
+  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum].join("|");
 
-  // Search cache takes priority over the stored pokedataId — it was set by findBestMatch
-  // (name+number+set logic) and is more reliable than a potentially stale stored value.
+  // Search cache takes priority over stored pokedataId (more reliable — set by findBestMatch)
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
   var pdId = cachedId || card.pokedataId || null;
 
   if (!pdId) {
-    // No cached match — do a live search
     var searchQuery = card.name + (card.num ? " " + card.num : "");
     var results = await pdSearch(searchQuery);
-    // Fall back to name-only if number search returns nothing
-    if (!Array.isArray(results) || results.length === 0) {
-      results = await pdSearch(card.name);
-    }
+    if (!Array.isArray(results) || results.length === 0) results = await pdSearch(card.name);
     var match = findBestMatch(Array.isArray(results) ? results : [], card);
     if (!match) { console.warn("[PCT] No match for:", card.name, card.set, card.num); return { pdId: null, value: null }; }
     pdId = String(match.id);
@@ -1481,17 +1462,13 @@ async function fetchCardPrice(card) {
 
   // Check fetch cache
   var lastFetch = localStorage.getItem(FETCH_PFX + pdId);
-  var cacheAge = lastFetch ? (Date.now() - Number(lastFetch)) : Infinity;
-  var cacheValid = cacheAge < FETCH_CACHE_MS;
+  var cacheValid = lastFetch && (Date.now() - Number(lastFetch) < FETCH_CACHE_MS);
 
   if (cacheValid) {
-    // Cache hit — read from the grader-aware snap key.
-    // Raw and graded fetches are stored separately so they never contaminate each other.
-    var snapHistory = getHistory(pdId, card.grader, card.grade);
-    var snapPrice = snapHistory ? snapHistory.latest : null;
+    var snapHist = getHistory(pdId, card.grader, card.grade);
+    var snapPrice = snapHist ? snapHist.latest : null;
     if (isGraded && !snapPrice) {
-      // Graded card has no graded snap yet — force a fresh fetch to get PSA/BGS price
-      cacheValid = false;
+      cacheValid = false; // graded card has no graded snap yet — force fresh fetch
     } else {
       return { pdId: pdId, value: snapPrice || card.value || null, cached: true };
     }
@@ -1875,7 +1852,6 @@ function InventoryTab(_ref21) {
     setInv(updated.slice());
     setRefreshingAll(false);
     setRefreshProgress("");
-    // Record manual refresh timestamp so auto-snapshot skips for 72h
     try { localStorage.setItem("cc:lastManualRefresh", String(Date.now())); } catch(e) {}
   };
 
@@ -3383,18 +3359,13 @@ function useAutoSnapshot(wl, inv, setInv) {
   useEffect(function() {
     var runSnapshots = async function() {
       var now = new Date();
-      var h = now.getHours();
-      if (h !== 22) return; // only trigger at 10pm hour
+      if (now.getHours() !== 22) return; // only run at 10pm
 
       var MS_72H = 72 * 3600 * 1000;
       var lastSnap   = Number(localStorage.getItem("cc:lastSnapTs") || 0);
       var lastManual = Number(localStorage.getItem("cc:lastManualRefresh") || 0);
-      var nowTs = Date.now();
-
-      // Skip if a manual refresh happened within the last 72h
-      if (nowTs - lastManual < MS_72H) return;
-      // Skip if auto-snapshot already ran within the last 72h
-      if (nowTs - lastSnap < MS_72H) return;
+      if (Date.now() - lastManual < MS_72H) return; // manual refresh within 72h — skip
+      if (Date.now() - lastSnap   < MS_72H) return; // auto-snap ran within 72h — skip
 
       // Snapshot inventory cards that already have a pokedataId
       var invCards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed; });
@@ -3431,8 +3402,7 @@ function useAutoSnapshot(wl, inv, setInv) {
     };
 
     var check = function() {
-      var h = new Date().getHours();
-      if (h === 22) runSnapshots();
+      if (new Date().getHours() === 22) runSnapshots();
     };
 
     check(); // check on mount
