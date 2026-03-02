@@ -1860,7 +1860,7 @@ function InventoryTab(_ref21) {
       var imported = [];
       for (var i = start; i < lines.length; i++) {
         var cols = parseCSVLine(lines[i]);
-        var cn=cols[0], sn=cols[1], num=cols[2], grader=cols[3], grade=cols[4], paid=cols[5], qty=cols[6], notes=cols[7], status=cols[8];
+        var cn=cols[0], sn=cols[1], num=cols[2], grader=cols[3], grade=cols[4], price=cols[5], paid=cols[6], qty=cols[7], notes=cols[8], status=cols[9];
         if (!cn) continue;
         var count = parseInt(qty)||1;
         for (var q = 0; q < count; q++) {
