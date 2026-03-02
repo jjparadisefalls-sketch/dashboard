@@ -1322,8 +1322,7 @@ function extractPrice(pricing, grader, grade) {
       }
     }
     // Nothing found — log so we can fix the key format
-    var gkeys = Object.keys(pricing).filter(function(k){return k.toUpperCase().indexOf(g)!==-1;});
-    console.warn("[PCT] No graded price >0 for", g, n, "| Graded keys+values:", JSON.stringify(gkeys.map(function(k){return k+":"+pricing[k].value;})));
+    console.warn("[PCT] No graded price for", g, n, "| Available keys:", JSON.stringify(Object.keys(pricing)));
     return null;
   }
 
@@ -1337,18 +1336,47 @@ function extractPrice(pricing, grader, grade) {
 // Find best matching card from search results
 // Normalize set name for fuzzy matching against PokeData set_code / set_name
 function normalizeSet(s) {
-  return (s || "").toLowerCase().trim()
-    .replace(/scarlet\s*&\s*violet\s*promos?/i, "svp")
-    .replace(/scarlet\s*and\s*violet\s*promos?/i, "svp")
-    .replace(/scarlet\s*&\s*violet/i, "sv")
-    .replace(/shrouded\s*fable/i, "sfa")
-    .replace(/black\s*&\s*white/i, "bw")
-    .replace(/black\s*and\s*white/i, "bw")
-    .replace(/sun\s*&\s*moon/i, "sm")
-    .replace(/sun\s*and\s*moon/i, "sm")
-    .replace(/sword\s*&\s*shield/i, "swsh")
-    .replace(/sword\s*and\s*shield/i, "swsh")
-    .replace(/\s+/g, " ");
+  var t = (s || "").toLowerCase().trim();
+  // Long names first so they don't partially match shorter replacements
+  var replacements = [
+    [/scarlet\s*[&and]+\s*violet\s*promos?/i, "svp"],
+    [/scarlet\s*[&and]+\s*violet/i,            "sv"],
+    [/shrouded\s*fable/i,                       "sfa"],
+    [/stellar\s*crown/i,                        "scr"],
+    [/pok[eé]mon\s*card\s*151/i,              "mew"],
+    [/black\s*[&and]+\s*white\s*promos?/i,   "bwp"],
+    [/black\s*[&and]+\s*white/i,              "bw"],
+    [/sun\s*[&and]+\s*moon\s*promos?/i,      "smp"],
+    [/sun\s*[&and]+\s*moon/i,                 "sm"],
+    [/sword\s*[&and]+\s*shield\s*promos?/i,  "swshp"],
+    [/sword\s*[&and]+\s*shield/i,             "swsh"],
+    [/x[yx]\s*black\s*star\s*promos?/i,      "xyp"],
+    [/crown\s*zenith/i,                         "crz"],
+    [/lost\s*origin/i,                          "lor"],
+    [/paldea\s*evolved/i,                       "pal"],
+    [/obsidian\s*flames/i,                      "obf"],
+    [/twilight\s*masquerade/i,                  "twm"],
+    [/temporal\s*forces/i,                      "tef"],
+    [/paradox\s*rift/i,                         "par"],
+    [/paldean\s*fates/i,                        "paf"],
+    [/fusion\s*strike/i,                        "fst"],
+    [/silver\s*tempest/i,                       "sit"],
+    [/brilliant\s*stars/i,                      "brs"],
+    [/astral\s*radiance/i,                      "asr"],
+    [/chilling\s*reign/i,                       "cre"],
+    [/battle\s*styles/i,                        "bst"],
+    [/vivid\s*voltage/i,                        "viv"],
+    [/darkness\s*ablaze/i,                      "dab"],
+    [/rebel\s*clash/i,                          "rch"],
+    [/destined\s*rivals/i,                      "dri"],
+    [/journey\s*together/i,                     "jtg"],
+    [/mega\s*evolution\s*promos?/i,            "mep"],
+    [/miscellaneous\s*promos?/i,                "mis"],
+  ];
+  for (var i = 0; i < replacements.length; i++) {
+    t = t.replace(replacements[i][0], replacements[i][1]);
+  }
+  return t.replace(/\s+/g, " ").trim();
 }
 
 function setsMatch(r, setInput) {
@@ -1371,11 +1399,20 @@ function findBestMatch(results, card) {
   var set  = (card.set  || "").toLowerCase().trim();
   var eng  = results.filter(function(r) { return r.language === "ENGLISH"; });
 
-  var sameName = function(r) { return (r.name || "").toLowerCase() === name; };
+  var sameName = function(r) {
+    var rn = (r.name || "").toLowerCase();
+    if (rn === name) return true;
+    // Normalise "ex"/"EX"/"Ex" suffix so "mew ex" matches "mew ex"
+    var norm = function(s) { return s.replace(/\s+/g, " ").replace(/\bex\b/gi, "ex").trim(); };
+    return norm(rn) === norm(name);
+  };
   var sameNum  = function(r) {
     if (!num) return false;
     var rn = (r.num || "").toLowerCase();
-    return rn === num || parseInt(rn,10) === parseInt(num,10);
+    if (rn === num) return true;
+    // Strip leading zeros: "076" == "76", "011" == "11"
+    var ni = parseInt(num, 10), rni = parseInt(rn, 10);
+    return !isNaN(ni) && !isNaN(rni) && ni === rni;
   };
   var sameSet  = function(r) { return set && setsMatch(r, set); };
 
@@ -1394,24 +1431,28 @@ function findBestMatch(results, card) {
 
 // Fetch/cache price for one card. Reuses cache on re-import.
 async function fetchCardPrice(card) {
-  var pdId = card.pokedataId || null;
+  // Build normalised cache key — strips leading zeros so "11"=="011" always match
+  var _rawNum = (card.num||"").toLowerCase().trim();
+  var _normNum = (!isNaN(parseInt(_rawNum,10)) && !/[a-z]/i.test(_rawNum)) ? String(parseInt(_rawNum,10)) : _rawNum;
+  var cacheKey = [(card.name||"").toLowerCase().trim(), (card.set||"").toLowerCase().trim(), _normNum].join("|");
+
+  // Search cache takes priority over the stored pokedataId — it was set by findBestMatch
+  // (name+number+set logic) and is more reliable than a potentially stale stored value.
+  var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
+  var pdId = cachedId || card.pokedataId || null;
 
   if (!pdId) {
-    var cacheKey = [(card.name||"").toLowerCase().trim(), (card.set||"").toLowerCase().trim(), (card.num||"").toLowerCase().trim()].join("|");
-    pdId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
-    if (!pdId) {
-      // Include number in search query to help PokeData disambiguate cards with same name
-      var searchQuery = card.name + (card.num ? " " + card.num : "");
-      var results = await pdSearch(searchQuery);
-      // If number search returns nothing, fall back to name only
-      if (!Array.isArray(results) || results.length === 0) {
-        results = await pdSearch(card.name);
-      }
-      var match = findBestMatch(Array.isArray(results) ? results : [], card);
-      if (!match) { console.warn("[PCT] No match for:", card.name, card.set, card.num); return { pdId: null, value: null }; }
-      pdId = String(match.id);
-      try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
+    // No cached match — do a live search
+    var searchQuery = card.name + (card.num ? " " + card.num : "");
+    var results = await pdSearch(searchQuery);
+    // Fall back to name-only if number search returns nothing
+    if (!Array.isArray(results) || results.length === 0) {
+      results = await pdSearch(card.name);
     }
+    var match = findBestMatch(Array.isArray(results) ? results : [], card);
+    if (!match) { console.warn("[PCT] No match for:", card.name, card.set, card.num); return { pdId: null, value: null }; }
+    pdId = String(match.id);
+    try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
   }
 
   // Cache hit — reuse existing price, don't call API
@@ -1725,10 +1766,7 @@ function InvSection(_ref20) {
                       onClick:function() {
                         if (item.pokedataId) {
                           localStorage.removeItem(FETCH_PFX + item.pokedataId);
-                          localStorage.removeItem(SNAP_PFX + item.pokedataId);
                         }
-                        var ck = [(item.name||"").toLowerCase().trim(),(item.set||"").toLowerCase().trim(),(item.num||"").toLowerCase().trim()].join("|");
-                        localStorage.removeItem(SEARCH_PFX + ck);
                         (item._ids||[item.id]).forEach(function(id){ update(id,{pokedataId:null,value:null}); });
                       }
                     }, "↺"),
@@ -1801,6 +1839,8 @@ function InventoryTab(_ref21) {
     setInv(updated.slice());
     setRefreshingAll(false);
     setRefreshProgress("");
+    // Record manual refresh timestamp so auto-snapshot skips for 72h
+    try { localStorage.setItem("cc:lastManualRefresh", String(Date.now())); } catch(e) {}
   };
 
   // ── CSV import singles ──────────────────────────────────────────────────
@@ -3306,13 +3346,19 @@ function DashboardWatchlist(_ref30) {
 function useAutoSnapshot(wl, inv, setInv) {
   useEffect(function() {
     var runSnapshots = async function() {
-      var today = new Date().toDateString();
-      var lastRun = localStorage.getItem("cc:lastSnapDate");
-      if (lastRun === today) return; // already ran today
-
       var now = new Date();
       var h = now.getHours();
-      if (h < 10 || h >= 22) return; // only run 10am–10pm
+      if (h !== 22) return; // only trigger at 10pm hour
+
+      var MS_72H = 72 * 3600 * 1000;
+      var lastSnap   = Number(localStorage.getItem("cc:lastSnapTs") || 0);
+      var lastManual = Number(localStorage.getItem("cc:lastManualRefresh") || 0);
+      var nowTs = Date.now();
+
+      // Skip if a manual refresh happened within the last 72h
+      if (nowTs - lastManual < MS_72H) return;
+      // Skip if auto-snapshot already ran within the last 72h
+      if (nowTs - lastSnap < MS_72H) return;
 
       // Snapshot inventory cards that already have a pokedataId
       var invCards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed; });
@@ -3345,12 +3391,12 @@ function useAutoSnapshot(wl, inv, setInv) {
         await new Promise(function(r){ setTimeout(r, 300); });
       }
 
-      try { localStorage.setItem("cc:lastSnapDate", today); } catch(e) {}
+      try { localStorage.setItem("cc:lastSnapTs", String(Date.now())); localStorage.setItem("cc:lastSnapDate", new Date().toDateString()); } catch(e) {}
     };
 
     var check = function() {
       var h = new Date().getHours();
-      if (h >= 10 && h < 22) runSnapshots();
+      if (h === 22) runSnapshots();
     };
 
     check(); // check on mount
