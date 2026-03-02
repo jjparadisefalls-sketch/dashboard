@@ -1322,7 +1322,8 @@ function extractPrice(pricing, grader, grade) {
       }
     }
     // Nothing found — log so we can fix the key format
-    console.warn("[PCT] No graded price for", g, n, "| Available keys:", JSON.stringify(Object.keys(pricing)));
+    var gkeys = Object.keys(pricing).filter(function(k){return k.toUpperCase().indexOf(g)!==-1;});
+    console.warn("[PCT] No graded price >0 for", g, n, "| Graded keys+values:", JSON.stringify(gkeys.map(function(k){return k+":"+pricing[k].value;})));
     return null;
   }
 
@@ -1371,7 +1372,11 @@ function findBestMatch(results, card) {
   var eng  = results.filter(function(r) { return r.language === "ENGLISH"; });
 
   var sameName = function(r) { return (r.name || "").toLowerCase() === name; };
-  var sameNum  = function(r) { return num && (r.num || "").toLowerCase() === num; };
+  var sameNum  = function(r) {
+    if (!num) return false;
+    var rn = (r.num || "").toLowerCase();
+    return rn === num || parseInt(rn,10) === parseInt(num,10);
+  };
   var sameSet  = function(r) { return set && setsMatch(r, set); };
 
   // Priority 1: name + number + set (most specific)
@@ -1720,7 +1725,10 @@ function InvSection(_ref20) {
                       onClick:function() {
                         if (item.pokedataId) {
                           localStorage.removeItem(FETCH_PFX + item.pokedataId);
+                          localStorage.removeItem(SNAP_PFX + item.pokedataId);
                         }
+                        var ck = [(item.name||"").toLowerCase().trim(),(item.set||"").toLowerCase().trim(),(item.num||"").toLowerCase().trim()].join("|");
+                        localStorage.removeItem(SEARCH_PFX + ck);
                         (item._ids||[item.id]).forEach(function(id){ update(id,{pokedataId:null,value:null}); });
                       }
                     }, "↺"),
