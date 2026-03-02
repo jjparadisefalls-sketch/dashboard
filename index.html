@@ -1942,30 +1942,7 @@ function InventoryTab(_ref21) {
       React.createElement("button", {
         style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:8},
         onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
-      }, "🗑 Clear All"),
-
-      // Nuke all search+fetch caches — forces fresh match+price on next Refresh
-      React.createElement("button", {
-        style:{background:"rgba(167,139,250,0.12)",border:"1px solid rgba(167,139,250,0.3)",borderRadius:7,padding:"7px 14px",color:"#a78bfa",fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:8},
-        onClick:function(){
-          if(!confirm("Clear ALL price caches for "+activeSport+"? Every card will re-fetch on next Refresh.")) return;
-          var allKeys = Object.keys(localStorage);
-          var cleared = 0;
-          // Clear search ID cache for all inventory cards in this sport
-          (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;}).forEach(function(c){
-            var ck = [(c.name||"").toLowerCase().trim(),(c.set||"").toLowerCase().trim(),(c.num||"").toLowerCase().trim()].join("|");
-            localStorage.removeItem(SEARCH_PFX + ck);
-            if (c.pokedataId) localStorage.removeItem(FETCH_PFX + c.pokedataId);
-            cleared++;
-          });
-          // Also wipe pokedataId and value from inventory so they re-match fresh
-          setInv((inv||[]).map(function(x){
-            if (x.sport!==activeSport||x.sealed) return x;
-            return Object.assign({},x,{pokedataId:null,value:null});
-          }));
-          alert("Cleared caches for "+cleared+" cards. Hit Refresh All Prices to re-fetch everything.");
-        }
-      }, "🔄 Re-Match All")
+      }, "🗑 Clear All")
     ),
 
     // Sections
