@@ -1808,14 +1808,9 @@ function InvSection(_ref20) {
     else if (sortMode === "low") arr.sort(function(a,b){ return (a.value||0)-(b.value||0); });
     return arr;
   }, [cards, sortMode]);
-  // Only include cards that have a market price in P&L calculation
-  var pricedCards = cards.filter(function(i) { return i.value && i.value > 0; });
-  var totalPaid = pricedCards.reduce(function (s, i) {
-    return s + (i.paid || 0);
-  }, 0);
-  var totalValue = collated.filter(function(i) { return i.value && i.value > 0; }).reduce(function (s, i) {
-    return s + (i.value || 0) * (i.qty || 1);
-  }, 0);
+  var _pricedOnly = cards.filter(function(i) { return i.value && i.value > 0; });
+  var totalPaid = _pricedOnly.reduce(function (s, i) { return s + (i.paid || 0); }, 0);
+  var totalValue = collated.filter(function(i) { return i.value && i.value > 0; }).reduce(function (s, i) { return s + (i.value || 0) * (i.qty || 1); }, 0);
   var totalProfit = totalPaid > 0 ? totalValue - totalPaid : 0;
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2204,8 +2199,7 @@ function InventoryTab(_ref21) {
                     sameName = function sameName(r) {
                       var _r$name, _card$name;
                       return ((_r$name = r.name) === null || _r$name === void 0 ? void 0 : _r$name.toLowerCase()) === ((_card$name = card.name) === null || _card$name === void 0 ? void 0 : _card$name.toLowerCase());
-                    };
-                    // Strict match: name + number + set
+                    }; // Strict match: name + number + set
                     match = matches.find(function (r) {
                       var _r$set_code, _r$set_name, _r$set_code2, _r$set_code3;
                       return sameName(r) && cardNum && (r.num || "").toLowerCase() === cardNum && cardSet && (((_r$set_code = r.set_code) === null || _r$set_code === void 0 ? void 0 : _r$set_code.toLowerCase()) === cardSet || ((_r$set_name = r.set_name) === null || _r$set_name === void 0 ? void 0 : _r$set_name.toLowerCase()) === cardSet || ((_r$set_code2 = r.set_code) === null || _r$set_code2 === void 0 ? void 0 : _r$set_code2.toLowerCase().includes(cardSet)) || cardSet.includes((_r$set_code3 = r.set_code) === null || _r$set_code3 === void 0 ? void 0 : _r$set_code3.toLowerCase()));
@@ -2263,7 +2257,7 @@ function InventoryTab(_ref21) {
                           // First time — set baseline
                           setBaseline(pdId, value);
                         }
-                        // Always write value back so P&L is correct
+                        // Always write value+pokedataId back so P&L is always correct
                         updated = updated.map(function (x) {
                           return x.id === card.id ? _objectSpread(_objectSpread({}, x), {}, {
                             value: value,
@@ -2321,14 +2315,13 @@ function InventoryTab(_ref21) {
   var filtered = (inv || []).filter(function (i) {
     return i.sport === activeSport;
   });
-  var _pricedInv = (inv || []).filter(function(i) { return i.value && i.value > 0; });
-  var totalPaid = _pricedInv.reduce(function (s, i) {
+  var totalPaid = (inv || []).reduce(function (s, i) {
     return s + (i.paid || 0);
   }, 0);
-  var totalValue = _pricedInv.reduce(function (s, i) {
+  var totalValue = (inv || []).reduce(function (s, i) {
     return s + (i.value || 0);
   }, 0);
-  var totalProfit = totalPaid > 0 ? totalValue - totalPaid : 0;
+  var totalProfit = totalValue - totalPaid;
   if (!invReady) return /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 20,
@@ -2457,28 +2450,16 @@ function InventoryTab(_ref21) {
       alert("Cache cleared for " + graded.length + " graded card(s). Now hit Refresh All Prices.");
     }
   }, "🏅 Refresh Graded"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      background: "rgba(251,191,36,0.15)",
-      border: "1px solid rgba(251,191,36,0.3)",
-      borderRadius: 7,
-      padding: "7px 14px",
-      color: "#fbbf24",
-      fontSize: 12,
-      fontWeight: 600,
-      cursor: "pointer",
-      marginLeft: 8
-    },
+    style: { background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 7, padding: "7px 14px", color: "#fbbf24", fontSize: 12, fontWeight: 600, cursor: "pointer", marginLeft: 8 },
     onClick: function onClick() {
       var missing = (inv || []).filter(function(x) { return x.sport === activeSport && !x.sealed && !x.value && x.pokedataId; });
       var noId = (inv || []).filter(function(x) { return x.sport === activeSport && !x.sealed && !x.value && !x.pokedataId; });
-      // Clear price cache for cards with ID but no value
       missing.forEach(function(x) { localStorage.removeItem("cc:lastfetch:" + x.pokedataId); });
-      // Clear search cache for cards with no ID so they re-search
       noId.forEach(function(x) {
         var sk = "cc:searchid:" + (x.name||"").toLowerCase().trim() + "|" + (x.set||"").toLowerCase().trim() + "|" + (x.num||"").toLowerCase().trim();
         localStorage.removeItem(sk);
       });
-      alert("Cleared cache for " + missing.length + " priced cards and " + noId.length + " unmatched cards. Now hit Refresh All Prices.");
+      alert("Cache cleared for " + missing.length + " unpriced + " + noId.length + " unmatched cards. Now hit Refresh All Prices.");
     }
   }, "🔄 Fix Missing"), /*#__PURE__*/React.createElement("div", null, STATUSES.map(function (s) {
     return /*#__PURE__*/React.createElement(InvSection, {
@@ -2733,10 +2714,9 @@ function InventoryTab(_ref21) {
                           matches = Array.isArray(results) ? results : [];
                           cardNum = (card.num || "").toLowerCase().trim();
                           cardSet = (card.set || "").toLowerCase().trim();
-                          var _SA = {"mew":"pokemon card 151","151":"pokemon card 151","blk":"black bolt","svi":"scarlet & violet base","scr":"stellar crown","meg":"mega evolution","pfl":"paldean fates","paf":"paldean fates","pal":"paldea evolved","obf":"obsidian flames","par":"paradox rift","jtg":"journey together","dri":"destined rivals","ssp":"surging sparks","ssr":"surging sparks","asc":"ascended heroes","svp":"scarlet & violet promos","svp promo":"scarlet & violet promos","sacrlet & violet promos":"scarlet & violet promos","pre":"prismatic evolutions","twm":"twilight masquerade","wht":"white flare","tef":"temporal forces","sfa":"shrouded fable","mep promo":"miscellaneous promos","yx promos":"xy black star promos","xy blackstar promos":"xy black star promos","swsh promo":"sword & shield promo","sword and shield":"sword & shield","sv-p promos":"sv-p promos","sm-p promos":"sm-p promos","pokemon go stamped":"pokemon go","grown zenith":"crown zenith","crown  zenith":"crown zenith","1st edition holofoil":"base set 1st edition","jungle":"jungle 1st edition","e":"expedition","evolutions":"xy evolutions"}; cardSet = _SA[cardSet] || cardSet;
-                          var _engResults2 = results.filter(function(r) { return r.language === "ENGLISH"; });
-                          var _searchPool2 = _engResults2.length > 0 ? _engResults2 : results;
-                          match = _searchPool2.find(function (r) {
+                          match = results.filter(function (r) {
+                            return r.language === "ENGLISH";
+                          }).find(function (r) {
                             var _r$name2, _card$name2, _r$set_code7, _r$set_name3, _r$set_code8, _r$set_code9;
                             return ((_r$name2 = r.name) === null || _r$name2 === void 0 ? void 0 : _r$name2.toLowerCase()) === ((_card$name2 = card.name) === null || _card$name2 === void 0 ? void 0 : _card$name2.toLowerCase()) && (r.num || "").toLowerCase() === cardNum && (((_r$set_code7 = r.set_code) === null || _r$set_code7 === void 0 ? void 0 : _r$set_code7.toLowerCase()) === cardSet || ((_r$set_name3 = r.set_name) === null || _r$set_name3 === void 0 ? void 0 : _r$set_name3.toLowerCase()) === cardSet || ((_r$set_code8 = r.set_code) === null || _r$set_code8 === void 0 ? void 0 : _r$set_code8.toLowerCase().includes(cardSet)) || cardSet.includes((_r$set_code9 = r.set_code) === null || _r$set_code9 === void 0 ? void 0 : _r$set_code9.toLowerCase()));
                           });
@@ -4368,17 +4348,12 @@ function useAutoSnapshot(wl, inv, setInv) {
     var check = function check() {
       var h = new Date().getHours();
       var m = new Date().getMinutes();
-      // Run every 6 days at 10am
-      var _dayOfYear = Math.floor(Date.now() / (6 * 24 * 3600 * 1000));
-      var _snapKey6 = "cc:lastSnap6:" + _dayOfYear;
-      if (h === 10 && m === 0 && !localStorage.getItem(_snapKey6)) { localStorage.setItem(_snapKey6, "1"); runSnapshots(); }
+      if (h === 10 && m === 0) runSnapshots();
     };
 
     // Also run on load if past the snapshot time and not yet run today
     var h = new Date().getHours();
-    var _dayOfYear2 = Math.floor(Date.now() / (6 * 24 * 3600 * 1000));
-    var _snapKey62 = "cc:lastSnap6:" + _dayOfYear2;
-    if (h >= 10 && !localStorage.getItem(_snapKey62)) { localStorage.setItem(_snapKey62, "1"); runSnapshots(); }
+    if (h >= 10) runSnapshots();
     var interval = setInterval(check, 60000);
     return function () {
       return clearInterval(interval);
