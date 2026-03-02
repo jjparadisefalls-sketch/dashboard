@@ -1501,6 +1501,19 @@ function SportBadge(_ref16) {
 var savePriceSnapshot = saveSnap;
 var getPriceHistory   = getHistory;
 
+// ── fmtMove: global price-movement helper ─────────────────────────────────
+function fmtMove(cur, old) {
+  if (!old || !cur) return React.createElement("span", {style:{color:"var(--muted)"}}, "—");
+  var d = cur - old;
+  var p = (d / old) * 100;
+  var cls = d > 0.01 ? "move-up" : d < -0.01 ? "move-down" : "move-flat";
+  var sign = d > 0 ? "+" : "";
+  return React.createElement("span", { className:"move-pill "+cls },
+    sign+"$"+Math.abs(d).toFixed(2)
+  );
+}
+
+
 
 var STATUSES = [
   { id: "pc",      label: "PC",       color: "#60a5fa" },
