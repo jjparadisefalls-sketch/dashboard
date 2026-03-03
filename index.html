@@ -3993,7 +3993,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
 <script>
 (function() {
   var STORE_KEY = 'cc:pokenews';
-  var MAX_ITEMS = 10;
+  var MAX_ITEMS = 25;
   var news = [];
 
   function save() {
@@ -4004,7 +4004,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
   }
 
   function getTierLabel(count) {
-    if (count >= MAX_ITEMS) return 'Full (10/10)';
+    if (count >= MAX_ITEMS) return 'Full (25/25)';
     return count + '/' + MAX_ITEMS;
   }
 
@@ -4041,7 +4041,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
     var inp = document.getElementById('pokenews-input');
     if (!inp || !inp.value.trim()) return;
     if (news.length >= MAX_ITEMS) {
-      alert('Poke News is full (10/10). Remove an item first.');
+      alert('Poke News is full (25/25). Remove an item first.');
       return;
     }
     news.unshift({ text: inp.value.trim(), seen: false });
@@ -4095,3 +4095,4 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
 })();
 </script>
 </body></html>
+
