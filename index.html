@@ -10,6 +10,51 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #07090f; }
     #root { min-height: 100vh; }
+  
+  /* Appointments scroll */
+  .panel:has(.appt-row) {
+    max-height: 365px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .panel:has(.appt-row) .panel-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--s1);
+  }
+  .panel:has(.appt-row) .add-form {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--s1);
+  }
+  /* Tasks scroll */
+  .panel:has(.todo-row) {
+    max-height: 335px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .panel:has(.todo-row) .panel-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--s1);
+  }
+  .panel:has(.todo-row) .add-form {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--s1);
+  }
+  /* Scrollbar styling */
+  .panel:has(.appt-row)::-webkit-scrollbar,
+  .panel:has(.todo-row)::-webkit-scrollbar { width: 5px; }
+  .panel:has(.appt-row)::-webkit-scrollbar-track,
+  .panel:has(.todo-row)::-webkit-scrollbar-track { background: transparent; }
+  .panel:has(.appt-row)::-webkit-scrollbar-thumb,
+  .panel:has(.todo-row)::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
   </style>
 <script>"use strict";
 
@@ -934,6 +979,7 @@ function Appointments(_ref12) {
     setAcct = _useState20[1];
   var add = function add() {
     if (!title.trim() || !appts) return;
+    if (appts.length >= 25) return;
     var newAppt = {
       id: Date.now(),
       title: title,
@@ -1106,6 +1152,7 @@ function Todos(_ref13) {
   };
   var add = function add() {
     if (!text.trim() || !todos) return;
+    if (todos.length >= 25) return;
     setTodos([].concat(_toConsumableArray(todos), [{
       id: Date.now(),
       text: text,
