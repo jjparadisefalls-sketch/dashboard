@@ -1413,7 +1413,10 @@ function findBestMatch(results, card) {
     if (norm(rn) === norm(name)) return true;
     // "Mega Charizard X" and "Mega Charizard EX" are same card in common usage
     var deex = function(s) { return norm(s).replace(/mega (\w+) ex/, "mega $1 x").replace(/mega (\w+) x/, "mega $1 ex"); };
-    return deex(rn) === norm(name) || norm(rn) === deex(name);
+    if (deex(rn) === norm(name) || norm(rn) === deex(name)) return true;
+    // Strip suffix variants: "Blastoise ex" matches "Blastoise", "Chansey" matches "Chansey Reverse Holo"
+    var strip = function(s) { return s.replace(/\s+(ex|vstar|vmax|vmax|gx|reverse holo|holo|stamped)\s*$/i, "").trim(); };
+    return strip(rn) === strip(name) || strip(rn) === name || rn === strip(name);
   };
 
   var sameNum = function(r) {
@@ -1426,10 +1429,24 @@ function findBestMatch(results, card) {
 
   var sameSet = function(r) { return set && setsMatch(r, set); };
 
+  // Number is the ultimate differentiator — NEVER drop it when present
   var m = eng.find(function(r) { return sameName(r) && sameNum(r) && sameSet(r); });
   if (!m && num) m = eng.find(function(r) { return sameName(r) && sameNum(r); });
-  if (!m && set) m = eng.find(function(r) { return sameName(r) && sameSet(r); });
-  if (!m) m = eng.find(function(r) { return sameName(r); });
+  // Only fall back to set/name-only when no number was provided
+  if (!m && !num && set) m = eng.find(function(r) { return sameName(r) && sameSet(r); });
+  if (!m && !num) m = eng.find(function(r) { return sameName(r); });
+  // Last resort when num given but no exact match: closest number in same set
+  if (!m && num && set) {
+    var inSet = eng.filter(function(r) { return sameName(r) && sameSet(r); });
+    if (inSet.length) {
+      var target = parseInt(num, 10);
+      inSet.sort(function(a, b) {
+        return Math.abs(parseInt(a.num,10) - target) - Math.abs(parseInt(b.num,10) - target);
+      });
+      m = inSet[0];
+      if (m) console.log("[PCT] Closest-number fallback used:", m.name, m.num, m.set_name);
+    }
+  }
 
   if (m) console.log("[PCT] Matched:", card.name, card.num, card.set, "->", m.name, m.num, m.set_name, "id:", m.id);
   return m || null;
@@ -1442,13 +1459,35 @@ async function fetchCardPrice(card) {
   var normNum = (!isNaN(parseInt(rawNum, 10)) && !/[a-z]/i.test(rawNum)) ? String(parseInt(rawNum, 10)) : rawNum;
   var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum].join("|");
 
-  // Search cache takes priority over stored pokedataId (more reliable — set by findBestMatch)
+  // Search cache — but validate the cached ID still matches this card's number
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
   var pdId = cachedId || card.pokedataId || null;
 
-  if (!pdId) {
-    var searchQuery = card.name + (card.num ? " " + card.num : "");
+  // If we have a cached/stored ID but also have a card number, verify it's correct
+  // by checking against a fresh search. This catches stale wrong-ID cache entries.
+  var needsSearch = !pdId;
+  if (pdId && normNum) {
+    // Quick verify: fetch the cached ID's card data and check the number matches
+    var verifyPd = await pdPricing(pdId);
+    if (verifyPd && verifyPd.num) {
+      var cachedNum = String(parseInt(verifyPd.num, 10) || verifyPd.num);
+      var cardNum   = String(parseInt(normNum, 10) || normNum);
+      if (cachedNum !== cardNum) {
+        console.warn("[PCT] Cached ID", pdId, "has num", verifyPd.num, "but card needs num", normNum, "- re-searching");
+        pdId = null;
+        needsSearch = true;
+        try { localStorage.removeItem(SEARCH_PFX + cacheKey); } catch(e) {}
+      }
+    }
+  }
+
+  if (needsSearch) {
+    // Primary: name + set (gets all cards from that set, number matching picks the right one)
+    var searchQuery = card.name + (card.set ? " " + card.set : "") + (card.num ? " " + card.num : "");
     var results = await pdSearch(searchQuery);
+    // Fallback: name + number only
+    if (!Array.isArray(results) || results.length === 0) results = await pdSearch(card.name + (card.num ? " " + card.num : ""));
+    // Last fallback: name only
     if (!Array.isArray(results) || results.length === 0) results = await pdSearch(card.name);
     var match = findBestMatch(Array.isArray(results) ? results : [], card);
     if (!match) { console.warn("[PCT] No match for:", card.name, card.set, card.num); return { pdId: null, value: null }; }
