@@ -3996,7 +3996,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
   var news = [];
 
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(news)); } catch(e){}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(news)); } catch(e){} 
   }
   function load() {
     try { var d = localStorage.getItem(STORE_KEY); if(d) news = JSON.parse(d); } catch(e){}
@@ -4007,41 +4007,23 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
     var empty = document.getElementById('pokenews-empty');
     if (!list) return;
     list.innerHTML = '';
-    if (news.length === 0) {
-      empty.style.display = 'block';
-      return;
-    }
+    if (news.length === 0) { empty.style.display = 'block'; return; }
     empty.style.display = 'none';
     news.forEach(function(item, idx) {
       var row = document.createElement('div');
       row.className = 'pokenews-row' + (item.seen ? ' seen' : '');
-
-      // Seen checkbox
       var box = document.createElement('div');
       box.className = 'pokenews-seen-box' + (item.seen ? ' checked' : '');
       box.innerHTML = item.seen ? '<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>' : '';
-      box.onclick = function() {
-        news[idx].seen = !news[idx].seen;
-        save(); render();
-      };
-
-      // Text
+      box.onclick = function() { news[idx].seen = !news[idx].seen; save(); render(); };
       var txt = document.createElement('span');
       txt.className = 'pokenews-text';
       txt.textContent = item.text;
-
-      // Delete
       var del = document.createElement('button');
       del.className = 'pokenews-del';
       del.innerHTML = '<svg width="13" height="13" viewBox="0 0 13 13"><line x1="2" y1="2" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="11" y1="2" x2="2" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
-      del.onclick = function() {
-        news.splice(idx, 1);
-        save(); render();
-      };
-
-      row.appendChild(box);
-      row.appendChild(txt);
-      row.appendChild(del);
+      del.onclick = function() { news.splice(idx, 1); save(); render(); };
+      row.appendChild(box); row.appendChild(txt); row.appendChild(del);
       list.appendChild(row);
     });
   }
@@ -4054,42 +4036,47 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
     save(); render();
   }
 
-  function init() {
-    var content = document.querySelector('.content');
-    if (!content) { setTimeout(init, 300); return; }
-
-    load();
-
+  function tryInject() {
+    // Only inject when .two-col exists (dashboard is active) and panel not already there
+    var twoCol = document.querySelector('.two-col');
+    if (!twoCol) return;
+    if (document.getElementById('pokenews-panel')) return;
+    var content = twoCol.parentElement;
+    if (!content) return;
     var panel = document.createElement('div');
     panel.className = 'pokenews-panel';
+    panel.id = 'pokenews-panel';
     panel.innerHTML =
-      '<div class="pokenews-head">' +
-        '<div class="pokenews-title">' +
-          '<span style="font-size:16px">&#x1F3AE;</span> Pok&eacute; News' +
-        '</div>' +
-      '</div>' +
-      '<div class="pokenews-add">' +
-        '<input id="pokenews-input" placeholder="Add news, hot cards, tips…" />' +
-        '<button id="pokenews-btn">+ Add</button>' +
-      '</div>' +
+      '<div class="pokenews-head"><div class="pokenews-title"><span style="font-size:16px">&#x1F3AE;</span> Pok&eacute; News</div></div>' +
+      '<div class="pokenews-add"><input id="pokenews-input" placeholder="Add news, hot cards, tips…" /><button id="pokenews-btn">+ Add</button></div>' +
       '<div id="pokenews-empty" class="pokenews-empty" style="display:none">No news yet — add something!</div>' +
       '<div id="pokenews-list" class="pokenews-list"></div>';
-
     content.appendChild(panel);
-
     document.getElementById('pokenews-btn').onclick = addNews;
     document.getElementById('pokenews-input').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') addNews();
     });
-
     render();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { setTimeout(init, 600); });
-  } else {
-    setTimeout(init, 600);
-  }
+  load();
+
+  // Watch for .two-col appearing in the DOM (dashboard becoming active)
+  var observer = new MutationObserver(function(mutations) {
+    for (var i = 0; i < mutations.length; i++) {
+      var added = mutations[i].addedNodes;
+      for (var j = 0; j < added.length; j++) {
+        if (added[j].querySelector && added[j].querySelector('.two-col')) {
+          setTimeout(tryInject, 50);
+          return;
+        }
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Also try on initial load
+  setTimeout(tryInject, 800);
 })();
 </script>
 </body></html>
