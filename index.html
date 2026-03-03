@@ -56,7 +56,7 @@
   .panel:has(.todo-row)::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
 
   
-  /* PokÃ© News */
+  /* Poké News */
   .pokenews-panel {
     background: var(--s1);
     border: 1px solid var(--border);
@@ -211,7 +211,7 @@ var _React = React,
   useEffect = _React.useEffect,
   useCallback = _React.useCallback;
 
-// ââ Constants ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Constants ──────────────────────────────────────────────────────────────
 var POKEMON_TCG_API_KEY = "tcg_live_0b7bbd4667635153ed895df714aee9dd868c0d8d";
 var TCG_HEADERS = {
   "X-Api-Key": POKEMON_TCG_API_KEY
@@ -219,7 +219,7 @@ var TCG_HEADERS = {
 var CORS_PROXY = "https://corsproxy.io/?";
 
 // Wrap Pokemon TCG API calls through CORS proxy
-// ââ PokeData API helpers (via Render proxy) âââââââââââââââââââââââââââââââ
+// ── PokeData API helpers (via Render proxy) ───────────────────────────────
 var PD_PROXY = "https://pokedata-proxy.onrender.com";
 function pdSearch(_x, _x2) {
   return _pdSearch.apply(this, arguments);
@@ -257,7 +257,7 @@ function _pdSearch() {
 }
 function pdPricing(_x3, _x4) {
   return _pdPricing.apply(this, arguments);
-} // ââ Google Calendar Integration (redirect-based OAuth) ââââââââââââââââââââ
+} // ── Google Calendar Integration (redirect-based OAuth) ────────────────────
 function _pdPricing() {
   _pdPricing = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee10(id, signal) {
     var url, resp;
@@ -321,7 +321,7 @@ function parseTokenFromHash() {
 }
 function fetchGCalEvents(_x5) {
   return _fetchGCalEvents.apply(this, arguments);
-} // ââ useGoogleCalendar hook (supports 2 accounts, persists tokens) âââââââââ
+} // ── useGoogleCalendar hook (supports 2 accounts, persists tokens) ─────────
 function _fetchGCalEvents() {
   _fetchGCalEvents = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee11(accessToken) {
     var now, later, url, resp, data;
@@ -386,9 +386,9 @@ function useGoogleCalendar() {
     gcalEvents2 = _useState8[0],
     setGcalEvents2 = _useState8[1];
 
-  // On mount â reload saved events AND check for new OAuth redirect
+  // On mount — reload saved events AND check for new OAuth redirect
   useEffect(function () {
-    // First check if we just came back from OAuth â do this BEFORE restoring
+    // First check if we just came back from OAuth — do this BEFORE restoring
     var tokenData = parseTokenFromHash();
     var whichAccount = localStorage.getItem("gcal_connecting") || "1";
     if (tokenData) {
@@ -433,7 +433,7 @@ function useGoogleCalendar() {
         });
       }
     } else {
-      // No OAuth redirect â just restore both saved accounts
+      // No OAuth redirect — just restore both saved accounts
       try {
         var _saved = localStorage.getItem("gcal_events_1");
         if (_saved) {
@@ -500,7 +500,7 @@ var ACCOUNTS = {
   },
   cards: {
     id: "cards",
-    label: "PokÃ©mon & Cards",
+    label: "Pokémon & Cards",
     "short": "PC",
     color: "#f0c040",
     bg: "rgba(240,192,64,0.12)",
@@ -536,11 +536,11 @@ function fmtTime(t) {
   return "".concat(hr % 12 || 12, ":").concat(m).concat(hr >= 12 ? "pm" : "am");
 }
 
-// ââ Seed data ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Seed data ──────────────────────────────────────────────────────────────
 var SEED = {
   appts: [{
     id: 1,
-    title: "Patient eval â Sarah M.",
+    title: "Patient eval — Sarah M.",
     account: "pt",
     date: today(),
     time: "09:00"
@@ -552,7 +552,7 @@ var SEED = {
     time: "14:00"
   }, {
     id: 3,
-    title: "Card show â NYC",
+    title: "Card show — NYC",
     account: "cards",
     date: new Date(Date.now() + 864e5 * 2).toISOString().split("T")[0],
     time: "10:00"
@@ -596,7 +596,7 @@ var SEED = {
   }
 };
 
-// ââ Persistent storage hook ââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Persistent storage hook ────────────────────────────────────────────────
 function usePersistedState(key, seed) {
   var _useState9 = useState(null),
     _useState10 = _slicedToArray(_useState9, 2),
@@ -637,7 +637,7 @@ function usePersistedState(key, seed) {
   return [value, persist, ready];
 }
 
-// ââ Icons ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Icons ──────────────────────────────────────────────────────────────────
 var Ico = {
   cal: /*#__PURE__*/React.createElement("svg", {
     width: "14",
@@ -833,10 +833,10 @@ var Ico = {
   }))
 };
 
-// ââ CSS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── CSS ────────────────────────────────────────────────────────────────────
 var CSS = "\n  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap');\n\n  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }\n\n  :root {\n    --bg:       #07090f;\n    --s1:       #0e1118;\n    --s2:       #141824;\n    --s3:       #1c2235;\n    --border:   rgba(255,255,255,0.06);\n    --border2:  rgba(255,255,255,0.11);\n    --text:     #e2e8f0;\n    --muted:    #64748b;\n    --muted2:   #94a3b8;\n    --pt:       #4f9eff;\n    --cards:    #f0c040;\n    --personal: #d1d5db;\n    --font:     'Outfit', sans-serif;\n    --mono:     'JetBrains Mono', monospace;\n  }\n\n  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }\n  button, input, textarea, select { font-family: var(--font); }\n\n  .shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }\n\n  /* Sidebar */\n  .sidebar {\n    background: var(--s1); border-right: 1px solid var(--border);\n    display: flex; flex-direction: column; padding: 24px 0;\n    position: sticky; top: 0; height: 100vh; overflow-y: auto;\n  }\n  .sidebar-brand { padding: 0 20px 24px; border-bottom: 1px solid var(--border); }\n  .brand-logo {\n    width: 40px; height: 40px; border-radius: 10px;\n    background: linear-gradient(135deg, var(--pt), var(--cards));\n    display: flex; align-items: center; justify-content: center;\n    font-weight: 800; font-size: 18px; color: #07090f; margin-bottom: 10px;\n  }\n  .brand-name { font-size: 15px; font-weight: 700; }\n  .brand-sub  { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }\n\n  .sidebar-section { padding: 20px 12px 0; }\n  .sidebar-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); padding: 0 8px; margin-bottom: 6px; }\n\n  .sidebar-nav-btn {\n    display: flex; align-items: center; gap: 10px; width: 100%;\n    padding: 9px 10px; border-radius: 8px; border: none; background: transparent;\n    color: var(--muted2); font-size: 13px; font-weight: 500; cursor: pointer;\n    transition: all 0.15s; text-align: left;\n  }\n  .sidebar-nav-btn:hover { background: var(--s2); color: var(--text); }\n  .sidebar-nav-btn.active { background: var(--s3); color: var(--text); }\n\n  .account-filters { padding: 20px 12px 0; }\n  .acct-pill {\n    display: flex; align-items: center; gap: 8px; width: 100%;\n    padding: 8px 10px; border-radius: 8px; border: none; background: transparent;\n    font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;\n    color: var(--muted2); text-align: left;\n  }\n  .acct-pill:hover { background: var(--s2); }\n  .acct-pill.active { background: var(--s3); color: var(--text); }\n  .acct-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }\n  .acct-pill .acct-count { margin-left: auto; font-size: 11px; font-family: var(--mono); color: var(--muted); }\n\n  .cal-connect { margin: 16px 12px 0; }\n  .cal-btn {\n    width: 100%; padding: 9px 12px; border-radius: 8px;\n    border: 1px dashed var(--border2); background: transparent;\n    color: var(--muted); font-size: 12px; cursor: pointer;\n    display: flex; align-items: center; gap: 8px; transition: all 0.15s;\n  }\n  .cal-btn:hover { background: var(--s2); color: var(--muted2); }\n  .cal-btn + .cal-btn { margin-top: 6px; }\n\n  /* Main */\n  .main { display: flex; flex-direction: column; }\n  .topbar {\n    display: flex; align-items: center; justify-content: space-between;\n    padding: 18px 28px; border-bottom: 1px solid var(--border);\n    background: rgba(7,9,15,0.9); backdrop-filter: blur(12px);\n    position: sticky; top: 0; z-index: 50;\n  }\n  .topbar-title { font-size: 20px; font-weight: 700; }\n  .topbar-date  { font-size: 12px; color: var(--muted); margin-top: 1px; font-family: var(--mono); }\n  .topbar-time  { font-size: 14px; font-weight: 600; color: var(--muted2); font-family: var(--mono); }\n\n  .content { padding: 24px 28px; flex: 1; }\n\n  /* Panels */\n  .panel { background: var(--s1); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 20px; }\n  .panel-head {\n    display: flex; align-items: center; justify-content: space-between;\n    padding: 14px 18px; border-bottom: 1px solid var(--border);\n  }\n  .panel-title { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted2); }\n\n  .acct-badge {\n    display: inline-flex; align-items: center;\n    font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px;\n    font-family: var(--mono); letter-spacing: 0.04em; flex-shrink: 0;\n  }\n\n  /* Appointment rows */\n  .appt-row { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); transition: background 0.1s; }\n  .appt-row:last-child { border-bottom: none; }\n  .appt-row:hover { background: var(--s2); }\n  .appt-time-pill { font-size: 11px; font-family: var(--mono); font-weight: 500; min-width: 52px; text-align: center; padding: 3px 6px; border-radius: 5px; flex-shrink: 0; }\n  .appt-title { font-size: 13px; font-weight: 500; flex: 1; }\n  .appt-date-tag { font-size: 11px; color: var(--muted); font-family: var(--mono); }\n\n  .row-del { background: none; border: none; color: var(--muted); cursor: pointer; padding: 3px; opacity: 0; transition: opacity 0.15s; display: flex; }\n  .appt-row:hover .row-del, .todo-row:hover .row-del { opacity: 1; }\n  .row-del:hover { color: #f87171; }\n\n  /* Todo rows */\n  .todo-row { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--border); transition: background 0.1s; }\n  .todo-row:last-child { border-bottom: none; }\n  .todo-row:hover { background: var(--s2); }\n  .todo-box { width: 17px; height: 17px; border-radius: 4px; border: 1.5px solid var(--border2); background: transparent; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.15s; color: #07090f; }\n  .todo-box.done { background: #34d399; border-color: #34d399; }\n  .todo-label { font-size: 13px; flex: 1; }\n  .todo-label.done { text-decoration: line-through; color: var(--muted); }\n\n  /* Add forms */\n  .add-form { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--s2); flex-wrap: wrap; }\n  .add-in { flex: 1; min-width: 100px; background: var(--s3); border: 1px solid var(--border2); border-radius: 7px; padding: 7px 11px; color: var(--text); font-size: 12px; outline: none; transition: border-color 0.15s; }\n  .add-in:focus { border-color: var(--pt); }\n  .add-in::placeholder { color: var(--muted); }\n  .add-select { background: var(--s3); border: 1px solid var(--border2); border-radius: 7px; padding: 7px 10px; color: var(--text); font-size: 12px; outline: none; cursor: pointer; }\n  .add-select option { background: var(--s2); }\n  .add-submit { background: var(--pt); border: none; border-radius: 7px; padding: 7px 14px; color: #07090f; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: opacity 0.15s; white-space: nowrap; }\n  .add-submit:hover { opacity: 0.85; }\n\n  /* Notes */\n  .notes-tabs { display: flex; border-bottom: 1px solid var(--border); }\n  .notes-tab { padding: 10px 16px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--muted); transition: all 0.15s; border-bottom: 2px solid transparent; margin-bottom: -1px; }\n  .notes-tab:hover { color: var(--muted2); }\n  .notes-tab.active { color: var(--text); }\n  .notes-textarea { width: 100%; background: transparent; border: none; padding: 16px 18px; color: var(--text); font-size: 13px; line-height: 1.75; resize: vertical; min-height: 130px; outline: none; font-family: var(--mono); }\n\n  /* Grid */\n  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }\n  .full-col { grid-column: 1 / -1; }\n\n  /* Pok\xE9mon */\n  .poke-search-bar { display: flex; gap: 10px; margin-bottom: 20px; }\n  .poke-search-in { flex: 1; background: var(--s2); border: 1px solid var(--border2); border-radius: 9px; padding: 11px 16px; color: var(--text); font-size: 13px; outline: none; transition: border-color 0.15s; }\n  .poke-search-in:focus { border-color: var(--cards); }\n  .poke-search-in::placeholder { color: var(--muted); }\n  .poke-search-btn { background: var(--cards); color: #07090f; border: none; border-radius: 9px; padding: 11px 20px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: opacity 0.15s; }\n  .poke-search-btn:hover { opacity: 0.85; }\n  .poke-search-btn:disabled { opacity: 0.5; cursor: not-allowed; }\n\n  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 14px; }\n  .poke-card { background: var(--s2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; cursor: pointer; transition: transform 0.15s, border-color 0.15s; position: relative; }\n  .poke-card:hover { transform: translateY(-3px); border-color: var(--cards); }\n  .poke-card img { width: 100%; display: block; aspect-ratio: 3/4; object-fit: cover; }\n  .poke-card-body { padding: 9px 11px; }\n  .poke-card-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n  .poke-card-set  { font-size: 10px; color: var(--muted); margin-top: 2px; }\n  .poke-card-price { margin-top: 7px; font-size: 12px; font-weight: 600; color: #34d399; font-family: var(--mono); }\n  .poke-card-price.none { color: var(--muted); }\n  .poke-pin-btn { position: absolute; top: 6px; right: 6px; background: rgba(7,9,15,0.75); border: none; border-radius: 5px; padding: 4px; cursor: pointer; color: var(--muted); display: flex; transition: color 0.15s; }\n  .poke-pin-btn:hover, .poke-pin-btn.pinned { color: var(--cards); }\n\n  .watchlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 12px; }\n  .watch-card { background: var(--s2); border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }\n  .watch-card img { width: 100%; display: block; aspect-ratio: 3/4; object-fit: cover; }\n  .watch-card-body { padding: 8px 10px; }\n  .watch-card-name { font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n  .watch-price { font-size: 11px; color: #34d399; font-family: var(--mono); margin-top: 4px; }\n\n  .alert-row { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--border); }\n  .alert-row:last-child { border-bottom: none; }\n  .alert-name { font-size: 13px; flex: 1; }\n  .alert-threshold { font-family: var(--mono); font-size: 12px; color: var(--muted); }\n  .alert-val { font-family: var(--mono); font-size: 12px; font-weight: 600; }\n  .alert-val.above { color: #34d399; }\n  .alert-val.below { color: #f87171; }\n\n  /* Detail overlay */\n  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 24px; }\n  .detail { background: var(--s1); border: 1px solid var(--border2); border-radius: 16px; max-width: 580px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 24px; display: grid; grid-template-columns: 190px 1fr; gap: 22px; position: relative; }\n  .detail img { width: 100%; border-radius: 10px; }\n  .detail-info { display: flex; flex-direction: column; gap: 10px; }\n  .detail-name { font-size: 22px; font-weight: 800; }\n  .detail-set  { font-size: 12px; color: var(--muted); }\n  .detail-close { position: absolute; top: 14px; right: 14px; background: var(--s2); border: 1px solid var(--border2); border-radius: 6px; padding: 5px; color: var(--muted); cursor: pointer; display: flex; }\n  .detail-close:hover { color: var(--text); }\n  .price-table { width: 100%; border-collapse: collapse; font-size: 12px; }\n  .price-table th { text-align: left; padding: 5px 0; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 400; }\n  .price-table td { padding: 6px 0; border-bottom: 1px solid var(--border); font-family: var(--mono); }\n  .price-table td:last-child { text-align: right; color: #34d399; font-weight: 500; }\n\n  .section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; font-family: var(--mono); display: flex; align-items: center; gap: 6px; }\n\n  /* Cal modal */\n  .cal-modal-box { max-width: 440px; display: block !important; }\n  .cal-modal-box h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }\n  .cal-modal-box p  { font-size: 13px; color: var(--muted2); line-height: 1.6; margin-bottom: 16px; }\n  .cal-step { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }\n  .cal-step:last-child { border-bottom: none; }\n  .cal-step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--s3); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; color: var(--muted2); }\n  .cal-step-text { font-size: 12px; color: var(--muted2); line-height: 1.6; }\n  .cal-step-text strong { color: var(--text); display: block; margin-bottom: 2px; }\n  .cal-close-btn { margin-top: 16px; width: 100%; padding: 10px; border-radius: 8px; border: none; background: var(--s3); color: var(--muted2); font-size: 13px; cursor: pointer; }\n  .cal-close-btn:hover { background: var(--s2); color: var(--text); }\n\n  .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }\n  .loading-ring { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border2); border-top-color: var(--cards); border-radius: 50%; animation: spin 0.7s linear infinite; }\n  @keyframes spin { to { transform: rotate(360deg); } }\n  .empty { text-align: center; padding: 36px 20px; color: var(--muted); font-size: 13px; }\n  .empty-icon { font-size: 26px; margin-bottom: 8px; }\n\n  /* Market page tabs */\n  .market-tabs { display: flex; gap: 4px; margin-bottom: 24px; flex-wrap: wrap; }\n  .market-tab {\n    padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border2);\n    background: var(--s2); color: var(--muted2); font-size: 13px; font-weight: 500;\n    cursor: pointer; transition: all 0.15s;\n  }\n  .market-tab:hover { color: var(--text); background: var(--s3); }\n  .market-tab.active { background: var(--s3); color: var(--cards); border-color: rgba(240,192,64,0.3); }\n\n  /* Inventory table */\n  .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }\n  .inv-table th { text-align: left; padding: 4px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500; }\n  .inv-table td { padding: 2px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 11px; white-space: nowrap; overflow: hidden; max-width: 160px; }\n  .inv-table tr:last-child td { border-bottom: none; }\n  .inv-table tr:hover td { background: var(--s2); }\n  .inv-sport { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); }\n  .inv-grade { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; font-family: var(--mono); }\n  .grade-psa  { background: rgba(79,158,255,0.15); color: var(--pt); border: 1px solid rgba(79,158,255,0.3); }\n  .grade-bgs  { background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3); }\n  .grade-raw  { background: rgba(100,116,139,0.15); color: var(--muted2); border: 1px solid rgba(100,116,139,0.3); }\n  .profit-pos { color: #34d399; font-weight: 600; font-family: var(--mono); }\n  .profit-neg { color: #f87171; font-weight: 600; font-family: var(--mono); }\n  .profit-neu { color: var(--muted); font-family: var(--mono); }\n\n  /* Inventory add form */\n  .inv-add-form { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--s2); align-items: center; }\n  @media (max-width: 900px) { .inv-add-form { grid-template-columns: 1fr 1fr; } }\n\n  /* Stats row */\n  .stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 20px; }\n  .stat-card { background: var(--s1); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }\n  .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }\n  .stat-value { font-size: 22px; font-weight: 700; font-family: var(--mono); }\n  .stat-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; }\n\n  /* Dashboard Watchlist panel */\n  .wl-row { display: flex; align-items: center; gap: 6px; padding: 2px 10px; border-bottom: 1px solid var(--border); transition: background 0.1s; }\n  .wl-row:last-child { border-bottom: none; }\n  .wl-row:hover { background: var(--s2); }\n  .wl-img { width: 38px; border-radius: 5px; flex-shrink: 0; }\n  .wl-name { font-size: 13px; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n  .wl-price { font-size: 11px; font-weight: 600; font-family: var(--mono); color: var(--cards); flex-shrink: 0; }\n  .wl-moves { display: flex; gap: 6px; flex-shrink: 0; }\n  .move-pill { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; font-family: var(--mono); }\n  .move-up   { background: rgba(52,211,153,0.12); color: #34d399; }\n  .move-down { background: rgba(248,113,113,0.12); color: #f87171; }\n  .move-flat { background: rgba(100,116,139,0.12); color: var(--muted2); }\n  .move-na   { background: rgba(100,116,139,0.08); color: var(--muted); }\n  .grade-psa { background: rgba(59,130,246,0.12); color: #60a5fa; }\n\n  /* Watchlist add row */\n  .wl-add-form { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--s2); flex-wrap: wrap; }\n\n  /* Collapsible */\n  .collapse-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; cursor: pointer; user-select: none; }\n  .collapse-arrow { font-size: 11px; color: var(--muted); transition: transform 0.2s; }\n  .collapse-arrow.open { transform: rotate(180deg); }\n\n  /* Layout toggle */\n  .layout-toggle { display: flex; gap: 6px; }\n  .layout-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border2); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; transition: all 0.15s; }\n  .layout-btn.active { background: var(--s3); color: var(--text); border-color: var(--border2); }\n";
 
-// ââ Account Badge ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Account Badge ──────────────────────────────────────────────────────────
 function AcctBadge(_ref) {
   var id = _ref.id;
   var a = ACCOUNTS[id];
@@ -851,7 +851,7 @@ function AcctBadge(_ref) {
   }, a["short"]);
 }
 
-// ââ Calendar Connect Modal âââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Calendar Connect Modal ─────────────────────────────────────────────────
 function CalModal(_ref2) {
   var provider = _ref2.provider,
     onClose = _ref2.onClose;
@@ -861,19 +861,19 @@ function CalModal(_ref2) {
     detail: "Visit console.cloud.google.com and create or select a project."
   }, {
     title: "Enable Google Calendar API",
-    detail: "APIs & Services â Library â search Google Calendar API â Enable."
+    detail: "APIs & Services → Library → search Google Calendar API → Enable."
   }, {
     title: "Create OAuth 2.0 credentials",
-    detail: "Credentials â Create â OAuth 2.0 Client ID â Web Application."
+    detail: "Credentials → Create → OAuth 2.0 Client ID → Web Application."
   }, {
     title: "Paste your Client ID here",
     detail: "Once you have it, share it and I'll wire up the OAuth flow for you."
   }] : [{
     title: "Register an app in Azure",
-    detail: "portal.azure.com â Azure Active Directory â App Registrations â New."
+    detail: "portal.azure.com → Azure Active Directory → App Registrations → New."
   }, {
     title: "Add Microsoft Graph permissions",
-    detail: "API Permissions â Add â Microsoft Graph â Calendars.Read."
+    detail: "API Permissions → Add → Microsoft Graph → Calendars.Read."
   }, {
     title: "Copy your Application (client) ID",
     detail: "It's shown on the app overview page after registration."
@@ -906,7 +906,7 @@ function CalModal(_ref2) {
   }, "Got it \u2014 I'll set this up and come back")));
 }
 
-// ââ Card Detail Modal ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Card Detail Modal ──────────────────────────────────────────────────────
 function CardDetail(_ref3) {
   var _card$tcgplayer, _card$images, _card$images2, _card$set, _card$tcgplayer2;
   var card = _ref3.card,
@@ -1029,7 +1029,7 @@ function CardDetail(_ref3) {
       alignItems: "center",
       gap: 6
     }
-  }, Ico.pin, " ", isPinned ? "Pinned â" : "Watchlist"), /*#__PURE__*/React.createElement("button", {
+  }, Ico.pin, " ", isPinned ? "Pinned ✓" : "Watchlist"), /*#__PURE__*/React.createElement("button", {
     onClick: function onClick() {
       onSetAlert(card);
       onClose();
@@ -1065,7 +1065,7 @@ function CardDetail(_ref3) {
   }, "TCGPlayer \u2197")))));
 }
 
-// ââ Appointments âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Appointments ───────────────────────────────────────────────────────────
 function Appointments(_ref12) {
   var filter = _ref12.filter,
     _ref12$gcalEvents = _ref12.gcalEvents,
@@ -1237,7 +1237,7 @@ function Appointments(_ref12) {
   }, Ico.plus, " Add")));
 }
 
-// ââ Todos ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Todos ──────────────────────────────────────────────────────────────────
 function Todos(_ref13) {
   var filter = _ref13.filter;
   var _usePersistedState3 = usePersistedState("cc:todos", SEED.todos),
@@ -1359,7 +1359,7 @@ function Todos(_ref13) {
   }, Ico.plus, " Add")));
 }
 
-// ââ Notes ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Notes ──────────────────────────────────────────────────────────────────
 function Notes() {
   var _ACCOUNTS$activeTab;
   var _usePersistedState5 = usePersistedState("cc:notes", SEED.notes),
@@ -1417,7 +1417,7 @@ function Notes() {
 }
 
 
-// ââ Price snapshot & history helpers âââââââââââââââââââââââââââââââââââââ
+// ── Price snapshot & history helpers ─────────────────────────────────────
 var SNAP_PFX   = "cc:snap:";
 var FETCH_PFX  = "cc:lastfetch:";
 var SEARCH_PFX = "cc:searchid:";
@@ -1448,7 +1448,7 @@ function getHistory(pdId, grader, grade) {
   var key = gradeSnapKey(pdId, grader, grade);
   var snaps = [];
   try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
-  // NOTE: no legacy fallback â raw and graded snaps are intentionally isolated
+  // NOTE: no legacy fallback — raw and graded snaps are intentionally isolated
   if (!snaps.length) return null;
   var latest = snaps[snaps.length-1].price;
   var find = function(daysAgo) {
@@ -1483,7 +1483,7 @@ function extractPrice(pricing, grader, grade) {
     for (var i = 0; i < attempts.length; i++) {
       if (pricing[attempts[i]] && pricing[attempts[i]].value > 0) return pricing[attempts[i]].value;
     }
-    // Broad scan â any key containing the grader and grade
+    // Broad scan — any key containing the grader and grade
     var keys = Object.keys(pricing);
     for (var j = 0; j < keys.length; j++) {
       var k = keys[j].toUpperCase();
@@ -1492,12 +1492,12 @@ function extractPrice(pricing, grader, grade) {
         return pricing[keys[j]].value;
       }
     }
-    // Nothing found â log so we can fix the key format
+    // Nothing found — log so we can fix the key format
     console.warn("[PCT] No graded price for", g, n, "| Available keys:", JSON.stringify(Object.keys(pricing)));
     return null;
   }
 
-  // Raw card â prefer TCGPlayer, fall back through sources
+  // Raw card — prefer TCGPlayer, fall back through sources
   return (pricing["TCGPlayer"]    && pricing["TCGPlayer"].value    > 0 ? pricing["TCGPlayer"].value    : null) ||
          (pricing["eBay Raw"]     && pricing["eBay Raw"].value     > 0 ? pricing["eBay Raw"].value     : null) ||
          (pricing["Pokedata Raw"] && pricing["Pokedata Raw"].value > 0 ? pricing["Pokedata Raw"].value : null) ||
@@ -1513,7 +1513,7 @@ function normalizeSet(s) {
     [/scarlet\s*[&and]+\s*violet/i,           "sv"],
     [/shrouded\s*fable/i,                     "sfa"],
     [/stellar\s*crown/i,                      "scr"],
-    [/pok[eÃ©]mon\s*card\s*151/i,         "mew"],
+    [/pok[eé]mon\s*card\s*151/i,         "mew"],
     [/black\s*[&and]+\s*white\s*promos?/i,    "bwp"],
     [/black\s*[&and]+\s*white/i,              "bw"],
     [/sun\s*[&and]+\s*moon\s*promos?/i,       "smp"],
@@ -1591,7 +1591,7 @@ function findBestMatch(results, card) {
 
   var sameSet = function(r) { return set && setsMatch(r, set); };
 
-  // Number is the ultimate differentiator â NEVER drop it when present
+  // Number is the ultimate differentiator — NEVER drop it when present
   var m = eng.find(function(r) { return sameName(r) && sameNum(r) && sameSet(r); });
   if (!m && num) m = eng.find(function(r) { return sameName(r) && sameNum(r); });
   // Only fall back to set/name-only when no number was provided
@@ -1621,7 +1621,7 @@ async function fetchCardPrice(card) {
   var normNum = (!isNaN(parseInt(rawNum, 10)) && !/[a-z]/i.test(rawNum)) ? String(parseInt(rawNum, 10)) : rawNum;
   var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum].join("|");
 
-  // Search cache â but validate the cached ID still matches this card's number
+  // Search cache — but validate the cached ID still matches this card's number
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
   var pdId = cachedId || card.pokedataId || null;
 
@@ -1667,7 +1667,7 @@ async function fetchCardPrice(card) {
     var snapHist = getHistory(pdId, card.grader, card.grade);
     var snapPrice = snapHist ? snapHist.latest : null;
     if (isGraded && !snapPrice) {
-      cacheValid = false; // graded card has no graded snap yet â force fresh fetch
+      cacheValid = false; // graded card has no graded snap yet — force fresh fetch
     } else {
       return { pdId: pdId, value: snapPrice || card.value || null, cached: true };
     }
@@ -1683,13 +1683,13 @@ async function fetchCardPrice(card) {
   return { pdId: pdId, value: value };
 }
 
-// ââ Sport map (used by App and InventoryTab) ââââââââââââââââââââââââââââââ
+// ── Sport map (used by App and InventoryTab) ──────────────────────────────
 var SPORTS_MAP = {
-  pokemon:    { label: "PokÃ©mon",    emoji: "â¡", color: "#f0c040", bg: "rgba(240,192,64,0.12)" },
-  disney:     { label: "Disney",     emoji: "â¨", color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
-  baseball:   { label: "Baseball",   emoji: "â¾", color: "#34d399", bg: "rgba(52,211,153,0.12)" },
-  football:   { label: "Football",   emoji: "ð", color: "#f87171", bg: "rgba(248,113,113,0.12)" },
-  basketball: { label: "Basketball", emoji: "ð", color: "#fb923c", bg: "rgba(251,146,60,0.12)" }
+  pokemon:    { label: "Pokémon",    emoji: "⚡", color: "#f0c040", bg: "rgba(240,192,64,0.12)" },
+  disney:     { label: "Disney",     emoji: "✨", color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
+  baseball:   { label: "Baseball",   emoji: "⚾", color: "#34d399", bg: "rgba(52,211,153,0.12)" },
+  football:   { label: "Football",   emoji: "🏈", color: "#f87171", bg: "rgba(248,113,113,0.12)" },
+  basketball: { label: "Basketball", emoji: "🏀", color: "#fb923c", bg: "rgba(251,146,60,0.12)" }
 };
 var SPORTS = Object.entries(SPORTS_MAP).map(function(e) { return Object.assign({ id: e[0] }, e[1]); });
 function SportBadge(_ref16) {
@@ -1698,13 +1698,13 @@ function SportBadge(_ref16) {
   return React.createElement("span", { className: "inv-sport", style: { background: s.bg, color: s.color, border: "1px solid " + s.color + "33" } }, s.label);
 }
 
-// ââ Backward-compat shims (used by Watchlist/SearchTab code) âââââââââââââ
+// ── Backward-compat shims (used by Watchlist/SearchTab code) ─────────────
 var savePriceSnapshot = saveSnap;
 var getPriceHistory   = getHistory;
 
-// ââ fmtMove: global price-movement helper âââââââââââââââââââââââââââââââââ
+// ── fmtMove: global price-movement helper ─────────────────────────────────
 function fmtMove(cur, old) {
-  if (!old || !cur) return React.createElement("span", {style:{color:"var(--muted)"}}, "â");
+  if (!old || !cur) return React.createElement("span", {style:{color:"var(--muted)"}}, "—");
   var d = cur - old;
   var p = (d / old) * 100;
   var cls = d > 0.01 ? "move-up" : d < -0.01 ? "move-down" : "move-flat";
@@ -1733,7 +1733,7 @@ function normalizeStatus(s) {
 
 function MovePill(_ref) {
   var current = _ref.current, prev = _ref.prev;
-  if (!current || !prev) return React.createElement("span", { style: { color: "var(--muted)" } }, "â");
+  if (!current || !prev) return React.createElement("span", { style: { color: "var(--muted)" } }, "—");
   var diff = current - prev;
   var pct  = diff / prev * 100;
   var sign = diff >= 0 ? "+" : "";
@@ -1760,7 +1760,7 @@ function StatusBadge(_ref) {
   return React.createElement("span", { style: { fontSize:9, fontWeight:600, padding:"1px 5px", borderRadius:3, background:s.color+"22", color:s.color, border:"1px solid "+s.color+"44", fontFamily:"var(--mono)" } }, s.label);
 }
 
-// ââ CSV parser helper âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── CSV parser helper ─────────────────────────────────────────────────────
 function parseCSVLine(line) {
   var cols = [], cur = "", inQ = false;
   for (var i = 0; i < line.length; i++) {
@@ -1773,7 +1773,7 @@ function parseCSVLine(line) {
   return cols;
 }
 
-// ââ Sealed Section ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Sealed Section ────────────────────────────────────────────────────────
 function SealedSection(_ref18) {
   var cards = _ref18.cards, del = _ref18.del, update = _ref18.update, activeSport = _ref18.activeSport, clearSection = _ref18.clearSection;
   var _s = useState(false); var collapsed = _s[0]; var setCollapsed = _s[1];
@@ -1803,13 +1803,13 @@ function SealedSection(_ref18) {
   return React.createElement("div", { style:{ marginBottom:12 } },
     React.createElement("div", { style: hdrStyle, onClick: function(){ setCollapsed(function(c){return!c;}); } },
       React.createElement("span", { style:{ width:8,height:8,borderRadius:"50%",background:"#fb923c",flexShrink:0 } }),
-      React.createElement("span", { style:{ fontSize:12,fontWeight:600,color:"var(--text)",flex:1 } }, "ð¦ Sealed"),
+      React.createElement("span", { style:{ fontSize:12,fontWeight:600,color:"var(--text)",flex:1 } }, "📦 Sealed"),
       React.createElement("span", { style:{ fontSize:10,color:"var(--muted)",fontFamily:"var(--mono)" } }, cards.length+" items"),
       totalPaid>0 && React.createElement("span", { style:{ fontSize:10,color:"var(--muted)",fontFamily:"var(--mono)" } }, "paid $"+totalPaid.toFixed(2)),
       totalValue>0 && React.createElement("span", { style:{ fontSize:10,fontFamily:"var(--mono)",color:profit>=0?"var(--green)":"var(--red)" } }, (profit>=0?"+":"")+"$"+profit.toFixed(2)),
       totalPaid>0&&totalValue>0 && React.createElement("span", { style:{ fontSize:10,fontFamily:"var(--mono)",color:profit>=0?"var(--green)":"var(--red)" } }, "("+((profit/totalPaid)*100).toFixed(1)+"%)"),
       clearSection && React.createElement("button", { style:{ fontSize:10,padding:"2px 8px",borderRadius:4,border:"1px solid rgba(248,113,113,0.3)",background:"none",color:"var(--red)",cursor:"pointer" }, onClick:function(ev){ev.stopPropagation();if(confirm("Clear all Sealed?"))clearSection();} }, "Clear"),
-      React.createElement("span", { style:{ fontSize:10,color:"var(--muted)" } }, collapsed?"â¶":"â¼")
+      React.createElement("span", { style:{ fontSize:10,color:"var(--muted)" } }, collapsed?"▶":"▼")
     ),
     !collapsed && React.createElement("div", { className:"panel", style:{ padding:0 } },
       cards.length===0
@@ -1836,9 +1836,9 @@ function SealedSection(_ref18) {
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:11 } }, item.qty||1),
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--muted2)",fontSize:11 } }, "$"+((item.paid)||0).toFixed(2)),
                   React.createElement("td", null,
-                    React.createElement("input", { type:"number", className:"add-in", style:{ width:70,padding:"1px 4px",fontSize:11 }, value:item.value||"", placeholder:"â", onChange:function(ev){updateSealed(item.id,{value:parseFloat(ev.target.value)||0});} })
+                    React.createElement("input", { type:"number", className:"add-in", style:{ width:70,padding:"1px 4px",fontSize:11 }, value:item.value||"", placeholder:"—", onChange:function(ev){updateSealed(item.id,{value:parseFloat(ev.target.value)||0});} })
                   ),
-                  React.createElement("td", { className:pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu", style:{ fontSize:11 } }, pl!==0?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"â"),
+                  React.createElement("td", { className:pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu", style:{ fontSize:11 } }, pl!==0?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"—"),
                   React.createElement("td", { style:{ fontSize:10,color:"var(--muted)" } }, item.notes),
                   React.createElement("td", null,
                     React.createElement("button", { className:"row-del", style:{ opacity:1 }, onClick:function(){ delSealed(item.id); } }, Ico.trash)
@@ -1851,7 +1851,7 @@ function SealedSection(_ref18) {
   );
 }
 
-// ââ InvSection ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── InvSection ────────────────────────────────────────────────────────────
 function InvSection(_ref_inv) {
   var title = _ref_inv.title, color = _ref_inv.color, cards = _ref_inv.cards,
       del = _ref_inv.del, update = _ref_inv.update, clearSection = _ref_inv.clearSection;
@@ -1903,7 +1903,7 @@ function InvSection(_ref_inv) {
       totalValue>0 && React.createElement("span", { style:{ fontSize:10,fontFamily:"var(--mono)",color:profit>=0?"var(--green)":"var(--red)" } }, (profit>=0?"+":"")+"$"+profit.toFixed(2)),
       totalPaid>0&&totalValue>0 && React.createElement("span", { style:{ fontSize:10,fontFamily:"var(--mono)",color:profit>=0?"var(--green)":"var(--red)" } }, "("+((profit/totalPaid)*100).toFixed(1)+"%)"),
       clearSection && React.createElement("button", { style:{ fontSize:10,padding:"2px 8px",borderRadius:4,border:"1px solid rgba(248,113,113,0.3)",background:"none",color:"var(--red)",cursor:"pointer" }, onClick:function(ev){ev.stopPropagation();if(confirm("Clear all "+title+"?"))clearSection();} }, "Clear"),
-      React.createElement("span", { style:{ fontSize:10,color:"var(--muted)" } }, collapsed?"â¶":"â¼")
+      React.createElement("span", { style:{ fontSize:10,color:"var(--muted)" } }, collapsed?"▶":"▼")
     ),
     !collapsed && React.createElement("div", { className:"panel", style:{ padding:0 } },
       sorted.length===0
@@ -1911,14 +1911,14 @@ function InvSection(_ref_inv) {
         : React.createElement("table", { className:"inv-table" },
             React.createElement("thead", null,
               React.createElement("tr", null,
-                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("alpha");} }, "Card"+(sortMode==="alpha"?" â²":"")),
+                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("alpha");} }, "Card"+(sortMode==="alpha"?" ▲":"")),
                 React.createElement("th", null, "Set"),
                 React.createElement("th", null, "#"),
                 React.createElement("th", null, "Grade"),
                 React.createElement("th", null, "Qty"),
                 React.createElement("th", null, "Paid"),
-                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("value");} }, "Market"+(sortMode==="value"?" â¼":"")),
-                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("pl");} }, "P&L"+(sortMode==="pl"?" â¼":"")),
+                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("value");} }, "Market"+(sortMode==="value"?" ▼":"")),
+                React.createElement("th", { style:{cursor:"pointer"}, onClick:function(){setSortMode("pl");} }, "P&L"+(sortMode==="pl"?" ▼":"")),
                 React.createElement("th", null, "3D"),
                 React.createElement("th", null, "7D"),
                 React.createElement("th", null, "30D"),
@@ -1937,16 +1937,16 @@ function InvSection(_ref_inv) {
                 return React.createElement("tr", { key:item.id },
                   React.createElement("td", { style:{ fontWeight:600,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" } },
                     item.name,
-                    item.qty>1 && React.createElement("span", { style:{ color:"var(--muted)",fontSize:10,marginLeft:4 } }, "Ã"+item.qty)
+                    item.qty>1 && React.createElement("span", { style:{ color:"var(--muted)",fontSize:10,marginLeft:4 } }, "×"+item.qty)
                   ),
-                  React.createElement("td", { style:{ fontSize:10,color:"var(--muted)",maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" } }, item.set||"â"),
-                  React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:10,color:"var(--muted2)" } }, item.num||"â"),
+                  React.createElement("td", { style:{ fontSize:10,color:"var(--muted)",maxWidth:90,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" } }, item.set||"—"),
+                  React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:10,color:"var(--muted2)" } }, item.num||"—"),
                   React.createElement("td", { style:{ whiteSpace:"nowrap" } }, React.createElement(GradeBadge, { grader:item.grader, grade:item.grade })),
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",fontSize:11 } }, item.qty||1),
-                  React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--muted2)",fontSize:11 } }, avgPaid?"$"+avgPaid.toFixed(2):"â"),
+                  React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--muted2)",fontSize:11 } }, avgPaid?"$"+avgPaid.toFixed(2):"—"),
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--cards)",fontSize:11 } },
                     item.fetchingPrice
-                      ? React.createElement("span", { style:{ color:"var(--muted)",fontStyle:"italic" } }, "â¦")
+                      ? React.createElement("span", { style:{ color:"var(--muted)",fontStyle:"italic" } }, "…")
                       : (item.status === "sold" || item.status === "forsale")
                         ? React.createElement("input", {
                             type: "number",
@@ -1958,14 +1958,14 @@ function InvSection(_ref_inv) {
                               (item._ids||[item.id]).forEach(function(id){ update(id, { value: isNaN(v) ? null : v }); });
                             }
                           })
-                        : cur ? "$"+cur.toFixed(2) : "â"
+                        : cur ? "$"+cur.toFixed(2) : "—"
                   ),
                   React.createElement("td", { className:plClass, style:{ fontSize:11 } },
-                    pl!=null?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"â"
+                    pl!=null?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"—"
                   ),
-                  React.createElement("td", null, h ? fmtMove(h.latest, h.p3d)  : React.createElement("span",{style:{color:"var(--muted)"}}, "â")),
-                  React.createElement("td", null, h ? fmtMove(h.latest, h.p7d)  : React.createElement("span",{style:{color:"var(--muted)"}}, "â")),
-                  React.createElement("td", null, h ? fmtMove(h.latest, h.p30d) : React.createElement("span",{style:{color:"var(--muted)"}}, "â")),
+                  React.createElement("td", null, h ? fmtMove(h.latest, h.p3d)  : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
+                  React.createElement("td", null, h ? fmtMove(h.latest, h.p7d)  : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
+                  React.createElement("td", null, h ? fmtMove(h.latest, h.p30d) : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
                   React.createElement("td", null,
                     React.createElement("select", {
                       style:{ fontSize:10,background:"var(--s2)",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"1px 2px" },
@@ -1995,7 +1995,7 @@ function InvSection(_ref_inv) {
                         }
                         (item._ids||[item.id]).forEach(function(id){ update(id,{pokedataId:null,value:null}); });
                       }
-                    }, "âº"),
+                    }, "↺"),
                     React.createElement("button", {
                       className:"row-del", style:{ opacity:1 },
                       onClick:function(){ (item._ids||[item.id]).forEach(function(id){ del(id); }); }
@@ -2009,7 +2009,7 @@ function InvSection(_ref_inv) {
   );
 }
 
-// ââ Inventory Tab âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Inventory Tab ─────────────────────────────────────────────────────────
 function InventoryTab(_ref21) {
   var inv = _ref21.inv, setInv = _ref21.setInv, invReady = _ref21.invReady,
       activeSport = _ref21.activeSport || "pokemon", setActiveSport = _ref21.setActiveSport;
@@ -2031,7 +2031,7 @@ function InventoryTab(_ref21) {
     setForm(blank);
   };
 
-  // ââ Refresh all prices (manual) âââââââââââââââââââââââââââââââââââââââââ
+  // ── Refresh all prices (manual) ─────────────────────────────────────────
   var refreshAllPrices = async function() {
     var toRefresh = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed; });
     if (!toRefresh.length) return;
@@ -2068,7 +2068,7 @@ function InventoryTab(_ref21) {
     try { localStorage.setItem("cc:lastManualRefresh", String(Date.now())); } catch(e) {}
   };
 
-  // ââ CSV import singles ââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ── CSV import singles ──────────────────────────────────────────────────
   var handleCSVImport = function(e) {
     var file = e.target.files[0];
     if (!file) return;
@@ -2094,7 +2094,7 @@ function InventoryTab(_ref21) {
             if (h && h.latest) cachedValue = h.latest;
           }
         }
-        // Store one record per CSV row with qty â grouping display handles collation
+        // Store one record per CSV row with qty — grouping display handles collation
         imported.push({
           id: Date.now()+i*100,
           name: cn, set: sn||"", num: num||"",
@@ -2109,14 +2109,14 @@ function InventoryTab(_ref21) {
       }
       if (imported.length) {
         setInv((inv||[]).concat(imported));
-        alert("â Imported "+imported.length+" cards."+(imported.filter(function(c){return c.value;}).length>0?" ("+imported.filter(function(c){return c.value;}).length+" prices reused from cache)":""));
+        alert("✅ Imported "+imported.length+" cards."+(imported.filter(function(c){return c.value;}).length>0?" ("+imported.filter(function(c){return c.value;}).length+" prices reused from cache)":""));
       }
       e.target.value = "";
     };
     reader.readAsText(file);
   };
 
-  // ââ CSV import sealed âââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ── CSV import sealed ───────────────────────────────────────────────────
   var handleSealedCSVImport = function(e) {
     var file = e.target.files[0];
     if (!file) return;
@@ -2135,7 +2135,7 @@ function InventoryTab(_ref21) {
         var others   = (inv||[]).filter(function(i){return !(i.sport===activeSport&&i.sealed);});
         var existing = (inv||[]).filter(function(i){return i.sport===activeSport&&i.sealed;});
         setInv(others.concat(existing).concat(imported));
-        alert("â Imported "+imported.length+" sealed items!");
+        alert("✅ Imported "+imported.length+" sealed items!");
       }
       e.target.value = "";
     };
@@ -2148,7 +2148,7 @@ function InventoryTab(_ref21) {
   var totalValue = singles.reduce(function(s,i){return s+(i.value||0);},0);
   var totalProfit = totalValue-totalPaid;
 
-  if (!invReady) return React.createElement("div", { style:{padding:20,color:"var(--muted)",fontSize:12} }, "Loadingâ¦");
+  if (!invReady) return React.createElement("div", { style:{padding:20,color:"var(--muted)",fontSize:12} }, "Loading…");
 
   var lastSnapDate = localStorage.getItem("cc:lastSnapDate");
   var snapToday = lastSnapDate === new Date().toDateString();
@@ -2174,11 +2174,11 @@ function InventoryTab(_ref21) {
       React.createElement("div", { className:"stat-card" },
         React.createElement("div", { className:"stat-label" }, "Unrealized P&L"),
         React.createElement("div", { className:"stat-value "+(totalProfit>=0?"profit-pos":"profit-neg") }, (totalProfit>=0?"+":"")+"$"+totalProfit.toFixed(2)),
-        React.createElement("div", { className:"stat-sub" }, totalPaid>0?(totalProfit/totalPaid*100).toFixed(1)+"% return":"â")
+        React.createElement("div", { className:"stat-sub" }, totalPaid>0?(totalProfit/totalPaid*100).toFixed(1)+"% return":"—")
       ),
       React.createElement("div", { className:"stat-card", style:{minWidth:120} },
         React.createElement("div", { className:"stat-label" }, "Daily Snapshot"),
-        React.createElement("div", { className:"stat-value", style:{fontSize:12,color:snapToday?"var(--green)":"var(--muted)"} }, snapToday?"â Done today":"Pending"),
+        React.createElement("div", { className:"stat-value", style:{fontSize:12,color:snapToday?"var(--green)":"var(--muted)"} }, snapToday?"✓ Done today":"Pending"),
         React.createElement("div", { className:"stat-sub" }, "auto by 10pm")
       )
     ),
@@ -2187,7 +2187,7 @@ function InventoryTab(_ref21) {
     React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px",justifyContent:"space-between"} },
       // Sport tabs
       React.createElement("div", { className:"market-tabs" },
-        [{id:"pokemon",label:"â¡ PokÃ©mon"},{id:"baseball",label:"â¾ Baseball"},{id:"football",label:"ð Football"},{id:"basketball",label:"ð Basketball"},{id:"disney",label:"â¨ Disney"}].map(function(sp){
+        [{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"},{id:"disney",label:"✨ Disney"}].map(function(sp){
           return React.createElement("button", { key:sp.id, className:"market-tab"+(activeSport===sp.id?" active":""), onClick:function(){setActive(sp.id);} }, sp.label);
         })
       ),
@@ -2198,7 +2198,7 @@ function InventoryTab(_ref21) {
           style:{background:refreshingAll?"rgba(240,192,64,0.05)":"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--cards)",fontSize:12,fontWeight:600,cursor:refreshingAll?"not-allowed":"pointer"},
           disabled: refreshingAll,
           onClick: refreshAllPrices
-        }, refreshingAll ? ("â³ "+refreshProgress+"â¦") : "ð Refresh All Prices"),
+        }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
 
         // Fix missing
         React.createElement("button", {
@@ -2210,13 +2210,13 @@ function InventoryTab(_ref21) {
             noId.forEach(function(x){ localStorage.removeItem(SEARCH_PFX+[(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),(x.num||"").toLowerCase().trim()].join("|")); });
             alert("Cache cleared for "+missing.length+" unpriced + "+noId.length+" unmatched. Hit Refresh All Prices.");
           }
-        }, "ð§ Fix Missing"),
+        }, "🔧 Fix Missing"),
 
         // Clear all
         React.createElement("button", {
           style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer"},
           onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
-        }, "ð Clear All")
+        }, "🗑 Clear All")
       )
     ),
 
@@ -2251,19 +2251,19 @@ function InventoryTab(_ref21) {
       })
     ),
 
-    // CSV import row â clean, no manual add forms (use CSV import)
+    // CSV import row — clean, no manual add forms (use CSV import)
     React.createElement("div", { style:{borderTop:"1px solid var(--border)",marginTop:4,padding:"10px 18px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"} },
       React.createElement("input", { type:"file", accept:".csv", id:"csv-import", onChange:handleCSVImport, style:{display:"none"} }),
-      React.createElement("label", { htmlFor:"csv-import", style:{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"rgba(79,158,255,0.15)",border:"1px solid rgba(79,158,255,0.35)",color:"var(--pt)",fontSize:12,fontWeight:600,whiteSpace:"nowrap"} }, "ð Import Singles CSV"),
+      React.createElement("label", { htmlFor:"csv-import", style:{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"rgba(79,158,255,0.15)",border:"1px solid rgba(79,158,255,0.35)",color:"var(--pt)",fontSize:12,fontWeight:600,whiteSpace:"nowrap"} }, "📂 Import Singles CSV"),
       React.createElement("span", { style:{fontSize:10,color:"var(--muted)",fontFamily:"var(--mono)"} }, "card_name, set_name, card_number, grader, grade, price_paid, quantity, notes, status"),
       React.createElement("input", { type:"file", accept:".csv", id:"csv-sealed-import", onChange:handleSealedCSVImport, style:{display:"none"} }),
-      React.createElement("label", { htmlFor:"csv-sealed-import", style:{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"rgba(251,146,60,0.15)",border:"1px solid rgba(251,146,60,0.35)",color:"#fb923c",fontSize:12,fontWeight:600,whiteSpace:"nowrap"} }, "ð¦ Import Sealed CSV"),
+      React.createElement("label", { htmlFor:"csv-sealed-import", style:{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"rgba(251,146,60,0.15)",border:"1px solid rgba(251,146,60,0.35)",color:"#fb923c",fontSize:12,fontWeight:600,whiteSpace:"nowrap"} }, "📦 Import Sealed CSV"),
       React.createElement("span", { style:{fontSize:10,color:"var(--muted)"} }, "product_name, set_name, type, price_paid, quantity, notes")
     )
   );
 }
 
-// ââ Search Tab âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Search Tab ─────────────────────────────────────────────────────────────
 function SearchTab(_ref24) {
   var watchlist = _ref24.watchlist,
     setWatchlist = _ref24.setWatchlist,
@@ -2539,7 +2539,7 @@ function SearchTab(_ref24) {
   }, Ico.close)));
 }
 
-// ââ Watchlist Tab ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Watchlist Tab ──────────────────────────────────────────────────────────
 function WatchlistTab(_ref26) {
   var watchlist = _ref26.watchlist,
     setWatchlist = _ref26.setWatchlist,
@@ -2703,7 +2703,7 @@ function WatchlistTab(_ref26) {
         fontFamily: "var(--mono)",
         color: "var(--text)"
       }
-    }, w.price ? "$".concat(Number(w.price).toFixed(2)) : "â"), /*#__PURE__*/React.createElement("div", {
+    }, w.price ? "$".concat(Number(w.price).toFixed(2)) : "—"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 6
@@ -2718,7 +2718,7 @@ function WatchlistTab(_ref26) {
         return refreshCard(w);
       },
       disabled: refreshing[w.id]
-    }, refreshing[w.id] ? "â¦" : "â»"), /*#__PURE__*/React.createElement("button", {
+    }, refreshing[w.id] ? "…" : "↻"), /*#__PURE__*/React.createElement("button", {
       className: "row-del",
       style: {
         opacity: 1
@@ -2757,7 +2757,7 @@ function WatchlistTab(_ref26) {
       className: "alert-threshold"
     }, "target $", a.threshold.toFixed(2)), /*#__PURE__*/React.createElement("span", {
       className: "alert-val ".concat(a.current != null && a.current >= a.threshold ? "above" : "below")
-    }, "now ", a.current != null ? "$".concat(a.current.toFixed(2)) : "â"), /*#__PURE__*/React.createElement("button", {
+    }, "now ", a.current != null ? "$".concat(a.current.toFixed(2)) : "—"), /*#__PURE__*/React.createElement("button", {
       className: "row-del",
       style: {
         opacity: 1
@@ -2771,7 +2771,7 @@ function WatchlistTab(_ref26) {
   })));
 }
 
-// ââ PokemonMarket (main container) ââââââââââââââââââââââââââââââââââââââââ
+// ── PokemonMarket (main container) ────────────────────────────────────────
 function PokemonMarket(_ref28) {
   var wl = _ref28.wl,
     setWl = _ref28.setWl,
@@ -2788,13 +2788,13 @@ function PokemonMarket(_ref28) {
     setActiveTab = _useState54[1];
   var TABS = [{
     id: "search",
-    label: "ð Search & Prices"
+    label: "🔍 Search & Prices"
   }, {
     id: "watchlist",
-    label: "ð Watchlist & Alerts"
+    label: "📌 Watchlist & Alerts"
   }, {
     id: "inventory",
-    label: "ð¦ Card Inventory"
+    label: "📦 Card Inventory"
   }];
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "market-tabs"
@@ -2838,7 +2838,7 @@ function MovePill(_ref29) {
   }, label, " ", sign, pct.toFixed(1), "%");
 }
 
-// ââ Dashboard Watchlist Panel ââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Dashboard Watchlist Panel ──────────────────────────────────────────────
 function DashboardWatchlist(_ref30) {
   var layout = _ref30.layout,
     onLayoutChange = _ref30.onLayoutChange,
@@ -2881,7 +2881,7 @@ function DashboardWatchlist(_ref30) {
     changeMode = _useState70[0],
     setChangeMode = _useState70[1]; // "pct" or "usd"
 
-  // Search PokÃ©mon TCG API for card to add to watchlist
+  // Search Pokémon TCG API for card to add to watchlist
   var searchToAdd = /*#__PURE__*/function () {
     var _ref31 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee5() {
       var words, pokeName, controller, timeout, data, cards, setHint, filtered;
@@ -2925,7 +2925,7 @@ function DashboardWatchlist(_ref30) {
             _context7.prev = 19;
             _context7.t0 = _context7["catch"](5);
             if (_context7.t0.name === "AbortError") {
-              alert("Search timed out â try again.");
+              alert("Search timed out — try again.");
             } else {
               alert("Search failed: " + _context7.t0.message);
             }
@@ -3198,7 +3198,7 @@ function DashboardWatchlist(_ref30) {
       }
     }, /*#__PURE__*/React.createElement("span", {
       className: "wl-price"
-    }, card.fetchingPrice ? "â¦" : card.price ? "$".concat(Number(card.price).toFixed(2)) : "â"), (hist === null || hist === void 0 ? void 0 : hist.count) > 1 && function () {
+    }, card.fetchingPrice ? "…" : card.price ? "$".concat(Number(card.price).toFixed(2)) : "—"), (hist === null || hist === void 0 ? void 0 : hist.count) > 1 && function () {
       var cur = hist.latest;
       var w1 = hist.p7d;
       var m1 = hist.p30d;
@@ -3298,7 +3298,7 @@ function DashboardWatchlist(_ref30) {
       style: {
         marginLeft: 4
       }
-    }, a.current ? "$".concat(a.current.toFixed(2)) : "â"), /*#__PURE__*/React.createElement("button", {
+    }, a.current ? "$".concat(a.current.toFixed(2)) : "—"), /*#__PURE__*/React.createElement("button", {
       className: "row-del",
       style: {
         opacity: 1
@@ -3438,7 +3438,7 @@ function DashboardWatchlist(_ref30) {
         fontFamily: "var(--mono)",
         marginTop: 2
       }
-    }, price ? "$".concat(price.toFixed(2)) : "â"), alreadyWatching && /*#__PURE__*/React.createElement("div", {
+    }, price ? "$".concat(price.toFixed(2)) : "—"), alreadyWatching && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 10,
         color: "#34d399",
@@ -3504,7 +3504,7 @@ function DashboardWatchlist(_ref30) {
     }, "\u25BC"))), !collapsed && body);
   }
 
-  // Side-by-side layout â returns just the panel, notes goes next to it
+  // Side-by-side layout — returns just the panel, notes goes next to it
   return /*#__PURE__*/React.createElement("div", {
     className: "panel",
     style: {
@@ -3548,10 +3548,10 @@ function DashboardWatchlist(_ref30) {
   }, "Collapse")))), body);
 }
 
-// ââ Auto-snapshot scheduler (6am + 4pm) âââââââââââââââââââââââââââââââââââ
+// ── Auto-snapshot scheduler (6am + 4pm) ───────────────────────────────────
 
-// ââ Auto-snapshot scheduler âââââââââââââââââââââââââââââââââââââââââââââââ
-// Runs once per day (between 10amâ10pm) to store price history.
+// ── Auto-snapshot scheduler ───────────────────────────────────────────────
+// Runs once per day (between 10am–10pm) to store price history.
 // Does NOT fire if the page was already refreshed today.
 function useAutoSnapshot(wl, inv, setInv) {
   useEffect(function() {
@@ -3562,8 +3562,8 @@ function useAutoSnapshot(wl, inv, setInv) {
       var MS_72H = 72 * 3600 * 1000;
       var lastSnap   = Number(localStorage.getItem("cc:lastSnapTs") || 0);
       var lastManual = Number(localStorage.getItem("cc:lastManualRefresh") || 0);
-      if (Date.now() - lastManual < MS_72H) return; // manual refresh within 72h â skip
-      if (Date.now() - lastSnap   < MS_72H) return; // auto-snap ran within 72h â skip
+      if (Date.now() - lastManual < MS_72H) return; // manual refresh within 72h — skip
+      if (Date.now() - lastSnap   < MS_72H) return; // auto-snap ran within 72h — skip
 
       // Snapshot inventory cards that already have a pokedataId
       var invCards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed; });
@@ -3609,7 +3609,7 @@ function useAutoSnapshot(wl, inv, setInv) {
   }, []); // intentionally run once on mount only
 }
 
-// ââ Inventory Page (full sidebar view) ââââââââââââââââââââââââââââââââââââ
+// ── Inventory Page (full sidebar view) ────────────────────────────────────
 function InventoryPage(_ref35) {
   var inv = _ref35.inv, setInv = _ref35.setInv, invReady = _ref35.invReady,
       activeSport = _ref35.activeSport, setActiveSport = _ref35.setActiveSport;
@@ -3618,7 +3618,7 @@ function InventoryPage(_ref35) {
   );
 }
 
-// ââ Error Boundary ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Error Boundary ────────────────────────────────────────────────────────
 var ErrorBoundary = /*#__PURE__*/function (_React$Component) {
   _inherits(ErrorBoundary, _React$Component);
   var _super = _createSuper(ErrorBoundary);
@@ -3662,7 +3662,7 @@ var ErrorBoundary = /*#__PURE__*/function (_React$Component) {
     }
   }]);
   return ErrorBoundary;
-}(React.Component); // ââ App ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+}(React.Component); // ── App ────────────────────────────────────────────────────────────────────
 function App() {
   var _ACCOUNTS$acctFilter, _SPORTS_MAP$invSport, _SPORTS_MAP$invSport2, _ACCOUNTS$acctFilter2, _ACCOUNTS$acctFilter3, _ACCOUNTS$acctFilter4;
   var _useState71 = useState("dashboard"),
@@ -3770,7 +3770,7 @@ function App() {
     icon: Ico.cal
   }, {
     id: "pokemon",
-    label: "PokÃ©mon Market",
+    label: "Pokémon Market",
     icon: Ico.ball
   }].map(function (n) {
     return /*#__PURE__*/React.createElement("button", {
@@ -3809,7 +3809,7 @@ function App() {
       fontSize: 10,
       opacity: 0.5
     }
-  }, invOpen ? "â²" : "â¼")), invOpen && /*#__PURE__*/React.createElement("div", {
+  }, invOpen ? "▲" : "▼")), invOpen && /*#__PURE__*/React.createElement("div", {
     style: {
       marginLeft: 16,
       marginTop: 2,
@@ -3893,7 +3893,7 @@ function App() {
       borderColor: "rgba(52,211,153,0.4)",
       color: "#34d399"
     } : {})
-  }, Ico.link, /*#__PURE__*/React.createElement("span", null, gcalStatus === "connected" ? "â Google Cal synced" : gcalStatus === "loading" ? "Connectingâ¦" : "Connect Google Cal")), /*#__PURE__*/React.createElement("button", {
+  }, Ico.link, /*#__PURE__*/React.createElement("span", null, gcalStatus === "connected" ? "✓ Google Cal synced" : gcalStatus === "loading" ? "Connecting…" : "Connect Google Cal")), /*#__PURE__*/React.createElement("button", {
     className: "cal-btn",
     onClick: function onClick() {
       return setCalModal("outlook");
@@ -3904,7 +3904,7 @@ function App() {
     className: "topbar"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "topbar-title"
-  }, view === "dashboard" ? acctFilter === "all" ? "All Accounts" : (_ACCOUNTS$acctFilter = ACCOUNTS[acctFilter]) === null || _ACCOUNTS$acctFilter === void 0 ? void 0 : _ACCOUNTS$acctFilter.label : view === "pokemon" ? "PokÃ©mon Market" : view === "inventory" ? "Card Inventory \xB7 ".concat(((_SPORTS_MAP$invSport = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport === void 0 ? void 0 : _SPORTS_MAP$invSport.emoji) || "", " ").concat(((_SPORTS_MAP$invSport2 = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport2 === void 0 ? void 0 : _SPORTS_MAP$invSport2.label) || "") : "Dashboard"), /*#__PURE__*/React.createElement("div", {
+  }, view === "dashboard" ? acctFilter === "all" ? "All Accounts" : (_ACCOUNTS$acctFilter = ACCOUNTS[acctFilter]) === null || _ACCOUNTS$acctFilter === void 0 ? void 0 : _ACCOUNTS$acctFilter.label : view === "pokemon" ? "Pokémon Market" : view === "inventory" ? "Card Inventory \xB7 ".concat(((_SPORTS_MAP$invSport = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport === void 0 ? void 0 : _SPORTS_MAP$invSport.emoji) || "", " ").concat(((_SPORTS_MAP$invSport2 = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport2 === void 0 ? void 0 : _SPORTS_MAP$invSport2.label) || "") : "Dashboard"), /*#__PURE__*/React.createElement("div", {
     className: "topbar-date"
   }, dateStr)), acctFilter !== "all" && view === "dashboard" && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4005,206 +4005,93 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
 
   function getTierLabel(count) {
     if (count >= MAX_ITEMS) return 'Full (25/25)';
-    return count + '/' + MAX<script>
-(function() {
-  var STORE_KEY   = 'cc:pokenews';
-  var MAX_ITEMS   = 100;
-  var news        = [];
-  var BATCH_SIZE  = 3;
-  var CREATORS    = [
-    { name: 'PikaPikaPaPa',          handle: 'PikaPikaPaPa' },
-    { name: 'VegasCardDex',          handle: 'VegasCardDex' },
-    { name: 'Phillips Collectibles', handle: 'PhillipsCollectibles' },
-    { name: 'HyperRare TCG',         handle: 'HyperRareTCG' },
-    { name: 'PokeTrace',             handle: 'PokeTrace' },
-    { name: 'Flowslikewater',        handle: 'Flowslikewater' },
-    { name: 'Athlon Sports TCG',     handle: 'AthlonSports' }
-  ];
-
-  function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(news)); } catch(e){}
-  }
-
-  function load() {
-    try { var raw = localStorage.getItem(STORE_KEY); if(raw) news = JSON.parse(raw); } catch(e){}
+    return count + '/' + MAX_ITEMS;
   }
 
   function render() {
-    var list    = document.getElementById('pokenews-list');
-    var empty   = document.getElementById('pokenews-empty');
+    var list = document.getElementById('pokenews-list');
+    var empty = document.getElementById('pokenews-empty');
     var counter = document.getElementById('pokenews-counter');
     if (!list) return;
     list.innerHTML = '';
     if (counter) counter.textContent = getTierLabel(news.length);
-    if (empty) empty.style.display = news.length ? 'none' : 'block';
-    news.forEach(function(item) {
+    if (news.length === 0) { empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    news.forEach(function(item, idx) {
       var row = document.createElement('div');
       row.className = 'pokenews-row' + (item.seen ? ' seen' : '');
-
       var box = document.createElement('div');
       box.className = 'pokenews-seen-box' + (item.seen ? ' checked' : '');
-      box.innerHTML = item.seen
-        ? '<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2.5" stroke="currentColor" stroke-width="2" fill="none"/></svg>'
-        : '';
-      box.onclick = function() { item.seen = !item.seen; save(); render(); };
-
-      var txt = document.createElement('div');
+      box.innerHTML = item.seen ? '<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>' : '';
+      box.onclick = function() { news[idx].seen = !news[idx].seen; save(); render(); };
+      var txt = document.createElement('span');
       txt.className = 'pokenews-text';
       txt.textContent = item.text;
-
       var del = document.createElement('button');
       del.className = 'pokenews-del';
-      del.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
-      del.onclick = function() { news = news.filter(function(n){ return n !== item; }); save(); render(); };
-
-      row.appendChild(box);
-      row.appendChild(txt);
-      row.appendChild(del);
+      del.title = 'Remove';
+      del.innerHTML = '<svg width="13" height="13" viewBox="0 0 13 13"><line x1="2" y1="2" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="11" y1="2" x2="2" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+      del.onclick = function() { news.splice(idx, 1); save(); render(); };
+      row.appendChild(box); row.appendChild(txt); row.appendChild(del);
       list.appendChild(row);
     });
   }
 
-  function getTierLabel(count) {
-    if (!count) return '';
-    return count + ' item' + (count !== 1 ? 's' : '');
-  }
-
-  function addItem(text) {
-    if (!text) return;
-    news.unshift({ id: Date.now(), text: text, seen: false });
-    if (news.length > MAX_ITEMS) news = news.slice(0, MAX_ITEMS);
-    save();
-    render();
-  }
-
-  // ── Run Morning Market ──────────────────────────────────────────────────
-  function runMorningMarket() {
-    var btn = document.getElementById('pokenews-run-btn');
-    var statusEl = document.getElementById('pokenews-status');
-    if (btn && btn.disabled) return;
-
-    // Clear existing news at the start of every run
-    news = [];
-    save();
-    render();
-
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Running…'; }
-    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Starting morning market research…'; }
-
-    var batches = [];
-    for (var i = 0; i < CREATORS.length; i += BATCH_SIZE) {
-      batches.push(CREATORS.slice(i, i + BATCH_SIZE));
+  function addNews() {
+    var inp = document.getElementById('pokenews-input');
+    if (!inp || !inp.value.trim()) return;
+    if (news.length >= MAX_ITEMS) {
+      alert('Poke News is full (25/25). Remove an item first.');
+      return;
     }
-    var allResults = [];
+    news.unshift({ text: inp.value.trim(), seen: false });
+    inp.value = '';
+    save(); render();
+  }
 
-    function processBatch(idx) {
-      if (idx >= batches.length) {
-        finalize(allResults);
-        return;
-      }
-      var batch    = batches[idx];
-      var batchNum = idx + 1;
-      var total    = batches.length;
-      var names    = batch.map(function(c){ return c.name; }).join(', ');
-      if (statusEl) statusEl.textContent = 'Batch ' + batchNum + '/' + total + ': ' + names + '…';
+  function tryInject() {
+    var twoCol = document.querySelector('.two-col');
+    if (!twoCol) return;
+    if (document.getElementById('pokenews-panel')) return;
+    var content = twoCol.parentElement;
+    if (!content) return;
+    var panel = document.createElement('div');
+    panel.className = 'pokenews-panel';
+    panel.id = 'pokenews-panel';
+    panel.innerHTML =
+      '<div class="pokenews-head">' +
+        '<div class="pokenews-title"><span style="font-size:16px">&#x1F3AE;</span> Pok&eacute; News</div>' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<span id="pokenews-counter" style="font-size:10px;color:var(--muted);font-family:var(--mono);">0/' + MAX_ITEMS + '</span>' +
+          '<span style="font-size:9px;color:var(--muted);font-family:var(--mono);line-height:1.4;text-align:right;">1x &gt;$1k &bull; 1x $500-999 &bull; 2x $100-499 &bull; 3x $10-99</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pokenews-add"><input id="pokenews-input" placeholder="Add news, hot cards, tips…" /><button id="pokenews-btn">+ Add</button></div>' +
+      '<div id="pokenews-empty" class="pokenews-empty" style="display:none">No news yet — add something!</div>' +
+      '<div id="pokenews-list" class="pokenews-list"></div>';
+    content.appendChild(panel);
+    document.getElementById('pokenews-btn').onclick = addNews;
+    document.getElementById('pokenews-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') addNews();
+    });
+    render();
+  }
 
-      var prompt =
-        'You are a Pok\u00e9mon TCG market research assistant. This is batch ' + batchNum + ' of ' + total + '.\n\n' +
-        'Search the web for the LATEST Pok\u00e9mon card market intelligence from these YouTube content creators:\n' +
-        batch.map(function(c,i){ return (i+1)+'. '+c.name+' (@'+c.handle+')'; }).join('\n') + '\n\n' +
-        'For each creator find their most recent video (last 7 days preferred) and extract:\n' +
-        '- Which specific cards or sets they recommend as BUY / HOLD / SELL\n' +
-        '- Any price targets or market trend observations\n' +
-        '- Any sealed product they are bullish or bearish on\n\n' +
-        'FORMAT: bulleted list. Each bullet = one actionable insight.\n' +
-        'Pattern per bullet: [Creator] \u2014 [Card/Set] \u2014 [BUY|HOLD|SELL] \u2014 [Reason]\n' +
-        'Return 3-8 bullets per creator. Skip commentary without actionable data.';
+  load();
 
-      fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: [{ role: 'user', content: prompt }]
-        })
-      })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        var text = (data.content || [])
-          .filter(function(b){ return b.type === 'text'; })
-          .map(function(b){ return b.text || ''; })
-          .join('\n').trim();
-        if (text) {
-          text.split('\n')
-            .map(function(l){ return l.replace(/^[-\u2022*\d.]+\s*/, '').trim(); })
-            .filter(function(l){ return l.length > 20; })
-            .forEach(function(line){ allResults.push(line); });
+  var observer = new MutationObserver(function(mutations) {
+    for (var i = 0; i < mutations.length; i++) {
+      var added = mutations[i].addedNodes;
+      for (var j = 0; j < added.length; j++) {
+        if (added[j].querySelector && added[j].querySelector('.two-col')) {
+          setTimeout(tryInject, 50);
+          return;
         }
-        processBatch(idx + 1);
-      })
-      .catch(function(err){
-        console.error('Batch ' + batchNum + ' error:', err);
-        if (statusEl) statusEl.textContent = 'Error on batch ' + batchNum + '. Continuing…';
-        processBatch(idx + 1);
-      });
+      }
     }
-
-    processBatch(0);
-  }
-
-  function finalize(results) {
-    results.forEach(function(line){ addItem(line); });
-
-    // Download JSON to Downloads folder
-    try {
-      var payload = { generated: new Date().toISOString(), items: news };
-      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      var url  = URL.createObjectURL(blob);
-      var a    = document.createElement('a');
-      a.href = url; a.download = 'morning_market_results.json';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
-    } catch(e){}
-
-    var btn = document.getElementById('pokenews-run-btn');
-    var statusEl = document.getElementById('pokenews-status');
-    if (btn) { btn.disabled = false; btn.textContent = '\u25b6 Run Morning Market'; }
-    if (statusEl) {
-      statusEl.textContent = '\u2705 Done \u2014 ' + news.length + ' insights loaded. JSON saved to Downloads.';
-      setTimeout(function(){ statusEl.style.display = 'none'; }, 8000);
-    }
-  }
-
-  // ── Init ────────────────────────────────────────────────────────────────
-  function init() {
-    load();
-    render();
-
-    // Wire up manual add
-    var input = document.getElementById('pokenews-input');
-    var addBtn = document.getElementById('pokenews-add-btn');
-    if (input) {
-      input.addEventListener('keydown', function(e){ if(e.key==='Enter'){ addItem(input.value.trim()); input.value=''; } });
-    }
-    if (addBtn) {
-      addBtn.addEventListener('click', function(){ if(input){ addItem(input.value.trim()); input.value=''; } });
-    }
-
-    // Wire up Run Morning Market button
-    var runBtn = document.getElementById('pokenews-run-btn');
-    if (runBtn) {
-      runBtn.addEventListener('click', runMorningMarket);
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  setTimeout(tryInject, 800);
 })();
 </script>
 </body></html>
-
