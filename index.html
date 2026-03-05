@@ -191,6 +191,24 @@
   }
   .pokenews-row:hover .pokenews-del { opacity: 1; }
   .pokenews-del:hover { color: #f87171; }
+  .rmm-btn {
+    margin-left: auto;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 3px 7px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    opacity: 0.9;
+    transition: opacity 0.15s;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+  .rmm-btn:hover { opacity: 1; }
+  .rmm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 <script>"use strict";
 
@@ -1449,6 +1467,94 @@ function PokeNews() {
     _us2 = _slicedToArray(_useState, 2),
     text = _us2[0],
     setText = _us2[1];
+  var _useState_rmm = useState(false),
+    _us_rmm2 = _slicedToArray(_useState_rmm, 2),
+    rmmLoading = _us_rmm2[0],
+    setRmmLoading = _us_rmm2[1];
+  var _useState_status = useState(""),
+    _us_st2 = _slicedToArray(_useState_status, 2),
+    rmmStatus = _us_st2[0],
+    setRmmStatus = _us_st2[1];
+
+  var runMorningMarket = useCallback(function() {
+    if (rmmLoading) return;
+    setRmmLoading(true);
+    setRmmStatus("Searching market data...");
+    window.dispatchEvent(new CustomEvent("rmm-status", { detail: { running: true } }));
+
+    var today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    var prompt = [
+      "You are a Pokemon TCG market advisor. Today is " + today + ".",
+      "Search the web for the latest Pokemon card market news. Generate a morning market briefing.",
+      "",
+      "CREATOR PICKS - For each of these YouTube creators, find their most recent content and most convicted trade recommendation:",
+      "PikaPikaPaPa, Jordan Collects, Phillips Collectibles, Sam's Shiny Stocks, Twice Baked Jake, VegasCardDex.",
+      "Also check: Leonhart, PokeRev, or other top Pokemon TCG investment creators if they have recent picks.",
+      "",
+      "WEB NEWS - Search for: Pokemon card prices today, hot cards, undervalued cards, sealed product deals, grading news.",
+      "",
+      "FORMAT: Return ONLY a JSON array of news items (no markdown, no explanation, just raw JSON).",
+      "Each item: { \"text\": \"...\" }",
+      "",
+      "RULES:",
+      "- Total items: 8 to 10",
+      "- Prefix creator picks with the TV emoji \ud83d\udcfa and creator name in brackets e.g. \ud83d\udcfa [PikaPikaPaPa]",
+      "- Include AT LEAST: 1 item about a product >$1000, 1 item $500-$999, 2 items $100-$499, 3 items $10-$99",
+      "- Each item should be 1-2 sentences, specific, actionable, include price data",
+      "- Sort: creator picks first, then $1k+, then $500-$999, then $100-$499, then $10-$99, then business intel",
+      "- Start each non-creator item with a relevant emoji (\ud83d\udd25 \ud83d\udcb0 \ud83d\udcb3 \ud83d\udca1 \u26a1 \ud83d\udcc8)",
+      "- Use real current prices from TCGPlayer, eBay, PriceCharting where possible",
+      "- Do NOT include markdown formatting in the text field"
+    ].join("\n");
+
+    fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages: [{ role: "user", content: prompt }]
+      })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("");
+      // Strip any markdown fences
+      raw = raw.replace(/```json|```/g, "").trim();
+      var parsed;
+      try { parsed = JSON.parse(raw); } catch(e) {
+        // Try to extract array from text
+        var m = raw.match(/\[.*\]/s);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch(e2) { parsed = null; } }
+      }
+      if (parsed && Array.isArray(parsed) && parsed.length) {
+        var ts = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        var newItems = parsed.map(function(item) {
+          return { id: Date.now() + Math.random(), text: item.text || String(item), seen: false, ts: ts };
+        });
+        setItems(function(prev) { return [].concat(newItems, (prev || [])); });
+        setRmmStatus("");
+      } else {
+        setRmmStatus("No results returned. Try again.");
+        setTimeout(function() { setRmmStatus(""); }, 4000);
+      }
+    })
+    .catch(function(err) {
+      setRmmStatus("Error: " + err.message);
+      setTimeout(function() { setRmmStatus(""); }, 4000);
+    })
+    .finally(function() {
+      setRmmLoading(false);
+      window.dispatchEvent(new CustomEvent("rmm-status", { detail: { running: false } }));
+    });
+  }, [rmmLoading]);
+
+  useEffect(function() {
+    var handler = function() { runMorningMarket(); };
+    window.addEventListener("rmm-run", handler);
+    return function() { window.removeEventListener("rmm-run", handler); };
+  }, [runMorningMarket]);
 
   var add = function add() {
     var t = text.trim();
@@ -1479,6 +1585,7 @@ function PokeNews() {
         ),
         " Poké News"
       ),
+      rmmStatus && /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#a78bfa", fontFamily: "var(--mono)", marginRight: 8 } }, rmmStatus),
       /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "var(--muted)", fontFamily: "var(--mono)" } },
         items.filter(function(x) { return !x.seen; }).length, " unread"
       )
@@ -3795,6 +3902,10 @@ function App() {
     _useState78 = _slicedToArray(_useState77, 2),
     clock = _useState78[0],
     setClock = _useState78[1];
+  var _useState85 = useState(false),
+    _useState86 = _slicedToArray(_useState85, 2),
+    rmmRunning = _useState86[0],
+    setRmmRunning = _useState86[1];
   var _useState79 = useState("sidebyside"),
     _useState80 = _slicedToArray(_useState79, 2),
     watchLayout = _useState80[0],
@@ -3835,6 +3946,11 @@ function App() {
     return function () {
       return clearInterval(t);
     };
+  }, []);
+  useEffect(function () {
+    var handler = function(e) { setRmmRunning(e.detail && e.detail.running); };
+    window.addEventListener("rmm-status", handler);
+    return function() { window.removeEventListener("rmm-status", handler); };
   }, []);
   var _usePersistedState13 = usePersistedState("cc:appts", SEED.appts),
     _usePersistedState14 = _slicedToArray(_usePersistedState13, 1),
@@ -3878,27 +3994,29 @@ function App() {
     className: "sidebar-section"
   }, /*#__PURE__*/React.createElement("div", {
     className: "sidebar-label"
-  }, "Views"), [{
-    id: "dashboard",
-    label: "Dashboard",
-    icon: Ico.cal
-  }, {
-    id: "pokemon",
-    label: "Pokémon Market",
-    icon: Ico.ball
-  }].map(function (n) {
-    return /*#__PURE__*/React.createElement("button", {
-      key: n.id,
-      className: "sidebar-nav-btn ".concat(view === n.id ? "active" : ""),
-      onClick: function onClick() {
-        return setView(n.id);
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        opacity: 0.7
-      }
-    }, n.icon), " ", n.label);
-  }), /*#__PURE__*/React.createElement("button", {
+  }, "Views"), /*#__PURE__*/React.createElement("button", {
+      key: "dashboard",
+      className: "sidebar-nav-btn ".concat(view === "dashboard" ? "active" : ""),
+      onClick: function onClick() { return setView("dashboard"); },
+      style: { justifyContent: "space-between" }
+    },
+      /*#__PURE__*/React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 10 } },
+        /*#__PURE__*/React.createElement("span", { style: { opacity: 0.7 } }, Ico.cal), " Dashboard"
+      ),
+      view === "dashboard" && /*#__PURE__*/React.createElement("button", {
+        className: "rmm-btn",
+        disabled: rmmRunning,
+        onClick: function onClick(e) {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent("rmm-run"));
+        }
+      }, rmmRunning ? "..." : "RMM")
+    ),
+    /*#__PURE__*/React.createElement("button", {
+      key: "pokemon",
+      className: "sidebar-nav-btn ".concat(view === "pokemon" ? "active" : ""),
+      onClick: function onClick() { return setView("pokemon"); }
+    }, /*#__PURE__*/React.createElement("span", { style: { opacity: 0.7 } }, Ico.ball), " Pokémon Market"), /*#__PURE__*/React.createElement("button", {
     className: "sidebar-nav-btn ".concat(view === "inventory" ? "active" : ""),
     onClick: function onClick() {
       setView("inventory");
