@@ -209,6 +209,14 @@
   }
   .rmm-btn:hover { opacity: 1; }
   .rmm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .api-key-section { padding: 12px 16px; border-top: 1px solid var(--border); margin-top: 8px; }
+  .api-key-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 6px; }
+  .api-key-row { display: flex; gap: 6px; }
+  .api-key-input { flex: 1; background: var(--s2); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-size: 11px; padding: 5px 8px; outline: none; font-family: var(--mono); min-width: 0; }
+  .api-key-input:focus { border-color: var(--border2); }
+  .api-key-save { background: var(--accent, #6366f1); color: #fff; border: none; border-radius: 6px; font-size: 11px; font-weight: 600; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+  .api-key-save:hover { opacity: 0.85; }
+  .api-key-status { font-size: 10px; color: #34d399; margin-top: 4px; font-family: var(--mono); }
   </style>
 <script>"use strict";
 
@@ -1456,6 +1464,44 @@ function Notes() {
 }
 
 
+// ── API Key Settings ─────────────────────────────────────────────────────────
+function ApiKeySettings() {
+  var saved = localStorage.getItem("cc:apikey") || "";
+  var _us = React.useState(saved.length > 8 ? saved.slice(0,4) + "..." + saved.slice(-4) : saved),
+    _us2 = _slicedToArray(_us, 2),
+    display = _us2[0], setDisplay = _us2[1];
+  var _us3 = React.useState(""), _us4 = _slicedToArray(_us3, 2),
+    input = _us4[0], setInput = _us4[1];
+  var _us5 = React.useState(!!saved), _us6 = _slicedToArray(_us5, 2),
+    saved2 = _us6[0], setSaved2 = _us6[1];
+
+  var save = function() {
+    var key = input.trim();
+    if (!key) return;
+    localStorage.setItem("cc:apikey", key);
+    setDisplay(key.slice(0,4) + "..." + key.slice(-4));
+    setInput("");
+    setSaved2(true);
+  };
+
+  return /*#__PURE__*/React.createElement("div", { className: "api-key-section" },
+    /*#__PURE__*/React.createElement("div", { className: "api-key-label" }, "🔑 API Key"),
+    /*#__PURE__*/React.createElement("div", { className: "api-key-row" },
+      /*#__PURE__*/React.createElement("input", {
+        className: "api-key-input",
+        type: "password",
+        placeholder: saved2 ? display : "sk-ant-...",
+        value: input,
+        onChange: function(e) { setInput(e.target.value); },
+        onKeyDown: function(e) { if (e.key === "Enter") save(); }
+      }),
+      /*#__PURE__*/React.createElement("button", { className: "api-key-save", onClick: save }, "Save")
+    ),
+    saved2 && /*#__PURE__*/React.createElement("div", { className: "api-key-status" }, "✓ Key saved")
+  );
+}
+
+
 // ── Pokémon News ─────────────────────────────────────────────────────────────
 function PokeNews() {
   var _usePersistedState = usePersistedState("cc:pokenews-items", []),
@@ -1507,9 +1553,21 @@ function PokeNews() {
       "- Do NOT include markdown formatting in the text field"
     ].join("\n");
 
+    var apiKey = localStorage.getItem("cc:apikey") || "";
+    if (!apiKey) {
+      setRmmStatus("No API key. Add yours in Settings.");
+      setRmmLoading(false);
+      window.dispatchEvent(new CustomEvent("rmm-status", { detail: { running: false } }));
+      return;
+    }
     fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-calls": "true"
+      },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1000,
@@ -4130,7 +4188,7 @@ function App() {
     onClick: function onClick() {
       return setCalModal("outlook");
     }
-  }, Ico.link, " Connect Outlook"))), /*#__PURE__*/React.createElement("div", {
+  }, Ico.link, " Connect Outlook")), /*#__PURE__*/React.createElement(ApiKeySettings, null)), /*#__PURE__*/React.createElement("div", {
     className: "main"
   }, /*#__PURE__*/React.createElement("div", {
     className: "topbar"
