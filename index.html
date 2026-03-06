@@ -1560,7 +1560,7 @@ function PokeNews() {
       window.dispatchEvent(new CustomEvent("rmm-status", { detail: { running: false } }));
       return;
     }
-    fetch("https://api.anthropic.com/v1/messages", {
+    fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -4406,7 +4406,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
         '- Do NOT include bullet points, dashes, or numbering before the 📺 icon.\n' +
         '- Return ONLY the formatted lines, no preamble or commentary.';
 
-      fetch('https://api.anthropic.com/v1/messages', {
+      fetch('https://poke-proxy.jjparadisefalls.workers.dev', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4464,7 +4464,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
         '- Do NOT include bullet points or numbering before the icon.\n' +
         '- Return ONLY the formatted lines, no preamble or commentary.';
 
-      fetch('https://api.anthropic.com/v1/messages', {
+      fetch('https://poke-proxy.jjparadisefalls.workers.dev', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
