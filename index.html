@@ -1563,10 +1563,7 @@ function PokeNews() {
     fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-calls": "true"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
