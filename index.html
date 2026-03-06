@@ -1525,83 +1525,148 @@ function PokeNews() {
   var runMorningMarket = useCallback(function() {
     if (rmmLoading) return;
     setRmmLoading(true);
-    setRmmStatus("Searching market data...");
     window.dispatchEvent(new CustomEvent("rmm-status", { detail: { running: true } }));
 
-    var today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    var prompt = [
-      "You are a Pokemon TCG market advisor. Today is " + today + ".",
-      "Search the web for the latest Pokemon card market news. Generate a morning market briefing.",
-      "",
-      "CREATOR PICKS - For each of these YouTube creators, find their most recent content and most convicted trade recommendation:",
-      "PikaPikaPaPa, Jordan Collects, Phillips Collectibles, Sam's Shiny Stocks, Twice Baked Jake, VegasCardDex.",
-      "Also check: Leonhart, PokeRev, or other top Pokemon TCG investment creators if they have recent picks.",
-      "",
-      "WEB NEWS - Search for: Pokemon card prices today, hot cards, undervalued cards, sealed product deals, grading news.",
-      "",
-      "FORMAT: Return ONLY a JSON array of news items (no markdown, no explanation, just raw JSON).",
-      "Each item: { \"text\": \"...\" }",
-      "",
-      "RULES:",
-      "- Total items: 8 to 10",
-      "- Prefix creator picks with the TV emoji \ud83d\udcfa and creator name in brackets e.g. \ud83d\udcfa [PikaPikaPaPa]",
-      "- Include AT LEAST: 1 item about a product >$1000, 1 item $500-$999, 2 items $100-$499, 3 items $10-$99",
-      "- Each item should be 1-2 sentences, specific, actionable, include price data",
-      "- Sort: creator picks first, then $1k+, then $500-$999, then $100-$499, then $10-$99, then business intel",
-      "- Start each non-creator item with a relevant emoji (\ud83d\udd25 \ud83d\udcb0 \ud83d\udcb3 \ud83d\udca1 \u26a1 \ud83d\udcc8)",
-      "- Use real current prices from TCGPlayer, eBay, PriceCharting where possible",
-      "- Do NOT include markdown formatting in the text field"
-    ].join("\n");
+    var CREATORS = [
+      { name: "PikaPikaPapa",          handle: "PikaPikaPapa" },
+      { name: "Jordan Collects",       handle: "JordanCollects" },
+      { name: "Phillips Collectibles", handle: "PhillipsCollectibles" },
+      { name: "Sam's Shiny Stocks",    handle: "SamsShinyStocks" },
+      { name: "Twice Baked Jake",      handle: "TwiceBakedJake" },
+      { name: "VegasCardDex",          handle: "VegasCardDex" }
+    ];
 
-    var apiKey = localStorage.getItem("cc:apikey") || "";
-    if (!apiKey) {
-      setRmmStatus("No API key. Add yours in Settings.");
-      setRmmLoading(false);
-      window.dispatchEvent(new CustomEvent("rmm-status", { detail: { running: false } }));
-      return;
+    var ts = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    var allResults = [];
+    var creatorIdx = 0;
+
+    function fetchTranscript(creator) {
+      return fetch("https://poke-transcript.jjparadisefalls.workers.dev", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creator: creator.name, handle: creator.handle })
+      }).then(function(r) { return r.json(); }).catch(function() { return {}; });
     }
-    fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }]
-      })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("");
-      // Strip any markdown fences
-      raw = raw.replace(/```json|```/g, "").trim();
-      var parsed;
-      try { parsed = JSON.parse(raw); } catch(e) {
-        // Try to extract array from text
-        var m = raw.match(/\[.*\]/s);
-        if (m) { try { parsed = JSON.parse(m[0]); } catch(e2) { parsed = null; } }
-      }
-      if (parsed && Array.isArray(parsed) && parsed.length) {
-        var ts = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        var newItems = parsed.map(function(item) {
-          return { id: Date.now() + Math.random(), text: item.text || String(item), seen: false, ts: ts };
-        });
-        setItems(function(prev) { return [].concat(newItems, (prev || [])); });
-        setRmmStatus("");
+
+    function analyzeWithClaude(creatorData) {
+      var prompt;
+      if (creatorData.hasTranscript && creatorData.transcript) {
+        prompt = "You are a Pokemon TCG market advisor. Analyze this transcript from " + creatorData.creator + ".\n\n" +
+          "Video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n\n" +
+          "TRANSCRIPT:\n" + creatorData.transcript + "\n\n" +
+          "Find the single MOST CONVICTED trade recommendation — the card or product they expressed the highest confidence in.\n\n" +
+          "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
+          "No markdown, no extra text, just the JSON object.";
       } else {
-        setRmmStatus("No results returned. Try again.");
-        setTimeout(function() { setRmmStatus(""); }, 4000);
+        prompt = "You are a Pokemon TCG market advisor. Search the web for the most recent content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
+          (creatorData.videoTitle ? "Their latest video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n\n" : "") +
+          "Find their most convicted trade recommendation from this video or recent content.\n\n" +
+          "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
+          "If nothing found, return: { \"text\": \"\" }\n" +
+          "No markdown, no extra text, just the JSON object.";
       }
-    })
-    .catch(function(err) {
-      setRmmStatus("Error: " + err.message);
-      setTimeout(function() { setRmmStatus(""); }, 4000);
-    })
-    .finally(function() {
-      setRmmLoading(false);
-      window.dispatchEvent(new CustomEvent("rmm-status", { detail: { running: false } }));
-    });
+
+      var body = {
+        model: "claude-sonnet-4-5",
+        max_tokens: 300,
+        messages: [{ role: "user", content: prompt }]
+      };
+      if (!creatorData.hasTranscript) {
+        body.tools = [{ type: "web_search_20250305", name: "web_search" }];
+      }
+
+      return fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("").trim();
+        raw = raw.replace(/```json|```/g, "").trim();
+        try {
+          var parsed = JSON.parse(raw);
+          return parsed.text || "";
+        } catch(e) {
+          var m = raw.match(/\{[^}]+\}/);
+          if (m) { try { return JSON.parse(m[0]).text || ""; } catch(e2) {} }
+          return "";
+        }
+      })
+      .catch(function() { return ""; });
+    }
+
+    function processNextCreator() {
+      if (creatorIdx >= CREATORS.length) {
+        runMarketNews();
+        return;
+      }
+      var creator = CREATORS[creatorIdx++];
+      setRmmStatus("📺 " + creator.name + " (" + creatorIdx + "/" + CREATORS.length + ")...");
+
+      fetchTranscript(creator).then(function(data) {
+        return analyzeWithClaude(data);
+      }).then(function(line) {
+        if (line && line.length > 10) {
+          allResults.push({ id: Date.now() + Math.random(), text: line, seen: false, ts: ts });
+        }
+        processNextCreator();
+      }).catch(function() {
+        processNextCreator();
+      });
+    }
+
+    function runMarketNews() {
+      setRmmStatus("🌐 Searching market news...");
+      var prompt = "You are a Pokemon TCG market advisor. Search the web RIGHT NOW for the latest Pokemon TCG market news.\n\n" +
+        "Return ONLY a JSON array of 6-8 items (no markdown, just raw JSON).\n" +
+        "Each item: { \"text\": \"...\" }\n\n" +
+        "RULES:\n" +
+        "- Include AT LEAST: 1 item >$1000, 1 item $500-$999, 2 items $100-$499, 3 items $10-$99\n" +
+        "- Start each item with tier emoji: 💎 for $1k+, 🔥 for $500-999, ⭐ for $100-499, 💡 for $10-99\n" +
+        "- Specific card/product names, real current prices, actionable insights\n" +
+        "- No markdown in text field";
+
+      fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-5",
+          max_tokens: 1200,
+          tools: [{ type: "web_search_20250305", name: "web_search" }],
+          messages: [{ role: "user", content: prompt }]
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("").trim();
+        raw = raw.replace(/```json|```/g, "").trim();
+        var parsed;
+        try { parsed = JSON.parse(raw); } catch(e) {
+          var m = raw.match(/\[[\s\S]*\]/);
+          if (m) { try { parsed = JSON.parse(m[0]); } catch(e2) { parsed = []; } }
+        }
+        if (parsed && Array.isArray(parsed)) {
+          parsed.forEach(function(item) {
+            if (item.text) allResults.push({ id: Date.now() + Math.random(), text: item.text, seen: false, ts: ts });
+          });
+        }
+      })
+      .catch(function() {})
+      .finally(function() {
+        if (allResults.length > 0) {
+          setItems(function(prev) { return [].concat(allResults, (prev || [])); });
+          setRmmStatus("");
+        } else {
+          setRmmStatus("No results returned. Try again.");
+          setTimeout(function() { setRmmStatus(""); }, 4000);
+        }
+        setRmmLoading(false);
+        window.dispatchEvent(new CustomEvent("rmm-status", { detail: { running: false } }));
+      });
+    }
+
+    processNextCreator();
   }, [rmmLoading]);
 
   useEffect(function() {
