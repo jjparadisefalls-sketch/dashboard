@@ -4290,13 +4290,12 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
   var news        = [];
   var BATCH_SIZE  = 3;
   var CREATORS    = [
-    { name: 'PikaPikaPaPa',          handle: 'PikaPikaPaPa' },
-    { name: 'VegasCardDex',          handle: 'VegasCardDex' },
+    { name: 'PikaPikaPapa',          handle: 'PikaPikaPapa' },
+    { name: 'Jordan Collects',       handle: 'JordanCollects' },
     { name: 'Phillips Collectibles', handle: 'PhillipsCollectibles' },
-    { name: 'HyperRare TCG',         handle: 'HyperRareTCG' },
-    { name: 'PokeTrace',             handle: 'PokeTrace' },
-    { name: 'Flowslikewater',        handle: 'Flowslikewater' },
-    { name: 'Athlon Sports TCG',     handle: 'AthlonSports' }
+    { name: "Sam's Shiny Stocks",    handle: 'SamsShinyStocks' },
+    { name: 'Twice Baked Jake',      handle: 'TwiceBakedJake' },
+    { name: 'VegasCardDex',          handle: 'VegasCardDex' }
   ];
 
   function save() {
@@ -4355,55 +4354,64 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
     render();
   }
 
-  // ?? Run Morning Market ??????????????????????????????????????????????????
+  // ── Run Morning Market ──────────────────────────────────────────────────────
   function runMorningMarket() {
-    var btn = document.getElementById('pokenews-run-btn');
+    var btn      = document.getElementById('pokenews-run-btn');
     var statusEl = document.getElementById('pokenews-status');
     if (btn && btn.disabled) return;
 
-    // Clear existing news at the start of every run
+    // Wipe existing news so today's run starts clean
     news = [];
     save();
     render();
 
-    if (btn) { btn.disabled = true; btn.textContent = '? Running?'; }
-    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Starting morning market research?'; }
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Running…'; }
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Starting morning market research…'; }
 
+    var creatorResults = [];  // 📺 creator picks — added FIRST
+    var marketResults  = [];  // 🌐 web market news — added SECOND
+    var allResults     = [];  // merged final list
+
+    // ── PHASE 1: Creator picks (batched 3 at a time) ────────────────────────
     var batches = [];
     for (var i = 0; i < CREATORS.length; i += BATCH_SIZE) {
       batches.push(CREATORS.slice(i, i + BATCH_SIZE));
     }
-    var allResults = [];
 
     function processBatch(idx) {
       if (idx >= batches.length) {
-        finalize(allResults);
+        // All creator batches done — move to Phase 2
+        runMarketNews();
         return;
       }
       var batch    = batches[idx];
       var batchNum = idx + 1;
       var total    = batches.length;
       var names    = batch.map(function(c){ return c.name; }).join(', ');
-      if (statusEl) statusEl.textContent = 'Batch ' + batchNum + '/' + total + ': ' + names + '?';
+      if (statusEl) statusEl.textContent = '📺 Creator batch ' + batchNum + '/' + total + ': ' + names + '…';
 
       var prompt =
-        'You are a Pok\u00e9mon TCG market research assistant. This is batch ' + batchNum + ' of ' + total + '.\n\n' +
-        'Search the web for the LATEST Pok\u00e9mon card market intelligence from these YouTube content creators:\n' +
-        batch.map(function(c,i){ return (i+1)+'. '+c.name+' (@'+c.handle+')'; }).join('\n') + '\n\n' +
-        'For each creator find their most recent video (last 7 days preferred) and extract:\n' +
-        '- Which specific cards or sets they recommend as BUY / HOLD / SELL\n' +
-        '- Any price targets or market trend observations\n' +
-        '- Any sealed product they are bullish or bearish on\n\n' +
-        'FORMAT: bulleted list. Each bullet = one actionable insight.\n' +
-        'Pattern per bullet: [Creator] \u2014 [Card/Set] \u2014 [BUY|HOLD|SELL] \u2014 [Reason]\n' +
-        'Return 3-8 bullets per creator. Skip commentary without actionable data.';
+        'You are a Pokémon TCG market advisor for a professional trading card business that deals in singles, graded slabs, and sealed product.\n\n' +
+        'Search the web RIGHT NOW for the most recent YouTube videos (last 7 days preferred, last 14 days acceptable) from each of these creators:\n' +
+        batch.map(function(c, i){ return (i+1) + '. ' + c.name + ' (search: "' + c.name + ' pokemon" on YouTube)'; }).join('\n') + '\n\n' +
+        'For EACH creator:\n' +
+        '1. Find their single MOST CONVICTED trade — the one recommendation they expressed the highest confidence in.\n' +
+        '2. Note the video title and approximate date.\n' +
+        '3. Format EXACTLY as one line per creator:\n' +
+        '📺 [Creator Name] — [Card or Product Name] — [BUY|HOLD|SELL] — [Reason] (via: "[Video Title]", [Date])\n\n' +
+        'Rules:\n' +
+        '- One line per creator. Most convicted pick only.\n' +
+        '- Must include specific card/product name, not vague references.\n' +
+        '- Skip any creator if no recent video found — do not fabricate.\n' +
+        '- Do NOT include bullet points, dashes, or numbering before the 📺 icon.\n' +
+        '- Return ONLY the formatted lines, no preamble or commentary.';
 
       fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
+          max_tokens: 1200,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
           messages: [{ role: 'user', content: prompt }]
         })
@@ -4416,43 +4424,112 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
           .join('\n').trim();
         if (text) {
           text.split('\n')
-            .map(function(l){ return l.replace(/^[-\u2022*\d.]+\s*/, '').trim(); })
-            .filter(function(l){ return l.length > 20; })
-            .forEach(function(line){ allResults.push(line); });
+            .map(function(l){ return l.trim(); })
+            .filter(function(l){ return l.length > 20 && l.indexOf('📺') !== -1; })
+            .forEach(function(line){ creatorResults.push(line); });
         }
         processBatch(idx + 1);
       })
       .catch(function(err){
-        console.error('Batch ' + batchNum + ' error:', err);
-        if (statusEl) statusEl.textContent = 'Error on batch ' + batchNum + '. Continuing?';
+        console.error('Creator batch ' + batchNum + ' error:', err);
+        if (statusEl) statusEl.textContent = '⚠️ Error on creator batch ' + batchNum + '. Continuing…';
         processBatch(idx + 1);
       });
     }
 
-    processBatch(0);
-  }
+    // ── PHASE 2: Web market news with price tiers ───────────────────────────
+    function runMarketNews() {
+      if (statusEl) statusEl.textContent = '🌐 Searching web for market news…';
 
-  function finalize(results) {
-    results.forEach(function(line){ addItem(line); });
+      var prompt =
+        'You are a Pokémon TCG market advisor for a professional trading card business dealing in singles, graded slabs, and sealed product.\n\n' +
+        'Search the web RIGHT NOW for the latest Pokémon TCG market news, price movements, investment opportunities, and notable items.\n\n' +
+        'Return between 3 and 10 items total, with these MINIMUMS by price tier:\n' +
+        '- At least 1 item: product valued OVER $1,000\n' +
+        '- At least 1 item: product valued $500–$999.99\n' +
+        '- At least 2 items: product valued $100–$499.99\n' +
+        '- At least 3 items: product valued $10–$99.99\n\n' +
+        'Topics to cover: hot cards, cards to invest in now, beautiful/desirable cards, undervalued cards, sealed product news, set releases, market trends, grading news, tournament impact on prices.\n\n' +
+        'Format EXACTLY — one line per item:\n' +
+        '[TIER_ICON] [Card or Product Name] — [Current Price or Range] — [BUY|HOLD|SELL|WATCH] — [Insight]\n\n' +
+        'Use these tier icons based on price:\n' +
+        '🌐💎 for $1,000+\n' +
+        '🌐🔥 for $500–$999.99\n' +
+        '🌐⭐ for $100–$499.99\n' +
+        '🌐💡 for $10–$99.99\n\n' +
+        'Rules:\n' +
+        '- Specific card/product names only. No vague references.\n' +
+        '- Include current price or price range in each line.\n' +
+        '- Only include items with actionable intelligence.\n' +
+        '- Do NOT include bullet points or numbering before the icon.\n' +
+        '- Return ONLY the formatted lines, no preamble or commentary.';
 
-    // Download JSON to Downloads folder
-    try {
-      var payload = { generated: new Date().toISOString(), items: news };
-      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      var url  = URL.createObjectURL(blob);
-      var a    = document.createElement('a');
-      a.href = url; a.download = 'morning_market_results.json';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
-    } catch(e){}
-
-    var btn = document.getElementById('pokenews-run-btn');
-    var statusEl = document.getElementById('pokenews-status');
-    if (btn) { btn.disabled = false; btn.textContent = '\u25b6 Run Morning Market'; }
-    if (statusEl) {
-      statusEl.textContent = '\u2705 Done \u2014 ' + news.length + ' insights loaded. JSON saved to Downloads.';
-      setTimeout(function(){ statusEl.style.display = 'none'; }, 8000);
+      fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1200,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{ role: 'user', content: prompt }]
+        })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var text = (data.content || [])
+          .filter(function(b){ return b.type === 'text'; })
+          .map(function(b){ return b.text || ''; })
+          .join('\n').trim();
+        if (text) {
+          text.split('\n')
+            .map(function(l){ return l.trim(); })
+            .filter(function(l){ return l.length > 20 && l.indexOf('🌐') !== -1; })
+            .forEach(function(line){ marketResults.push(line); });
+        }
+        finalize();
+      })
+      .catch(function(err){
+        console.error('Market news error:', err);
+        if (statusEl) statusEl.textContent = '⚠️ Error fetching market news. Finalizing…';
+        finalize();
+      });
     }
+
+    // ── PHASE 3: Finalize — creators first, then market news ────────────────
+    function finalize() {
+      // Merge: creator picks first, market news second
+      allResults = creatorResults.concat(marketResults);
+
+      // Load into news panel
+      allResults.forEach(function(line){ addItem(line); });
+
+      // Download JSON snapshot
+      try {
+        var payload = { generated: new Date().toISOString(), items: news };
+        var blob    = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var url     = URL.createObjectURL(blob);
+        var a       = document.createElement('a');
+        a.href = url; a.download = 'morning_market_results.json';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+      } catch(e){}
+
+      // ✅ Wipe working arrays so tomorrow's run starts completely clean
+      allResults     = [];
+      creatorResults = [];
+      marketResults  = [];
+
+      var btn      = document.getElementById('pokenews-run-btn');
+      var statusEl = document.getElementById('pokenews-status');
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Run Morning Market'; }
+      if (statusEl) {
+        statusEl.textContent = '✅ Done — ' + news.length + ' insights loaded. JSON saved to Downloads.';
+        setTimeout(function(){ statusEl.style.display = 'none'; }, 8000);
+      }
+    }
+
+    // Kick off Phase 1
+    processBatch(0);
   }
 
   // ?? Init ????????????????????????????????????????????????????????????????
