@@ -4375,9 +4375,107 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
       batches.push(CREATORS.slice(i, i + BATCH_SIZE));
     }
 
+    // ── Fetch transcript for a single creator via browser (session cookies) ──
+    function fetchCreatorTranscript(creator) {
+      return fetch('https://poke-transcript.jjparadisefalls.workers.dev', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creator: creator.name, handle: creator.handle })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (!data.videoId) return { creator: creator.name, error: 'no video found' };
+        // Now fetch caption URL directly from YouTube in the browser (uses session cookies)
+        return fetch('https://www.youtube.com/watch?v=' + data.videoId, {
+          credentials: 'include',
+          headers: { 'Accept-Language': 'en-US,en;q=0.9' }
+        })
+        .then(function(r){ return r.text(); })
+        .then(function(html){
+          // Extract captionTracks baseUrl
+          var m = html.match(/"captionTracks":\[\{"baseUrl":"([^"]+)"/);
+          if (!m) return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false };
+          var captionUrl = m[1]
+            .replace(/\\u0026/g, '&')
+            .replace(/\\u003d/g, '=')
+            .replace(/\\u003c/g, '<')
+            .replace(/\\/g, '');
+          return fetch(captionUrl + '&fmt=json3', { credentials: 'include' })
+            .then(function(r){ return r.json(); })
+            .then(function(capData){
+              var transcript = (capData.events || [])
+                .filter(function(e){ return e.segs; })
+                .map(function(e){ return e.segs.map(function(s){ return s.utf8 || ''; }).join(''); })
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 10000);
+              return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: transcript, hasTranscript: transcript.length > 100 };
+            })
+            .catch(function(){ return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false }; });
+        })
+        .catch(function(){ return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false }; });
+      })
+      .catch(function(e){ return { creator: creator.name, error: e.message }; });
+    }
+
+    // ── Analyze a single creator with Claude ────────────────────────────────
+    function analyzeCreator(creatorData) {
+      var prompt;
+      if (creatorData.hasTranscript) {
+        prompt =
+          'You are a Pokémon TCG market advisor. Analyze this YouTube video transcript from ' + creatorData.creator + '.\n\n' +
+          'Video: "' + creatorData.videoTitle + '" (' + creatorData.videoDate + ')\n\n' +
+          'TRANSCRIPT:\n' + creatorData.transcript + '\n\n' +
+          'Find the single MOST CONVICTED trade recommendation in this transcript — the card or product the creator expressed the highest confidence in buying, holding, or selling.\n\n' +
+          'Format EXACTLY as one line:\n' +
+          '📺 ' + creatorData.creator + ' — [Card or Product Name] — [BUY|HOLD|SELL] — [Reason from transcript] (via: "' + creatorData.videoTitle + '", ' + creatorData.videoDate + ')\n\n' +
+          'Rules:\n' +
+          '- One line only. Most convicted pick only.\n' +
+          '- Must include specific card/product name.\n' +
+          '- Reason must come directly from the transcript.\n' +
+          '- Return ONLY the formatted line, no preamble.';
+      } else {
+        prompt =
+          'You are a Pokémon TCG market advisor. Search the web for the most recent content from ' + creatorData.creator + ' about Pokémon TCG investing.\n\n' +
+          'Their latest YouTube video is: "' + (creatorData.videoTitle || 'unknown') + '" (' + (creatorData.videoDate || 'recent') + ')\n\n' +
+          'Search for any written coverage, community posts, or descriptions of this video to find their top pick.\n\n' +
+          'Format EXACTLY as one line:\n' +
+          '📺 ' + creatorData.creator + ' — [Card or Product Name] — [BUY|HOLD|SELL] — [Reason] (via: "' + (creatorData.videoTitle || 'recent video') + '", ' + (creatorData.videoDate || 'recent') + ')\n\n' +
+          'Rules:\n' +
+          '- One line only. Most convicted pick only.\n' +
+          '- Must include specific card/product name, not vague references.\n' +
+          '- Skip if no reliable info found — do not fabricate.\n' +
+          '- Return ONLY the formatted line, no preamble.';
+      }
+
+      var body = {
+        model: 'claude-sonnet-4-5',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      };
+      if (!creatorData.hasTranscript) {
+        body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
+      }
+
+      return fetch('https://poke-proxy.jjparadisefalls.workers.dev', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var text = (data.content || [])
+          .filter(function(b){ return b.type === 'text'; })
+          .map(function(b){ return b.text || ''; })
+          .join('\n').trim();
+        return text;
+      })
+      .catch(function(){ return ''; });
+    }
+
     function processBatch(idx) {
       if (idx >= batches.length) {
-        // All creator batches done — move to Phase 2
         runMarketNews();
         return;
       }
@@ -4385,52 +4483,32 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
       var batchNum = idx + 1;
       var total    = batches.length;
       var names    = batch.map(function(c){ return c.name; }).join(', ');
-      if (statusEl) statusEl.textContent = '📺 Creator batch ' + batchNum + '/' + total + ': ' + names + '…';
+      if (statusEl) statusEl.textContent = '📺 Fetching transcripts for batch ' + batchNum + '/' + total + ': ' + names + '…';
 
-      var prompt =
-        'You are a Pokémon TCG market advisor for a professional trading card business that deals in singles, graded slabs, and sealed product.\n\n' +
-        'Search the web RIGHT NOW for the most recent YouTube videos (last 7 days preferred, last 14 days acceptable) from each of these creators:\n' +
-        batch.map(function(c, i){ return (i+1) + '. ' + c.name + ' (search: "' + c.name + ' pokemon" on YouTube)'; }).join('\n') + '\n\n' +
-        'For EACH creator:\n' +
-        '1. Find their single MOST CONVICTED trade — the one recommendation they expressed the highest confidence in.\n' +
-        '2. Note the video title and approximate date.\n' +
-        '3. Format EXACTLY as one line per creator:\n' +
-        '📺 [Creator Name] — [Card or Product Name] — [BUY|HOLD|SELL] — [Reason] (via: "[Video Title]", [Date])\n\n' +
-        'Rules:\n' +
-        '- One line per creator. Most convicted pick only.\n' +
-        '- Must include specific card/product name, not vague references.\n' +
-        '- Skip any creator if no recent video found — do not fabricate.\n' +
-        '- Do NOT include bullet points, dashes, or numbering before the 📺 icon.\n' +
-        '- Return ONLY the formatted lines, no preamble or commentary.';
-
-      fetch('https://poke-proxy.jjparadisefalls.workers.dev', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 1200,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: [{ role: 'user', content: prompt }]
-        })
-      })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        console.log('Creator batch ' + batchNum + ' response:', JSON.stringify(data).slice(0, 300));
-        var text = (data.content || [])
-          .filter(function(b){ return b.type === 'text'; })
-          .map(function(b){ return b.text || ''; })
-          .join('\n').trim();
-        if (text) {
-          text.split('\n')
-            .map(function(l){ return l.trim(); })
-            .filter(function(l){ return l.length > 20 && l.indexOf('📺') !== -1; })
-            .forEach(function(line){ creatorResults.push(line); });
+      // Step 1: fetch transcripts for all creators in this batch in parallel
+      Promise.all(batch.map(function(c){ return fetchCreatorTranscript(c); }))
+      .then(function(transcriptResults){
+        if (statusEl) statusEl.textContent = '🤖 Analyzing batch ' + batchNum + '/' + total + ' with Claude…';
+        // Step 2: analyze each one sequentially to avoid rate limits
+        var results = [];
+        function analyzeNext(i) {
+          if (i >= transcriptResults.length) {
+            results.forEach(function(line){ if(line && line.indexOf('📺') !== -1) creatorResults.push(line); });
+            processBatch(idx + 1);
+            return;
+          }
+          var cd = transcriptResults[i];
+          if (cd.error) { analyzeNext(i+1); return; }
+          console.log(cd.creator + ' transcript:', cd.hasTranscript ? cd.transcript.slice(0,100) : 'NONE (using web search)');
+          analyzeCreator(cd).then(function(line){
+            results.push(line);
+            analyzeNext(i+1);
+          });
         }
-        processBatch(idx + 1);
+        analyzeNext(0);
       })
       .catch(function(err){
-        console.error('Creator batch ' + batchNum + ' error:', err);
-        if (statusEl) statusEl.textContent = '⚠️ Error on creator batch ' + batchNum + '. Continuing…';
+        console.error('Batch ' + batchNum + ' error:', err);
         processBatch(idx + 1);
       });
     }
