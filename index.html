@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+?<!DOCTYPE html>
+<!-- saved from url=(0046)file:///C:/Users/johnn/Downloads/index_86.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -150,6 +151,18 @@
     transition: all 0.15s;
   }
   .pokenews-seen-box.checked { background: #a78bfa; border-color: #a78bfa; color: #fff; }
+  .pokenews-del {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 3px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    display: flex;
+  }
+  .pokenews-row:hover .pokenews-del { opacity: 1; }
+  .pokenews-del:hover { color: #f87171; }
   .pokenews-empty {
     padding: 24px;
     text-align: center;
@@ -196,7 +209,14 @@
   }
   .rmm-btn:hover { opacity: 1; }
   .rmm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
+  .api-key-section { padding: 12px 16px; border-top: 1px solid var(--border); margin-top: 8px; }
+  .api-key-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 6px; }
+  .api-key-row { display: flex; gap: 6px; }
+  .api-key-input { flex: 1; background: var(--s2); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-size: 11px; padding: 5px 8px; outline: none; font-family: var(--mono); min-width: 0; }
+  .api-key-input:focus { border-color: var(--border2); }
+  .api-key-save { background: var(--accent, #6366f1); color: #fff; border: none; border-radius: 6px; font-size: 11px; font-weight: 600; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+  .api-key-save:hover { opacity: 0.85; }
+  .api-key-status { font-size: 10px; color: #34d399; margin-top: 4px; font-family: var(--mono); }
   </style>
 <script>"use strict";
 
@@ -238,7 +258,14 @@ var _React = React,
   useEffect = _React.useEffect,
   useCallback = _React.useCallback;
 
+// ── Constants ──────────────────────────────────────────────────────────────
+var POKEMON_TCG_API_KEY = "tcg_live_0b7bbd4667635153ed895df714aee9dd868c0d8d";
+var TCG_HEADERS = {
+  "X-Api-Key": POKEMON_TCG_API_KEY
+};
+var CORS_PROXY = "https://corsproxy.io/?";
 
+// Wrap Pokemon TCG API calls through CORS proxy
 // ── PokeData API helpers (via Render proxy) ───────────────────────────────
 var PD_PROXY = "https://pokedata-proxy.onrender.com";
 function pdSearch(_x, _x2) {
@@ -310,6 +337,7 @@ function _pdPricing() {
 var GOOGLE_CLIENT_ID = "182501047579-lbspffj6ucj914h7kgqos50s0oc9i58h.apps.googleusercontent.com";
 var GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.events";
 var GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+var GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 var GOOGLE_CALENDAR_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 var REDIRECT_URI = "https://jjparadisefalls-sketch.github.io/dashboard/";
 function buildAuthUrl() {
@@ -1436,6 +1464,44 @@ function Notes() {
 }
 
 
+// ── API Key Settings ─────────────────────────────────────────────────────────
+function ApiKeySettings() {
+  var saved = localStorage.getItem("cc:apikey") || "";
+  var _us = React.useState(saved.length > 8 ? saved.slice(0,4) + "..." + saved.slice(-4) : saved),
+    _us2 = _slicedToArray(_us, 2),
+    display = _us2[0], setDisplay = _us2[1];
+  var _us3 = React.useState(""), _us4 = _slicedToArray(_us3, 2),
+    input = _us4[0], setInput = _us4[1];
+  var _us5 = React.useState(!!saved), _us6 = _slicedToArray(_us5, 2),
+    saved2 = _us6[0], setSaved2 = _us6[1];
+
+  var save = function() {
+    var key = input.trim();
+    if (!key) return;
+    localStorage.setItem("cc:apikey", key);
+    setDisplay(key.slice(0,4) + "..." + key.slice(-4));
+    setInput("");
+    setSaved2(true);
+  };
+
+  return /*#__PURE__*/React.createElement("div", { className: "api-key-section" },
+    /*#__PURE__*/React.createElement("div", { className: "api-key-label" }, "🔑 API Key"),
+    /*#__PURE__*/React.createElement("div", { className: "api-key-row" },
+      /*#__PURE__*/React.createElement("input", {
+        className: "api-key-input",
+        type: "password",
+        placeholder: saved2 ? display : "sk-ant-...",
+        value: input,
+        onChange: function(e) { setInput(e.target.value); },
+        onKeyDown: function(e) { if (e.key === "Enter") save(); }
+      }),
+      /*#__PURE__*/React.createElement("button", { className: "api-key-save", onClick: save }, "Save")
+    ),
+    saved2 && /*#__PURE__*/React.createElement("div", { className: "api-key-status" }, "✓ Key saved")
+  );
+}
+
+
 // ── Pokémon News ─────────────────────────────────────────────────────────────
 function PokeNews() {
   var _usePersistedState = usePersistedState("cc:pokenews-items", []),
@@ -2005,6 +2071,18 @@ function normalizeStatus(s) {
   return "pc";
 }
 
+function MovePill(_ref) {
+  var current = _ref.current, prev = _ref.prev;
+  if (!current || !prev) return React.createElement("span", { style: { color: "var(--muted)" } }, "—");
+  var diff = current - prev;
+  var pct  = diff / prev * 100;
+  var sign = diff >= 0 ? "+" : "";
+  var style;
+  if (diff >  0.005) style = { fontSize:10, fontWeight:600, padding:"1px 5px", borderRadius:3, fontFamily:"var(--mono)", background:"rgba(52,211,153,0.15)", color:"var(--green)" };
+  else if (diff < -0.005) style = { fontSize:10, fontWeight:600, padding:"1px 5px", borderRadius:3, fontFamily:"var(--mono)", background:"rgba(248,113,113,0.15)", color:"var(--red)" };
+  else style = { fontSize:10, color:"var(--muted)", fontFamily:"var(--mono)" };
+  return React.createElement("span", { style: style }, sign + pct.toFixed(1) + "%");
+}
 
 function GradeBadge(_ref) {
   var grader = _ref.grader, grade = _ref.grade;
@@ -3084,6 +3162,21 @@ function PokemonMarket(_ref28) {
     invReady: invReady
   }));
 }
+function MovePill(_ref29) {
+  var label = _ref29.label,
+    current = _ref29.current,
+    historical = _ref29.historical;
+  if (!historical || !current) return /*#__PURE__*/React.createElement("span", {
+    className: "move-pill move-na"
+  }, label, " \u2014");
+  var pct = (current - historical) / historical * 100;
+  var cls = pct > 1 ? "move-up" : pct < -1 ? "move-down" : "move-flat";
+  var sign = pct > 0 ? "+" : "";
+  return /*#__PURE__*/React.createElement("span", {
+    className: "move-pill ".concat(cls),
+    title: "Was $".concat(historical.toFixed(2))
+  }, label, " ", sign, pct.toFixed(1), "%");
+}
 
 // ── Dashboard Watchlist Panel ──────────────────────────────────────────────
 function DashboardWatchlist(_ref30) {
@@ -3795,8 +3888,10 @@ function DashboardWatchlist(_ref30) {
   }, "Collapse")))), body);
 }
 
+// ── Auto-snapshot scheduler (6am + 4pm) ───────────────────────────────────
+
 // ── Auto-snapshot scheduler ───────────────────────────────────────────────
-// Runs once per day (at 10pm) to store price history.
+// Runs once per day (between 10am–10pm) to store price history.
 // Does NOT fire if the page was already refreshed today.
 function useAutoSnapshot(wl, inv, setInv) {
   useEffect(function() {
@@ -3855,6 +3950,13 @@ function useAutoSnapshot(wl, inv, setInv) {
 }
 
 // ── Inventory Page (full sidebar view) ────────────────────────────────────
+function InventoryPage(_ref35) {
+  var inv = _ref35.inv, setInv = _ref35.setInv, invReady = _ref35.invReady,
+      activeSport = _ref35.activeSport, setActiveSport = _ref35.setActiveSport;
+  return React.createElement("div", null,
+    React.createElement(InventoryTab, { inv:inv, setInv:setInv, invReady:invReady, activeSport:activeSport, setActiveSport:setActiveSport })
+  );
+}
 
 // ── Error Boundary ────────────────────────────────────────────────────────
 var ErrorBoundary = /*#__PURE__*/function (_React$Component) {
@@ -4147,7 +4249,7 @@ function App() {
     onClick: function onClick() {
       return setCalModal("outlook");
     }
-  }, Ico.link, " Connect Outlook")))), /*#__PURE__*/React.createElement("div", {
+  }, Ico.link, " Connect Outlook")), /*#__PURE__*/React.createElement(ApiKeySettings, null)), /*#__PURE__*/React.createElement("div", {
     className: "main"
   }, /*#__PURE__*/React.createElement("div", {
     className: "topbar"
@@ -4179,7 +4281,7 @@ function App() {
     className: "topbar-time"
   }, timeStr)), /*#__PURE__*/React.createElement("div", {
     className: "content"
-  }, view === "inventory" ? /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(InventoryTab, {
+  }, view === "inventory" ? /*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(InventoryPage, {
     inv: inv,
     setInv: setInv,
     invReady: invReady,
@@ -4238,4 +4340,369 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
 </script>
 <body>
   <div id="root"></div>
+  
+
+
+
+
+<script>
+(function() {
+  var STORE_KEY   = 'cc:pokenews';
+  var MAX_ITEMS   = 100;
+  var news        = [];
+  var BATCH_SIZE  = 1;
+  var CREATORS    = [
+    { name: 'PikaPikaPapa',          handle: 'PikaPikaPapa' },
+    { name: 'Jordan Collects',       handle: 'JordanCollects' },
+    { name: 'Phillips Collectibles', handle: 'PhillipsCollectibles' },
+    { name: "Sam's Shiny Stocks",    handle: 'SamsShinyStocks' },
+    { name: 'Twice Baked Jake',      handle: 'TwiceBakedJake' },
+    { name: 'VegasCardDex',          handle: 'VegasCardDex' }
+  ];
+
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(news)); } catch(e){}
+  }
+
+  function load() {
+    try { var raw = localStorage.getItem(STORE_KEY); if(raw) news = JSON.parse(raw); } catch(e){}
+  }
+
+  function render() {
+    var list    = document.getElementById('pokenews-list');
+    var empty   = document.getElementById('pokenews-empty');
+    var counter = document.getElementById('pokenews-counter');
+    if (!list) return;
+    list.innerHTML = '';
+    if (counter) counter.textContent = getTierLabel(news.length);
+    if (empty) empty.style.display = news.length ? 'none' : 'block';
+    news.forEach(function(item) {
+      var row = document.createElement('div');
+      row.className = 'pokenews-row' + (item.seen ? ' seen' : '');
+
+      var box = document.createElement('div');
+      box.className = 'pokenews-seen-box' + (item.seen ? ' checked' : '');
+      box.innerHTML = item.seen
+        ? '<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2.5" stroke="currentColor" stroke-width="2" fill="none"/></svg>'
+        : '';
+      box.onclick = function() { item.seen = !item.seen; save(); render(); };
+
+      var txt = document.createElement('div');
+      txt.className = 'pokenews-text';
+      txt.textContent = item.text;
+
+      var del = document.createElement('button');
+      del.className = 'pokenews-del';
+      del.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+      del.onclick = function() { news = news.filter(function(n){ return n !== item; }); save(); render(); };
+
+      row.appendChild(box);
+      row.appendChild(txt);
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  function getTierLabel(count) {
+    if (!count) return '';
+    return count + ' item' + (count !== 1 ? 's' : '');
+  }
+
+  function addItem(text) {
+    if (!text) return;
+    news.unshift({ id: Date.now(), text: text, seen: false });
+    if (news.length > MAX_ITEMS) news = news.slice(0, MAX_ITEMS);
+    save();
+    render();
+  }
+
+  // ── Run Morning Market ──────────────────────────────────────────────────────
+  function runMorningMarket() {
+    var btn      = document.getElementById('pokenews-run-btn');
+    var statusEl = document.getElementById('pokenews-status');
+    if (btn && btn.disabled) return;
+
+    // Wipe existing news so today's run starts clean
+    news = [];
+    save();
+    render();
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Running…'; }
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Starting morning market research…'; }
+
+    var creatorResults = [];  // 📺 creator picks — added FIRST
+    var marketResults  = [];  // 🌐 web market news — added SECOND
+    var allResults     = [];  // merged final list
+
+    // ── PHASE 1: Creator picks (batched 3 at a time) ────────────────────────
+    var batches = [];
+    for (var i = 0; i < CREATORS.length; i += BATCH_SIZE) {
+      batches.push(CREATORS.slice(i, i + BATCH_SIZE));
+    }
+
+    // ── Fetch transcript for a single creator via browser (session cookies) ──
+    function fetchCreatorTranscript(creator) {
+      return fetch('https://poke-transcript.jjparadisefalls.workers.dev', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creator: creator.name, handle: creator.handle })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (!data.videoId) return { creator: creator.name, error: 'no video found' };
+        // Now fetch caption URL directly from YouTube in the browser (uses session cookies)
+        return fetch('https://www.youtube.com/watch?v=' + data.videoId, {
+          credentials: 'include',
+          headers: { 'Accept-Language': 'en-US,en;q=0.9' }
+        })
+        .then(function(r){ return r.text(); })
+        .then(function(html){
+          // Extract captionTracks baseUrl
+          var m = html.match(/"captionTracks":\[\{"baseUrl":"([^"]+)"/);
+          if (!m) return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false };
+          var captionUrl = m[1]
+            .replace(/\\u0026/g, '&')
+            .replace(/\\u003d/g, '=')
+            .replace(/\\u003c/g, '<')
+            .replace(/\\/g, '');
+          return fetch(captionUrl + '&fmt=json3', { credentials: 'include' })
+            .then(function(r){ return r.json(); })
+            .then(function(capData){
+              var transcript = (capData.events || [])
+                .filter(function(e){ return e.segs; })
+                .map(function(e){ return e.segs.map(function(s){ return s.utf8 || ''; }).join(''); })
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 10000);
+              return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: transcript, hasTranscript: transcript.length > 100 };
+            })
+            .catch(function(){ return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false }; });
+        })
+        .catch(function(){ return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false }; });
+      })
+      .catch(function(e){ return { creator: creator.name, error: e.message }; });
+    }
+
+    // ── Analyze a single creator with Claude ────────────────────────────────
+    function analyzeCreator(creatorData) {
+      var prompt;
+      if (creatorData.hasTranscript) {
+        prompt =
+          'You are a Pokémon TCG market advisor. Analyze this YouTube video transcript from ' + creatorData.creator + '.\n\n' +
+          'Video: "' + creatorData.videoTitle + '" (' + creatorData.videoDate + ')\n\n' +
+          'TRANSCRIPT:\n' + creatorData.transcript + '\n\n' +
+          'Find the single MOST CONVICTED trade recommendation in this transcript — the card or product the creator expressed the highest confidence in buying, holding, or selling.\n\n' +
+          'Format EXACTLY as one line:\n' +
+          '📺 ' + creatorData.creator + ' — [Card or Product Name] — [BUY|HOLD|SELL] — [Reason from transcript] (via: "' + creatorData.videoTitle + '", ' + creatorData.videoDate + ')\n\n' +
+          'Rules:\n' +
+          '- One line only. Most convicted pick only.\n' +
+          '- Must include specific card/product name.\n' +
+          '- Reason must come directly from the transcript.\n' +
+          '- Return ONLY the formatted line, no preamble.';
+      } else {
+        prompt =
+          'You are a Pokémon TCG market advisor. Search the web for the most recent content from ' + creatorData.creator + ' about Pokémon TCG investing.\n\n' +
+          'Their latest YouTube video is: "' + (creatorData.videoTitle || 'unknown') + '" (' + (creatorData.videoDate || 'recent') + ')\n\n' +
+          'Search for any written coverage, community posts, or descriptions of this video to find their top pick.\n\n' +
+          'Format EXACTLY as one line:\n' +
+          '📺 ' + creatorData.creator + ' — [Card or Product Name] — [BUY|HOLD|SELL] — [Reason] (via: "' + (creatorData.videoTitle || 'recent video') + '", ' + (creatorData.videoDate || 'recent') + ')\n\n' +
+          'Rules:\n' +
+          '- One line only. Most convicted pick only.\n' +
+          '- Must include specific card/product name, not vague references.\n' +
+          '- Skip if no reliable info found — do not fabricate.\n' +
+          '- Return ONLY the formatted line, no preamble.';
+      }
+
+      var body = {
+        model: 'claude-sonnet-4-5',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      };
+      if (!creatorData.hasTranscript) {
+        body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
+      }
+
+      return fetch('https://poke-proxy.jjparadisefalls.workers.dev', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var text = (data.content || [])
+          .filter(function(b){ return b.type === 'text'; })
+          .map(function(b){ return b.text || ''; })
+          .join('\n').trim();
+        return text;
+      })
+      .catch(function(){ return ''; });
+    }
+
+    function processBatch(idx) {
+      if (idx >= batches.length) {
+        runMarketNews();
+        return;
+      }
+      var batch    = batches[idx];
+      var batchNum = idx + 1;
+      var total    = batches.length;
+      var names    = batch.map(function(c){ return c.name; }).join(', ');
+      if (statusEl) statusEl.textContent = '📺 Fetching transcripts for batch ' + batchNum + '/' + total + ': ' + names + '…';
+
+      // Step 1: fetch transcripts for all creators in this batch in parallel
+      Promise.all(batch.map(function(c){ return fetchCreatorTranscript(c); }))
+      .then(function(transcriptResults){
+        if (statusEl) statusEl.textContent = '🤖 Analyzing batch ' + batchNum + '/' + total + ' with Claude…';
+        // Step 2: analyze each one sequentially to avoid rate limits
+        var results = [];
+        function analyzeNext(i) {
+          if (i >= transcriptResults.length) {
+            results.forEach(function(line){ if(line && line.indexOf('📺') !== -1) creatorResults.push(line); });
+            processBatch(idx + 1);
+            return;
+          }
+          var cd = transcriptResults[i];
+          if (cd.error) { analyzeNext(i+1); return; }
+          console.log(cd.creator + ' transcript:', cd.hasTranscript ? cd.transcript.slice(0,100) : 'NONE (using web search)');
+          analyzeCreator(cd).then(function(line){
+            results.push(line);
+            analyzeNext(i+1);
+          });
+        }
+        analyzeNext(0);
+      })
+      .catch(function(err){
+        console.error('Batch ' + batchNum + ' error:', err);
+        processBatch(idx + 1);
+      });
+    }
+
+    // ── PHASE 2: Web market news with price tiers ───────────────────────────
+    function runMarketNews() {
+      if (statusEl) statusEl.textContent = '🌐 Searching web for market news…';
+
+      var prompt =
+        'You are a Pokémon TCG market advisor for a professional trading card business dealing in singles, graded slabs, and sealed product.\n\n' +
+        'Search the web RIGHT NOW for the latest Pokémon TCG market news, price movements, investment opportunities, and notable items.\n\n' +
+        'Return between 3 and 10 items total, with these MINIMUMS by price tier:\n' +
+        '- At least 1 item: product valued OVER $1,000\n' +
+        '- At least 1 item: product valued $500–$999.99\n' +
+        '- At least 2 items: product valued $100–$499.99\n' +
+        '- At least 3 items: product valued $10–$99.99\n\n' +
+        'Topics to cover: hot cards, cards to invest in now, beautiful/desirable cards, undervalued cards, sealed product news, set releases, market trends, grading news, tournament impact on prices.\n\n' +
+        'Format EXACTLY — one line per item:\n' +
+        '[TIER_ICON] [Card or Product Name] — [Current Price or Range] — [BUY|HOLD|SELL|WATCH] — [Insight]\n\n' +
+        'Use these tier icons based on price:\n' +
+        '🌐💎 for $1,000+\n' +
+        '🌐🔥 for $500–$999.99\n' +
+        '🌐⭐ for $100–$499.99\n' +
+        '🌐💡 for $10–$99.99\n\n' +
+        'Rules:\n' +
+        '- Specific card/product names only. No vague references.\n' +
+        '- Include current price or price range in each line.\n' +
+        '- Only include items with actionable intelligence.\n' +
+        '- Do NOT include bullet points or numbering before the icon.\n' +
+        '- Return ONLY the formatted lines, no preamble or commentary.';
+
+      fetch('https://poke-proxy.jjparadisefalls.workers.dev', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 1200,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{ role: 'user', content: prompt }]
+        })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        console.log('Market news response:', JSON.stringify(data).slice(0, 300));
+        var text = (data.content || [])
+          .filter(function(b){ return b.type === 'text'; })
+          .map(function(b){ return b.text || ''; })
+          .join('\n').trim();
+        if (text) {
+          text.split('\n')
+            .map(function(l){ return l.trim(); })
+            .filter(function(l){ return l.length > 20 && l.indexOf('🌐') !== -1; })
+            .forEach(function(line){ marketResults.push(line); });
+        }
+        finalize();
+      })
+      .catch(function(err){
+        console.error('Market news error:', err);
+        if (statusEl) statusEl.textContent = '⚠️ Error fetching market news. Finalizing…';
+        finalize();
+      });
+    }
+
+    // ── PHASE 3: Finalize — creators first, then market news ────────────────
+    function finalize() {
+      // Merge: creator picks first, market news second
+      allResults = creatorResults.concat(marketResults);
+
+      // Load into news panel
+      allResults.forEach(function(line){ addItem(line); });
+
+      // Download JSON snapshot
+      try {
+        var payload = { generated: new Date().toISOString(), items: news };
+        var blob    = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var url     = URL.createObjectURL(blob);
+        var a       = document.createElement('a');
+        a.href = url; a.download = 'morning_market_results.json';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+      } catch(e){}
+
+      // ✅ Wipe working arrays so tomorrow's run starts completely clean
+      allResults     = [];
+      creatorResults = [];
+      marketResults  = [];
+
+      var btn      = document.getElementById('pokenews-run-btn');
+      var statusEl = document.getElementById('pokenews-status');
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Run Morning Market'; }
+      if (statusEl) {
+        statusEl.textContent = '✅ Done — ' + news.length + ' insights loaded. JSON saved to Downloads.';
+        setTimeout(function(){ statusEl.style.display = 'none'; }, 8000);
+      }
+    }
+
+    // Kick off Phase 1
+    processBatch(0);
+  }
+
+  // ?? Init ????????????????????????????????????????????????????????????????
+  function init() {
+    load();
+    render();
+
+    // Wire up manual add
+    var input = document.getElementById('pokenews-input');
+    var addBtn = document.getElementById('pokenews-add-btn');
+    if (input) {
+      input.addEventListener('keydown', function(e){ if(e.key==='Enter'){ addItem(input.value.trim()); input.value=''; } });
+    }
+    if (addBtn) {
+      addBtn.addEventListener('click', function(){ if(input){ addItem(input.value.trim()); input.value=''; } });
+    }
+
+    // Wire up Run Morning Market button
+    var runBtn = document.getElementById('pokenews-run-btn');
+    if (runBtn) {
+      runBtn.addEventListener('click', runMorningMarket);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
 </body></html>
+
+
