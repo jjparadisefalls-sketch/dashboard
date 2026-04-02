@@ -2090,26 +2090,47 @@ async function fetchCardPrice(card) {
 
   if (needsSearch) {
     var results = [];
+    var searchError = false;
+    // Safe wrapper — proxy cold-start throws; treat as empty not as genuine "no match"
+    var safeSearch = async function(q) {
+      try { var r = await pdSearch(q); return Array.isArray(r) ? r : []; }
+      catch(e) { searchError = true; console.warn("[PCT] Proxy error:", e.message); return []; }
+    };
     // Strategy 1: name + number (most precise)
-    if (card.num) results = await pdSearch(card.name + " " + card.num);
+    if (card.num) results = await safeSearch(card.name + " " + card.num);
     // Strategy 2: name + set name
-    if ((!Array.isArray(results) || results.length === 0) && card.set) results = await pdSearch(card.name + " " + card.set);
+    if (!results.length && card.set) results = await safeSearch(card.name + " " + card.set);
     // Strategy 3: name + set + number combined
-    if ((!Array.isArray(results) || results.length === 0) && card.set && card.num) results = await pdSearch(card.name + " " + card.set + " " + card.num);
+    if (!results.length && card.set && card.num) results = await safeSearch(card.name + " " + card.set + " " + card.num);
     // Strategy 4: name only
-    if (!Array.isArray(results) || results.length === 0) results = await pdSearch(card.name);
-    // Strategy 5: for alpha-prefix num (SWSH134, SM210, GG10) — also try stripping prefix
-    if ((!Array.isArray(results) || results.length === 0) && card.num && /^[a-z]/i.test(card.num)) {
+    if (!results.length) results = await safeSearch(card.name);
+    // Strategy 5: alpha-prefix num (SWSH134, SM210, GG10) — strip prefix and retry
+    if (!results.length && card.num && /^[a-z]/i.test(card.num)) {
       var numStripped = card.num.replace(/^[a-z]+/i, "");
-      if (numStripped) results = await pdSearch(card.name + " " + numStripped);
+      if (numStripped) results = await safeSearch(card.name + " " + numStripped);
     }
-    var match = findBestMatch(Array.isArray(results) ? results : [], card);
-    if (!match) { console.warn("[PCT] No match for:", card.name, card.set, card.num); return { pdId: null, value: null }; }
+    // If ALL searches errored (proxy asleep), bail without caching — will retry next refresh
+    if (searchError && !results.length) {
+      console.warn("[PCT] All searches failed (proxy unavailable) for:", card.name, card.set, card.num);
+      return { pdId: null, value: null, proxyError: true };
+    }
+    var match = findBestMatch(results, card);
+    if (!match) {
+      console.warn("[PCT] No match for:", card.name, card.set, card.num);
+      // Only cache NOMATCH when proxy was alive and truly returned no match
+      if (results.length > 0) {
+        try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
+      }
+      return { pdId: null, value: null };
+    }
     pdId = String(match.id);
     try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
     // Store matched name for hover debug on the ↺ button
     try { localStorage.setItem(SEARCH_PFX + cacheKey + ":name", [match.name, match.set_name||"", match.num||""].filter(Boolean).join(" · ")); } catch(e) {}
   }
+
+  // Skip NOMATCH sentinel — proxy was alive but card genuinely not in PokeData
+  if (pdId === "NOMATCH") return { pdId: null, value: null };
 
   var isGraded = card.grader && card.grader.toUpperCase() !== "RAW" && card.grade;
 
