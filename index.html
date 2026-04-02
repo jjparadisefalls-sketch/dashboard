@@ -2580,6 +2580,13 @@ function InvSection(_ref_inv) {
                       })(),
                       style:{ background:"none",border:"none",color:"var(--muted)",cursor:"pointer",padding:"3px",fontSize:10 },
                       onClick:function() {
+                        // Always clear the search cache key — works whether or not we have a pdId
+                        var rn = (item.num||"").toLowerCase().trim();
+                        var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
+                        var ck = [(item.name||"").toLowerCase().trim(),(item.set||"").toLowerCase().trim(),nn].join("|");
+                        localStorage.removeItem(SEARCH_PFX + ck);
+                        localStorage.removeItem(SEARCH_PFX + ck + ":name");
+                        // Also clear price/snap cache if we have a pdId
                         if (item.pokedataId) {
                           localStorage.removeItem(FETCH_PFX + item.pokedataId);
                           localStorage.removeItem(SNAP_PFX + item.pokedataId);
@@ -2589,13 +2596,20 @@ function InvSection(_ref_inv) {
                               localStorage.removeItem(SNAP_PFX + item.pokedataId + ":" + g.toLowerCase() + String(gr).replace(".",""));
                             });
                           });
-                          var rn = (item.num||"").toLowerCase().trim();
-                          var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
-                          var ck = [(item.name||"").toLowerCase().trim(),(item.set||"").toLowerCase().trim(),nn].join("|");
-                          localStorage.removeItem(SEARCH_PFX + ck);
-                          localStorage.removeItem(SEARCH_PFX + ck + ":name");
                         }
-                        (item._ids||[item.id]).forEach(function(id){ update(id,{pokedataId:null,value:null}); });
+                        // Reset state then immediately re-fetch this card
+                        (item._ids||[item.id]).forEach(function(id){ update(id,{pokedataId:null,value:null,fetchingPrice:true}); });
+                        var cardForFetch = Object.assign({}, item, {pokedataId:null, value:null});
+                        fetchCardPrice(cardForFetch).then(function(result) {
+                          (item._ids||[item.id]).forEach(function(id){
+                            var changes = { fetchingPrice:false };
+                            if (result.pdId)        changes.pokedataId = result.pdId;
+                            if (result.value != null) changes.value    = result.value;
+                            update(id, changes);
+                          });
+                        }).catch(function() {
+                          (item._ids||[item.id]).forEach(function(id){ update(id,{fetchingPrice:false}); });
+                        });
                       }
                     }, "↺"),
                     React.createElement("button", {
