@@ -2156,16 +2156,121 @@ function SportBadge(_ref16) {
 var savePriceSnapshot = saveSnap;
 var getPriceHistory   = getHistory;
 
-// ── fmtMove: global price-movement helper ─────────────────────────────────
+// ── fmtMove: global price-movement helper ($ and %) ──────────────────────
 function fmtMove(cur, old) {
   if (!old || !cur) return React.createElement("span", {style:{color:"var(--muted)"}}, "—");
   var d = cur - old;
   var p = (d / old) * 100;
   var cls = d > 0.01 ? "move-up" : d < -0.01 ? "move-down" : "move-flat";
   var sign = d > 0 ? "+" : "";
-  return React.createElement("span", { className:"move-pill "+cls },
-    sign+"$"+Math.abs(d).toFixed(2)
+  return React.createElement("span", { className:"move-pill "+cls, style:{whiteSpace:"nowrap"} },
+    sign+"$"+Math.abs(d).toFixed(2)+" · "+sign+p.toFixed(1)+"%"
   );
+}
+
+// ── 130point historical price database ───────────────────────────────────
+var HIST130_PFX      = "cc:hist130:";
+var HIST130_CACHE_MS = 23 * 3600 * 1000; // re-sync after 23h at most
+
+function hist130StorageKey(card) {
+  var g = (card.grader||"raw").toUpperCase().trim();
+  var isGraded = g && g !== "RAW" && card.grade;
+  var gradeTag = isGraded ? (g+String(card.grade).replace(".","")) : "raw";
+  return HIST130_PFX +
+    [(card.name||"").toLowerCase().trim(),
+     (card.set ||"").toLowerCase().trim(),
+     (card.num ||"").toLowerCase().trim(),
+     gradeTag].join("|");
+}
+
+function build130SearchQuery(card) {
+  var g = (card.grader||"raw").toUpperCase().trim();
+  var isGraded = g && g !== "RAW" && card.grade;
+  var q = (card.name||"");
+  if (card.set) q += " " + card.set;
+  if (card.num) q += " #" + card.num;
+  if (isGraded) q += " " + g + " " + card.grade;
+  else          q += " raw";
+  return q;
+}
+
+// Read hist130 from localStorage for one card. Returns { days, lastSync } or null.
+function readHist130(card) {
+  try {
+    var raw = localStorage.getItem(hist130StorageKey(card));
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+// Write hist130 to localStorage, merging new days with existing.
+function writeHist130(card, newDays) {
+  var existing = readHist130(card);
+  var map = {};
+  // Load existing days first
+  ((existing && existing.days) || []).forEach(function(d) { map[d.date] = d; });
+  // Merge / overwrite with newly fetched days
+  (newDays || []).forEach(function(d) { if (d.date && d.avgPrice > 0) map[d.date] = d; });
+  // Sort chronologically and keep at most 1100 days (~3 years)
+  var merged = Object.values(map).sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if (merged.length > 1100) merged = merged.slice(-1100);
+  try {
+    localStorage.setItem(hist130StorageKey(card), JSON.stringify({ lastSync: Date.now(), days: merged }));
+  } catch(e) {}
+  return merged;
+}
+
+// 3-day rolling average centered on daysAgo (uses daysAgo-1, daysAgo, daysAgo+1)
+function rollingAvg(days, daysAgo) {
+  if (!days || !days.length) return null;
+  var now = Date.now();
+  var DAY = 86400000;
+  var target = now - DAY * daysAgo;
+  var prices = [];
+  for (var i = 0; i < days.length; i++) {
+    var ts = new Date(days[i].date + "T12:00:00Z").getTime();
+    var diff = Math.abs(ts - target);
+    if (diff <= DAY * 1.5) prices.push(days[i].avgPrice); // ±1.5 days
+  }
+  if (!prices.length) return null;
+  return prices.reduce(function(a,b){ return a+b; }, 0) / prices.length;
+}
+
+// Fetch 3 years of daily averages from 130point via Claude proxy + web search
+async function fetch130History(card) {
+  var query = build130SearchQuery(card);
+  var prompt =
+    'You are a Pokémon TCG market data assistant. Search 130point.com and eBay completed sales for:\n' +
+    '"' + query + '"\n\n' +
+    'Goal: Build a complete daily price history going back as far as possible (up to 3 years).\n\n' +
+    'For each date that has sales data, compute the average sale price across all sales that day.\n' +
+    'Start from the 7th day that has any sales data for this card (skip the first 6 days to avoid launch-day volatility).\n\n' +
+    'Return ONLY a valid JSON array — no markdown, no explanation:\n' +
+    '[{"date":"YYYY-MM-DD","avgPrice":99.99,"saleCount":5}, ...]\n\n' +
+    'Rules:\n' +
+    '- date must be ISO format YYYY-MM-DD\n' +
+    '- avgPrice is the mean of all sales on that date (exclude obvious outliers >3x or <0.2x the median)\n' +
+    '- saleCount is the number of sales averaged\n' +
+    '- Include only dates where at least 1 real sale occurred\n' +
+    '- Return the array sorted oldest to newest\n' +
+    '- Return ONLY the raw JSON array, nothing else';
+
+  var resp = await fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 4000,
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  var data = await resp.json();
+  var raw = (data.content||[]).filter(function(b){ return b.type==="text"; }).map(function(b){ return b.text; }).join("").trim();
+  raw = raw.replace(/```json|```/g, "").trim();
+  var match = raw.match(/\[[\s\S]*\]/);
+  var newDays = [];
+  if (match) { try { newDays = JSON.parse(match[0]); } catch(e) {} }
+  return writeHist130(card, newDays);
 }
 
 
@@ -2387,6 +2492,14 @@ function InvSection(_ref_inv) {
                 var plClass = pl==null?"profit-neu":pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu";
                 var h = getHistory(item.pokedataId, item.grader, item.grade);
                 var cur = (item.value != null && item.value > 0) ? item.value : null;
+                // hist130 database for 3D/7D/30D rolling averages
+                var hist130data = readHist130(item);
+                var hist130days = hist130data && hist130data.days;
+                var p3d  = hist130days ? rollingAvg(hist130days, 3)  : null;
+                var p7d  = hist130days ? rollingAvg(hist130days, 7)  : null;
+                var p30d = hist130days ? rollingAvg(hist130days, 30) : null;
+                var hist130LastSync = hist130data && hist130data.lastSync;
+                var hist130Age = hist130LastSync ? Math.round((Date.now()-hist130LastSync)/3600000) : null;
 
                 return React.createElement("tr", { key:item.id },
                   React.createElement("td", { style:{ fontWeight:600,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" } },
@@ -2417,9 +2530,9 @@ function InvSection(_ref_inv) {
                   React.createElement("td", { className:plClass, style:{ fontSize:11 } },
                     pl!=null?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"—"
                   ),
-                  React.createElement("td", null, h ? fmtMove(h.latest, h.p3d)  : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
-                  React.createElement("td", null, h ? fmtMove(h.latest, h.p7d)  : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
-                  React.createElement("td", null, h ? fmtMove(h.latest, h.p30d) : React.createElement("span",{style:{color:"var(--muted)"}}, "—")),
+                  React.createElement("td", null, fmtMove(cur, p3d)),
+                  React.createElement("td", null, fmtMove(cur, p7d)),
+                  React.createElement("td", null, fmtMove(cur, p30d)),
                   React.createElement("td", null,
                     React.createElement("select", {
                       style:{ fontSize:10,background:"var(--s2)",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"1px 2px" },
@@ -2430,6 +2543,12 @@ function InvSection(_ref_inv) {
                     )
                   ),
                   React.createElement("td", { style:{ display:"flex",gap:4,alignItems:"center" } },
+                    hist130Age != null
+                      ? React.createElement("span", {
+                          title: "History synced " + (hist130Age < 1 ? "< 1h" : hist130Age + "h") + " ago · " + (hist130days ? hist130days.length : 0) + " days of data",
+                          style: { fontSize:9, color: hist130Age < 24 ? "#34d399" : "#6b7280", fontFamily:"var(--mono)", cursor:"default", whiteSpace:"nowrap" }
+                        }, hist130Age < 24 ? "📈 ✓" : "📈 " + hist130Age + "h")
+                      : React.createElement("span", { style:{ fontSize:9, color:"#4b5563", fontFamily:"var(--mono)" }, title:"No history synced yet" }, "📈 —"),
                     React.createElement("button", {
                       title:(function(){
                         var rn = (item.num||"").toLowerCase().trim();
@@ -2483,6 +2602,8 @@ function InventoryTab(_ref21) {
 
   var _ra = useState(false); var refreshingAll = _ra[0]; var setRefreshingAll = _ra[1];
   var _rp = useState(""); var refreshProgress = _rp[0]; var setRefreshProgress = _rp[1];
+  var _sh = useState(false); var syncingHistory = _sh[0]; var setSyncingHistory = _sh[1];
+  var _sp = useState(""); var syncHistProgress = _sp[0]; var setSyncHistProgress = _sp[1];
 
   var del    = function(id){ setInv((inv||[]).filter(function(x){return x.id!==id;})); };
   var update = function(id,changes){ setInv((inv||[]).map(function(x){return x.id===id?Object.assign({},x,changes):x;})); };
@@ -2530,7 +2651,29 @@ function InventoryTab(_ref21) {
     try { localStorage.setItem("cc:lastManualRefresh", String(Date.now())); } catch(e) {}
   };
 
-  // ── CSV import singles ──────────────────────────────────────────────────
+  // ── Sync all 130point history ───────────────────────────────────────────
+  var syncAllHistory = async function() {
+    var toSync = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed; });
+    // Deduplicate by hist130 key (grouped cards share same key)
+    var seen = {}, unique = [];
+    toSync.forEach(function(c) {
+      var k = hist130StorageKey(c);
+      if (!seen[k]) { seen[k] = true; unique.push(c); }
+    });
+    if (!unique.length) return;
+    setSyncingHistory(true);
+    for (var idx = 0; idx < unique.length; idx++) {
+      var card = unique[idx];
+      setSyncHistProgress((idx+1) + "/" + unique.length + " — " + (card.name||"").slice(0,20));
+      try { await fetch130History(card); } catch(e) { console.warn("hist130 failed for", card.name, e); }
+      // Gentle throttle to avoid hammering the proxy
+      await new Promise(function(r){ setTimeout(r, 1500); });
+    }
+    setSyncingHistory(false);
+    setSyncHistProgress("");
+    // Force re-render so the green checkmarks appear
+    setInv(function(v){ return v ? v.slice() : v; });
+  };
   var handleCSVImport = function(e) {
     var file = e.target.files[0];
     if (!file) return;
@@ -2661,6 +2804,14 @@ function InventoryTab(_ref21) {
           disabled: refreshingAll,
           onClick: refreshAllPrices
         }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
+
+        // Sync history
+        React.createElement("button", {
+          style:{background:syncingHistory?"rgba(99,102,241,0.05)":"rgba(99,102,241,0.15)",border:"1px solid rgba(99,102,241,0.4)",borderRadius:7,padding:"7px 14px",color:"#a5b4fc",fontSize:12,fontWeight:600,cursor:syncingHistory?"not-allowed":"pointer"},
+          disabled: syncingHistory,
+          onClick: syncAllHistory,
+          title: "Fetch 3-year price history from 130point.com for all cards. Populates 3D/7D/30D columns."
+        }, syncingHistory ? ("📈 " + syncHistProgress + "…") : "📈 Sync All History"),
 
         // Fix missing
         React.createElement("button", {
