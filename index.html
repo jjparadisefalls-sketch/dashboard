@@ -2790,12 +2790,24 @@ function InventoryTab(_ref21) {
       var k = hist130StorageKey(c);
       if (!seen[k]) { seen[k] = true; unique.push(c); }
     });
-    if (!unique.length) return;
+    // Skip cards already synced within the last 23 hours
+    var stale = unique.filter(function(c) {
+      var h = readHist130(c);
+      if (!h || !h.lastSync) return true; // never synced
+      return (Date.now() - h.lastSync) > HIST130_CACHE_MS;
+    });
+
+    if (!stale.length) {
+      setSyncHistProgress("✓ All cards up to date");
+      setTimeout(function(){ setSyncHistProgress(""); }, 4000);
+      return;
+    }
+
     setSyncingHistory(true);
     var errors = 0;
-    for (var idx = 0; idx < unique.length; idx++) {
-      var card = unique[idx];
-      setSyncHistProgress((idx+1) + "/" + unique.length + " — " + (card.name||"").slice(0,22));
+    for (var idx = 0; idx < stale.length; idx++) {
+      var card = stale[idx];
+      setSyncHistProgress((idx+1) + "/" + stale.length + " — " + (card.name||"").slice(0,22));
       try {
         await fetch130History(card);
       } catch(e) {
@@ -2954,7 +2966,17 @@ function InventoryTab(_ref21) {
           disabled: syncingHistory,
           onClick: syncAllHistory,
           title: "Fetch 3-year price history from 130point.com for all cards. Populates 3D/7D/30D columns."
-        }, syncingHistory ? ("📈 " + syncHistProgress + "…") : "📈 Sync All History"),
+        }, syncingHistory ? ("📈 " + syncHistProgress + "…") : (function(){
+          // Count how many cards need syncing
+          var sportCards = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed; });
+          var seen = {}, uniq = [];
+          sportCards.forEach(function(c){ var k=hist130StorageKey(c); if(!seen[k]){seen[k]=true;uniq.push(c);} });
+          var pending = uniq.filter(function(c){
+            var h = readHist130(c);
+            return !h || !h.lastSync || (Date.now()-h.lastSync) > HIST130_CACHE_MS;
+          }).length;
+          return pending > 0 ? ("📈 Sync History (" + pending + " pending)") : "📈 History ✓";
+        })()),
 
         // Fix missing
         React.createElement("button", {
