@@ -1484,20 +1484,55 @@ function ApiKeySettings() {
     setSaved2(true);
   };
 
-  return /*#__PURE__*/React.createElement("div", { className: "api-key-section" },
-    /*#__PURE__*/React.createElement("div", { className: "api-key-label" }, "🔑 API Key"),
+  return /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", { className: "api-key-section" },
+      /*#__PURE__*/React.createElement("div", { className: "api-key-label" }, "🔑 Anthropic API Key"),
+      /*#__PURE__*/React.createElement("div", { className: "api-key-row" },
+        /*#__PURE__*/React.createElement("input", {
+          className: "api-key-input",
+          type: "password",
+          placeholder: saved2 ? display : "sk-ant-...",
+          value: input,
+          onChange: function(e) { setInput(e.target.value); },
+          onKeyDown: function(e) { if (e.key === "Enter") save(); }
+        }),
+        /*#__PURE__*/React.createElement("button", { className: "api-key-save", onClick: save }, "Save")
+      ),
+      saved2 && /*#__PURE__*/React.createElement("div", { className: "api-key-status" }, "✓ Key saved")
+    ),
+    /*#__PURE__*/React.createElement(EbayAppIdField, null)
+  );
+}
+
+// ── eBay App ID settings field ────────────────────────────────────────────
+function EbayAppIdField() {
+  var stored = (function(){ try { return localStorage.getItem(EBAY_APP_ID_KEY)||""; } catch(e){ return ""; } })();
+  var _i = useState(""); var ebayInput = _i[0]; var setEbayInput = _i[1];
+  var _s = useState(!!stored); var ebaySaved = _s[0]; var setEbaySaved = _s[1];
+  var ebayDisplay = stored ? stored.slice(0,14)+"..." : "";
+
+  var saveEbay = function() {
+    var v = ebayInput.trim();
+    if (!v) return;
+    try { localStorage.setItem(EBAY_APP_ID_KEY, v); } catch(e) {}
+    setEbaySaved(true);
+    setEbayInput("");
+  };
+
+  return /*#__PURE__*/React.createElement("div", { className: "api-key-section", style:{ borderTop:"1px solid var(--border)", marginTop:0 } },
+    /*#__PURE__*/React.createElement("div", { className: "api-key-label" }, "🛒 eBay App ID (Production)"),
     /*#__PURE__*/React.createElement("div", { className: "api-key-row" },
       /*#__PURE__*/React.createElement("input", {
         className: "api-key-input",
-        type: "password",
-        placeholder: saved2 ? display : "sk-ant-...",
-        value: input,
-        onChange: function(e) { setInput(e.target.value); },
-        onKeyDown: function(e) { if (e.key === "Enter") save(); }
+        type: "text",
+        placeholder: ebaySaved ? ebayDisplay : "JJParadi-...-PRD-...",
+        value: ebayInput,
+        onChange: function(e) { setEbayInput(e.target.value); },
+        onKeyDown: function(e) { if (e.key === "Enter") saveEbay(); }
       }),
-      /*#__PURE__*/React.createElement("button", { className: "api-key-save", onClick: save }, "Save")
+      /*#__PURE__*/React.createElement("button", { className: "api-key-save", onClick: saveEbay }, "Save")
     ),
-    saved2 && /*#__PURE__*/React.createElement("div", { className: "api-key-status" }, "✓ Key saved")
+    ebaySaved && /*#__PURE__*/React.createElement("div", { className: "api-key-status" }, "✓ eBay App ID saved — use 📈 Sync All History to fetch price data")
   );
 }
 
@@ -2256,41 +2291,89 @@ function rollingAvg(days, daysAgo) {
   return prices.reduce(function(a,b){ return a+b; }, 0) / prices.length;
 }
 
-// Fetch 3 years of daily averages from 130point via Claude proxy + web search
-async function fetch130History(card) {
-  var query = build130SearchQuery(card);
-  var prompt =
-    'You are a Pokémon TCG market data assistant. Search 130point.com and eBay completed sales for:\n' +
-    '"' + query + '"\n\n' +
-    'Goal: Build a complete daily price history going back as far as possible (up to 3 years).\n\n' +
-    'For each date that has sales data, compute the average sale price across all sales that day.\n' +
-    'Start from the 7th day that has any sales data for this card (skip the first 6 days to avoid launch-day volatility).\n\n' +
-    'Return ONLY a valid JSON array — no markdown, no explanation:\n' +
-    '[{"date":"YYYY-MM-DD","avgPrice":99.99,"saleCount":5}, ...]\n\n' +
-    'Rules:\n' +
-    '- date must be ISO format YYYY-MM-DD\n' +
-    '- avgPrice is the mean of all sales on that date (exclude obvious outliers >3x or <0.2x the median)\n' +
-    '- saleCount is the number of sales averaged\n' +
-    '- Include only dates where at least 1 real sale occurred\n' +
-    '- Return the array sorted oldest to newest\n' +
-    '- Return ONLY the raw JSON array, nothing else';
+// Fetch sold history from eBay Finding API via Cloudflare Worker proxy
+var EBAY_APP_ID_KEY = "cc:ebayAppId";
 
-  var resp = await fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 4000,
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-      messages: [{ role: "user", content: prompt }]
-    })
+function getEbayAppId() {
+  try { return localStorage.getItem(EBAY_APP_ID_KEY) || ""; } catch(e) { return ""; }
+}
+
+function buildEbayKeywords(card) {
+  var g = (card.grader||"raw").toUpperCase().trim();
+  var isGraded = g && g !== "RAW" && card.grade;
+  var q = card.name || "";
+  if (card.set)  q += " " + card.set;
+  if (card.num)  q += " " + card.num;
+  if (isGraded)  q += " " + g + " " + card.grade;
+  return q.trim();
+}
+
+async function fetchEbaySoldPage(keywords, appId, page) {
+  var url = "https://poke-proxy.jjparadisefalls.workers.dev/ebay-sold" +
+    "?keywords=" + encodeURIComponent(keywords) +
+    "&appId="    + encodeURIComponent(appId) +
+    "&page="     + page;
+  var resp = await fetch(url);
+  if (!resp.ok) throw new Error("eBay proxy error: " + resp.status);
+  return resp.json();
+}
+
+async function fetch130History(card) {
+  var appId = getEbayAppId();
+  if (!appId) throw new Error("No eBay App ID set — add it in Settings");
+
+  var keywords = buildEbayKeywords(card);
+  var allSales = [];
+
+  // Fetch up to 3 pages (300 listings = ~90 days)
+  for (var page = 1; page <= 3; page++) {
+    var data;
+    try { data = await fetchEbaySoldPage(keywords, appId, page); } catch(e) { break; }
+
+    var resp = data && data.findCompletedItemsResponse && data.findCompletedItemsResponse[0];
+    if (!resp || resp.ack[0] !== "Success") break;
+
+    var items = (resp.searchResult && resp.searchResult[0] && resp.searchResult[0].item) || [];
+    if (!items.length) break;
+
+    items.forEach(function(item) {
+      var price = item.sellingStatus && item.sellingStatus[0] && item.sellingStatus[0].currentPrice;
+      var endTime = item.listingInfo && item.listingInfo[0] && item.listingInfo[0].endTime;
+      if (!price || !endTime) return;
+      var priceVal = parseFloat(price[0].__value__ || price[0]._ || 0);
+      if (!priceVal) return;
+      var date = endTime[0].slice(0, 10); // YYYY-MM-DD
+      allSales.push({ date: date, price: priceVal });
+    });
+
+    // Check if there are more pages
+    var totalPages = parseInt((resp.paginationOutput && resp.paginationOutput[0] && resp.paginationOutput[0].totalPages && resp.paginationOutput[0].totalPages[0]) || 1);
+    if (page >= totalPages) break;
+    await new Promise(function(r){ setTimeout(r, 300); });
+  }
+
+  if (!allSales.length) return writeHist130(card, []);
+
+  // Compute daily averages
+  var dayMap = {};
+  allSales.forEach(function(s) {
+    if (!dayMap[s.date]) dayMap[s.date] = [];
+    dayMap[s.date].push(s.price);
   });
-  var data = await resp.json();
-  var raw = (data.content||[]).filter(function(b){ return b.type==="text"; }).map(function(b){ return b.text; }).join("").trim();
-  raw = raw.replace(/```json|```/g, "").trim();
-  var match = raw.match(/\[[\s\S]*\]/);
-  var newDays = [];
-  if (match) { try { newDays = JSON.parse(match[0]); } catch(e) {} }
+
+  var newDays = Object.keys(dayMap).sort().map(function(date) {
+    var prices = dayMap[date].slice().sort(function(a,b){ return a-b; });
+    // Remove outliers: exclude prices > 3x or < 0.25x the median
+    var mid = prices[Math.floor(prices.length/2)];
+    var filtered = prices.filter(function(p){ return p >= mid*0.25 && p <= mid*3; });
+    if (!filtered.length) filtered = prices;
+    var avg = filtered.reduce(function(a,b){ return a+b; },0) / filtered.length;
+    return { date: date, avgPrice: parseFloat(avg.toFixed(2)), saleCount: filtered.length };
+  });
+
+  // Skip the first 6 days of sales data (launch-day volatility)
+  if (newDays.length > 6) newDays = newDays.slice(6);
+
   return writeHist130(card, newDays);
 }
 
@@ -2686,8 +2769,13 @@ function InventoryTab(_ref21) {
     try { localStorage.setItem("cc:lastManualRefresh", String(Date.now())); } catch(e) {}
   };
 
-  // ── Sync all 130point history ───────────────────────────────────────────
+  // ── Sync all eBay history ──────────────────────────────────────────────
   var syncAllHistory = async function() {
+    var appId = getEbayAppId();
+    if (!appId) {
+      alert("Please enter your eBay App ID in the Settings panel first.\n\nGo to Settings → eBay App ID and paste your Production App ID.");
+      return;
+    }
     var toSync = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed; });
     // Deduplicate by hist130 key (grouped cards share same key)
     var seen = {}, unique = [];
@@ -2697,15 +2785,28 @@ function InventoryTab(_ref21) {
     });
     if (!unique.length) return;
     setSyncingHistory(true);
+    var errors = 0;
     for (var idx = 0; idx < unique.length; idx++) {
       var card = unique[idx];
-      setSyncHistProgress((idx+1) + "/" + unique.length + " — " + (card.name||"").slice(0,20));
-      try { await fetch130History(card); } catch(e) { console.warn("hist130 failed for", card.name, e); }
-      // Gentle throttle to avoid hammering the proxy
-      await new Promise(function(r){ setTimeout(r, 1500); });
+      setSyncHistProgress((idx+1) + "/" + unique.length + " — " + (card.name||"").slice(0,22));
+      try {
+        await fetch130History(card);
+      } catch(e) {
+        errors++;
+        console.warn("[eBay hist] failed for", card.name, e.message);
+        if (e.message && e.message.includes("No eBay App ID")) {
+          setSyncingHistory(false);
+          setSyncHistProgress("");
+          alert("eBay App ID not set. Please add it in Settings.");
+          return;
+        }
+      }
+      // Throttle: eBay allows 5000 calls/day, be gentle
+      await new Promise(function(r){ setTimeout(r, 800); });
     }
     setSyncingHistory(false);
     setSyncHistProgress("");
+    if (errors > 0) setSyncHistProgress(errors + " errors — check console");
     // Force re-render so the green checkmarks appear
     setInv(function(v){ return v ? v.slice() : v; });
   };
