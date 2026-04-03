@@ -2330,6 +2330,13 @@ async function fetch130History(card) {
     var data;
     try { data = await fetchEbaySoldPage(keywords, appId, page); } catch(e) { break; }
 
+    // Handle eBay rate limit (errorId 10001) — stop immediately, preserve what we have
+    if (data && data.errorMessage) {
+      var errId = data.errorMessage[0] && data.errorMessage[0].error && data.errorMessage[0].error[0] && data.errorMessage[0].error[0].errorId && data.errorMessage[0].error[0].errorId[0];
+      if (errId === "10001") throw new Error("eBay rate limit reached — try again tomorrow");
+      break;
+    }
+
     var resp = data && data.findCompletedItemsResponse && data.findCompletedItemsResponse[0];
     if (!resp || resp.ack[0] !== "Success") break;
 
@@ -2801,8 +2808,8 @@ function InventoryTab(_ref21) {
           return;
         }
       }
-      // Throttle: eBay allows 5000 calls/day, be gentle
-      await new Promise(function(r){ setTimeout(r, 800); });
+      // Throttle: eBay Finding API — 2.5s between cards to stay well under rate limits
+      await new Promise(function(r){ setTimeout(r, 2500); });
     }
     setSyncingHistory(false);
     setSyncHistProgress("");
