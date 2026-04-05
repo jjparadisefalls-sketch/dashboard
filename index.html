@@ -2059,7 +2059,7 @@ function findBestMatch(results, card) {
     };
     if (deex(rn) === norm(name) || norm(rn) === deex(name)) return true;
     // Strip suffix variants: "Blastoise ex" matches "Blastoise", "Chansey" matches "Chansey Reverse Holo"
-    var strip = function(s) { return norm(s).replace(/\s+(ex|vstar|vmax|gx|reverse holo|holo|stamped)\s*$/i, "").trim(); };
+    var strip = function(s) { return norm(s).replace(/\s+(ex|vstar|vmax|gx|v|reverse holo|holo|stamped)\s*$/i, "").trim(); };
     if (strip(rn) === strip(name) || strip(rn) === name || rn === strip(name)) return true;
     // Apostrophe normalization: "Team Rocket's Crobat" matches "Team Rockets Crobat"
     var deapos = function(s) { return s.replace(/[''\u2019]/g, "").replace(/\s+/g, " ").trim(); };
@@ -2067,6 +2067,16 @@ function findBestMatch(results, card) {
     // Punctuation normalization: "Moltres, Zapdos & Articuno" matches "Moltres Zapdos & Articuno"
     var depunct = function(s) { return s.replace(/[,.:;]/g, " ").replace(/\s+/g, " ").trim(); };
     if (depunct(rn) === depunct(name)) return true;
+    // "Full Art" prefix stripping: "Full Art Machamp GX" matches "Machamp GX"
+    var defullart = function(s) { return norm(s).replace(/^(full art|secret rare|secret|radiant)\s+/i, "").trim(); };
+    if (defullart(rn) === defullart(name)) return true;
+    if (strip(defullart(rn)) === strip(defullart(name))) return true;
+    // "and" vs "&" normalization: "Eevee and Snorlax" matches "Eevee & Snorlax"
+    var deand = function(s) { return norm(s).replace(/\band\b/gi, "&").replace(/\s+/g, " ").trim(); };
+    if (deand(rn) === deand(name)) return true;
+    if (strip(deand(rn)) === strip(deand(name))) return true;
+    if (defullart(deand(rn)) === defullart(deand(name))) return true;
+    if (strip(defullart(deand(rn))) === strip(defullart(deand(name)))) return true;
     return false;
   };
 
@@ -2275,7 +2285,8 @@ function writeHist130(card, newDays) {
   return merged;
 }
 
-// 3-day rolling average centered on daysAgo (uses daysAgo-1, daysAgo, daysAgo+1)
+// Rolling average: finds the price daysAgo days before TODAY
+// Uses ±1.5 day window.
 function rollingAvg(days, daysAgo) {
   if (!days || !days.length) return null;
   var now = Date.now();
@@ -2285,7 +2296,7 @@ function rollingAvg(days, daysAgo) {
   for (var i = 0; i < days.length; i++) {
     var ts = new Date(days[i].date + "T12:00:00Z").getTime();
     var diff = Math.abs(ts - target);
-    if (diff <= DAY * 1.5) prices.push(days[i].avgPrice); // ±1.5 days
+    if (diff <= DAY * 1.5) prices.push(days[i].avgPrice);
   }
   if (!prices.length) return null;
   return prices.reduce(function(a,b){ return a+b; }, 0) / prices.length;
@@ -2593,7 +2604,7 @@ function InvSection(_ref_inv) {
                   React.createElement("td", { style:{ fontFamily:"var(--mono)",color:"var(--cards)",fontSize:11 } },
                     item.fetchingPrice
                       ? React.createElement("span", { style:{ color:"var(--muted)",fontStyle:"italic" } }, "…")
-                      : (item.status === "sold" || item.status === "forsale")
+                      : item.status === "sold"
                         ? React.createElement("input", {
                             type: "number",
                             placeholder: "$ sold",
