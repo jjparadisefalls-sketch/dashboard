@@ -2291,95 +2291,63 @@ function rollingAvg(days, daysAgo) {
   return prices.reduce(function(a,b){ return a+b; }, 0) / prices.length;
 }
 
-// Fetch sold history from eBay Finding API via Cloudflare Worker proxy
-var EBAY_APP_ID_KEY = "cc:ebayAppId";
-
-function getEbayAppId() {
-  try { return localStorage.getItem(EBAY_APP_ID_KEY) || ""; } catch(e) { return ""; }
+// ── PokeData grade mapping ────────────────────────────────────────────────
+// psa_grade codes: 0=raw, 1-10=PSA grades, 21=CGC9.5, 31=BGS9, 32=BGS9.5
+function pdGradeToKey(psaGrade) {
+  if (psaGrade === 0)  return "raw";
+  if (psaGrade >= 1 && psaGrade <= 10) return "PSA:" + psaGrade;
+  if (psaGrade === 21) return "CGC:9.5";
+  if (psaGrade === 31) return "BGS:9";
+  if (psaGrade === 32) return "BGS:9.5";
+  return "OTHER:" + psaGrade;
 }
 
-function buildEbayKeywords(card) {
-  var g = (card.grader||"raw").toUpperCase().trim();
-  var isGraded = g && g !== "RAW" && card.grade;
-  var q = card.name || "";
-  if (card.set)  q += " " + card.set;
-  if (card.num)  q += " " + card.num;
-  if (isGraded)  q += " " + g + " " + card.grade;
-  return q.trim();
+// Match a card's grader/grade to a PokeData psa_grade code
+function cardToPdGrade(card) {
+  var g = (card.grader || "raw").toUpperCase().trim();
+  var n = parseFloat(card.grade || 0);
+  if (!g || g === "RAW") return 0;
+  if (g === "PSA") return n >= 1 && n <= 10 ? n : null;
+  if (g === "CGC" && n === 9.5) return 21;
+  if (g === "BGS" && n === 9)   return 31;
+  if (g === "BGS" && n === 9.5) return 32;
+  return null; // grade not in PokeData's mapping
 }
 
-async function fetchEbaySoldPage(keywords, appId, page) {
-  var url = "https://poke-proxy.jjparadisefalls.workers.dev/ebay-sold" +
-    "?keywords=" + encodeURIComponent(keywords) +
-    "&appId="    + encodeURIComponent(appId) +
-    "&page="     + page;
-  var resp = await fetch(url);
-  if (!resp.ok) throw new Error("eBay proxy error: " + resp.status);
-  return resp.json();
-}
-
+// Fetch price history from PokeData /api/transactions (requires browser session)
 async function fetch130History(card) {
-  var appId = getEbayAppId();
-  if (!appId) throw new Error("No eBay App ID set — add it in Settings");
+  var pdId = card.pokedataId;
+  if (!pdId) throw new Error("No PokeData ID — refresh prices first");
 
-  var keywords = buildEbayKeywords(card);
-  var allSales = [];
+  var resp = await fetch(
+    "https://www.pokedata.io/api/transactions?card_id=" + encodeURIComponent(pdId) + "&page=0"
+  );
+  if (!resp.ok) throw new Error("PokeData transactions error: " + resp.status);
+  var data = await resp.json();
 
-  // Fetch up to 3 pages (300 listings = ~90 days)
-  for (var page = 1; page <= 3; page++) {
-    var data;
-    try { data = await fetchEbaySoldPage(keywords, appId, page); } catch(e) { break; }
+  var ebayAvg = data && data.ebay_avg;
+  if (!ebayAvg || !ebayAvg.length) return writeHist130(card, []);
 
-    // Handle eBay rate limit (errorId 10001) — stop immediately, preserve what we have
-    if (data && data.errorMessage) {
-      var errId = data.errorMessage[0] && data.errorMessage[0].error && data.errorMessage[0].error[0] && data.errorMessage[0].error[0].errorId && data.errorMessage[0].error[0].errorId[0];
-      if (errId === "10001") throw new Error("eBay rate limit reached — try again tomorrow");
-      break;
-    }
+  // Find which psa_grade code matches this card
+  var targetGrade = cardToPdGrade(card);
 
-    var resp = data && data.findCompletedItemsResponse && data.findCompletedItemsResponse[0];
-    if (!resp || resp.ack[0] !== "Success") break;
-
-    var items = (resp.searchResult && resp.searchResult[0] && resp.searchResult[0].item) || [];
-    if (!items.length) break;
-
-    items.forEach(function(item) {
-      var price = item.sellingStatus && item.sellingStatus[0] && item.sellingStatus[0].currentPrice;
-      var endTime = item.listingInfo && item.listingInfo[0] && item.listingInfo[0].endTime;
-      if (!price || !endTime) return;
-      var priceVal = parseFloat(price[0].__value__ || price[0]._ || 0);
-      if (!priceVal) return;
-      var date = endTime[0].slice(0, 10); // YYYY-MM-DD
-      allSales.push({ date: date, price: priceVal });
-    });
-
-    // Check if there are more pages
-    var totalPages = parseInt((resp.paginationOutput && resp.paginationOutput[0] && resp.paginationOutput[0].totalPages && resp.paginationOutput[0].totalPages[0]) || 1);
-    if (page >= totalPages) break;
-    await new Promise(function(r){ setTimeout(r, 300); });
-  }
-
-  if (!allSales.length) return writeHist130(card, []);
-
-  // Compute daily averages
-  var dayMap = {};
-  allSales.forEach(function(s) {
-    if (!dayMap[s.date]) dayMap[s.date] = [];
-    dayMap[s.date].push(s.price);
+  // Filter to matching grade rows
+  var gradeRows = ebayAvg.filter(function(e) {
+    return targetGrade === null ? e.psa_grade === 0 : e.psa_grade === targetGrade;
   });
 
-  var newDays = Object.keys(dayMap).sort().map(function(date) {
-    var prices = dayMap[date].slice().sort(function(a,b){ return a-b; });
-    // Remove outliers: exclude prices > 3x or < 0.25x the median
-    var mid = prices[Math.floor(prices.length/2)];
-    var filtered = prices.filter(function(p){ return p >= mid*0.25 && p <= mid*3; });
-    if (!filtered.length) filtered = prices;
-    var avg = filtered.reduce(function(a,b){ return a+b; },0) / filtered.length;
-    return { date: date, avgPrice: parseFloat(avg.toFixed(2)), saleCount: filtered.length };
-  });
-
-  // Skip the first 6 days of sales data (launch-day volatility)
-  if (newDays.length > 6) newDays = newDays.slice(6);
+  // Convert to our { date, avgPrice, saleCount } format
+  var newDays = gradeRows
+    .filter(function(e) { return e.sold_price > 0; })
+    .map(function(e) {
+      // Convert "Fri, 03 Oct 2025 00:00:00 GMT" to "2025-10-03"
+      var d = new Date(e.date_sold);
+      var iso = d.getFullYear() + '-' +
+        String(d.getMonth()+1).padStart(2,'0') + '-' +
+        String(d.getDate()).padStart(2,'0');
+      return { date: iso, avgPrice: parseFloat(e.sold_price.toFixed(2)), saleCount: 1 };
+    })
+    .sort(function(a,b){ return a.date.localeCompare(b.date); });
 
   return writeHist130(card, newDays);
 }
@@ -2776,14 +2744,9 @@ function InventoryTab(_ref21) {
     try { localStorage.setItem("cc:lastManualRefresh", String(Date.now())); } catch(e) {}
   };
 
-  // ── Sync all eBay history ──────────────────────────────────────────────
+  // ── Sync all PokeData transaction history ──────────────────────────────
   var syncAllHistory = async function() {
-    var appId = getEbayAppId();
-    if (!appId) {
-      alert("Please enter your eBay App ID in the Settings panel first.\n\nGo to Settings → eBay App ID and paste your Production App ID.");
-      return;
-    }
-    var toSync = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed; });
+    var toSync = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed && i.pokedataId; });
     // Deduplicate by hist130 key (grouped cards share same key)
     var seen = {}, unique = [];
     toSync.forEach(function(c) {
@@ -2813,15 +2776,14 @@ function InventoryTab(_ref21) {
       } catch(e) {
         errors++;
         console.warn("[eBay hist] failed for", card.name, e.message);
-        if (e.message && e.message.includes("No eBay App ID")) {
-          setSyncingHistory(false);
-          setSyncHistProgress("");
-          alert("eBay App ID not set. Please add it in Settings.");
-          return;
+        if (e.message && e.message.includes("No PokeData ID")) {
+          console.warn("[hist] Skipping card with no PokeData ID:", card.name);
+        } else if (e.message && e.message.includes("PokeData transactions error")) {
+          console.warn("[hist] PokeData error for", card.name, ":", e.message);
         }
       }
-      // Throttle: eBay Finding API — 2.5s between cards to stay well under rate limits
-      await new Promise(function(r){ setTimeout(r, 2500); });
+      // Throttle: PokeData — brief pause to avoid hammering
+      await new Promise(function(r){ setTimeout(r, 500); });
     }
     setSyncingHistory(false);
     setSyncHistProgress("");
@@ -2965,7 +2927,7 @@ function InventoryTab(_ref21) {
           style:{background:syncingHistory?"rgba(99,102,241,0.05)":"rgba(99,102,241,0.15)",border:"1px solid rgba(99,102,241,0.4)",borderRadius:7,padding:"7px 14px",color:"#a5b4fc",fontSize:12,fontWeight:600,cursor:syncingHistory?"not-allowed":"pointer"},
           disabled: syncingHistory,
           onClick: syncAllHistory,
-          title: "Fetch 3-year price history from 130point.com for all cards. Populates 3D/7D/30D columns."
+          title: "Fetch price history from PokeData for all cards. Requires PokeData login. Populates 3D/7D/30D columns."
         }, syncingHistory ? ("📈 " + syncHistProgress + "…") : (function(){
           // Count how many cards need syncing
           var sportCards = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed; });
