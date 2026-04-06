@@ -2188,122 +2188,19 @@ function fmtMove(cur, old) {
 }
 
 // ── 130point historical price database ───────────────────────────────────
-var HIST130_PFX      = "cc:hist130:";
-var HIST130_CACHE_MS = 23 * 3600 * 1000; // re-sync after 23h at most
 
-function hist130StorageKey(card) {
-  var g = (card.grader||"raw").toUpperCase().trim();
-  var isGraded = g && g !== "RAW" && card.grade;
-  var gradeTag = isGraded ? (g+String(card.grade).replace(".","")) : "raw";
-  return HIST130_PFX +
-    [(card.name||"").toLowerCase().trim(),
-     (card.set ||"").toLowerCase().trim(),
-     (card.num ||"").toLowerCase().trim(),
-     gradeTag].join("|");
-}
 
-// Read hist130 from localStorage for one card. Returns { days, lastSync } or null.
-function readHist130(card) {
-  try {
-    var raw = localStorage.getItem(hist130StorageKey(card));
-    return raw ? JSON.parse(raw) : null;
-  } catch(e) { return null; }
-}
 
-// Write hist130 to localStorage, merging new days with existing.
-function writeHist130(card, newDays) {
-  var existing = readHist130(card);
-  var map = {};
-  // Load existing days first
-  ((existing && existing.days) || []).forEach(function(d) { map[d.date] = d; });
-  // Merge / overwrite with newly fetched days
-  (newDays || []).forEach(function(d) { if (d.date && d.avgPrice > 0) map[d.date] = d; });
-  // Sort chronologically and keep at most 1100 days (~3 years)
-  var merged = Object.values(map).sort(function(a,b){ return a.date.localeCompare(b.date); });
-  if (merged.length > 1100) merged = merged.slice(-1100);
-  try {
-    localStorage.setItem(hist130StorageKey(card), JSON.stringify({ lastSync: Date.now(), days: merged }));
-  } catch(e) {}
-  return merged;
-}
 
 // Rolling average: finds the price daysAgo days before TODAY
 // Uses ±1.5 day window.
-function rollingAvg(days, daysAgo) {
-  if (!days || !days.length) return null;
-  var now = Date.now();
-  var DAY = 86400000;
-  var target = now - DAY * daysAgo;
-  var prices = [];
-  for (var i = 0; i < days.length; i++) {
-    var ts = new Date(days[i].date + "T12:00:00Z").getTime();
-    var diff = Math.abs(ts - target);
-    if (diff <= DAY * 1.5) prices.push(days[i].avgPrice);
-  }
-  if (!prices.length) return null;
-  return prices.reduce(function(a,b){ return a+b; }, 0) / prices.length;
-}
 
 // ── PokeData grade mapping ────────────────────────────────────────────────
 // psa_grade codes: 0=raw, 1-10=PSA grades, 21=CGC9.5, 31=BGS9, 32=BGS9.5
-function pdGradeToKey(psaGrade) {
-  if (psaGrade === 0)  return "raw";
-  if (psaGrade >= 1 && psaGrade <= 10) return "PSA:" + psaGrade;
-  if (psaGrade === 21) return "CGC:9.5";
-  if (psaGrade === 31) return "BGS:9";
-  if (psaGrade === 32) return "BGS:9.5";
-  return "OTHER:" + psaGrade;
-}
 
 // Match a card's grader/grade to a PokeData psa_grade code
-function cardToPdGrade(card) {
-  var g = (card.grader || "raw").toUpperCase().trim();
-  var n = parseFloat(card.grade || 0);
-  if (!g || g === "RAW") return 0;
-  if (g === "PSA") return n >= 1 && n <= 10 ? n : null;
-  if (g === "CGC" && n === 9.5) return 21;
-  if (g === "BGS" && n === 9)   return 31;
-  if (g === "BGS" && n === 9.5) return 32;
-  return null; // grade not in PokeData's mapping
-}
 
 // Fetch price history from PokeData /api/transactions (requires browser session)
-async function fetch130History(card) {
-  var pdId = card.pokedataId;
-  if (!pdId) throw new Error("No PokeData ID — refresh prices first");
-
-  var resp = await fetch(
-    "https://poke-proxy.jjparadisefalls.workers.dev/transactions?card_id=" + encodeURIComponent(pdId) + "&page=0"
-  );
-  if (!resp.ok) throw new Error("PokeData transactions error: " + resp.status);
-  var data = await resp.json();
-
-  var ebayAvg = data && data.ebay_avg;
-  if (!ebayAvg || !ebayAvg.length) return writeHist130(card, []);
-
-  // Find which psa_grade code matches this card
-  var targetGrade = cardToPdGrade(card);
-
-  // Filter to matching grade rows
-  var gradeRows = ebayAvg.filter(function(e) {
-    return targetGrade === null ? e.psa_grade === 0 : e.psa_grade === targetGrade;
-  });
-
-  // Convert to our { date, avgPrice, saleCount } format
-  var newDays = gradeRows
-    .filter(function(e) { return e.sold_price > 0; })
-    .map(function(e) {
-      // Convert "Fri, 03 Oct 2025 00:00:00 GMT" to "2025-10-03"
-      var d = new Date(e.date_sold);
-      var iso = d.getFullYear() + '-' +
-        String(d.getMonth()+1).padStart(2,'0') + '-' +
-        String(d.getDate()).padStart(2,'0');
-      return { date: iso, avgPrice: parseFloat(e.sold_price.toFixed(2)), saleCount: 1 };
-    })
-    .sort(function(a,b){ return a.date.localeCompare(b.date); });
-
-  return writeHist130(card, newDays);
-}
 
 
 
@@ -2524,14 +2421,11 @@ function InvSection(_ref_inv) {
                 var plClass = pl==null?"profit-neu":pl>0?"profit-pos":pl<0?"profit-neg":"profit-neu";
                 var h = getHistory(item.pokedataId, item.grader, item.grade);
                 var cur = (item.value != null && item.value > 0) ? item.value : null;
-                // hist130 database for 3D/7D/30D rolling averages
-                var hist130data = readHist130(item);
-                var hist130days = hist130data && hist130data.days;
-                var p3d  = hist130days ? rollingAvg(hist130days, 3)  : null;
-                var p7d  = hist130days ? rollingAvg(hist130days, 7)  : null;
-                var p30d = hist130days ? rollingAvg(hist130days, 30) : null;
-                var hist130LastSync = hist130data && hist130data.lastSync;
-                var hist130Age = hist130LastSync ? Math.round((Date.now()-hist130LastSync)/3600000) : null;
+                // Use saveSnap history for 3D/7D/30D — anchored to today
+                var p3d  = h ? h.p3d  : null;
+                var p7d  = h ? h.p7d  : null;
+                var p30d = h ? h.p30d : null;
+                var snapAge = h && h.count > 0 ? Math.round((Date.now() - (item._lastSnap||0)) / 3600000) : null;
 
                 return React.createElement("tr", { key:item.id },
                   React.createElement("td", { style:{ fontWeight:600,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" } },
@@ -2575,12 +2469,12 @@ function InvSection(_ref_inv) {
                     )
                   ),
                   React.createElement("td", { style:{ display:"flex",gap:4,alignItems:"center" } },
-                    hist130Age != null
+                    h && h.count > 0
                       ? React.createElement("span", {
-                          title: "History synced " + (hist130Age < 1 ? "< 1h" : hist130Age + "h") + " ago · " + (hist130days ? hist130days.length : 0) + " days of data",
-                          style: { fontSize:9, color: hist130Age < 24 ? "#34d399" : "#6b7280", fontFamily:"var(--mono)", cursor:"default", whiteSpace:"nowrap" }
-                        }, hist130Age < 24 ? "📈 ✓" : "📈 " + hist130Age + "h")
-                      : React.createElement("span", { style:{ fontSize:9, color:"#4b5563", fontFamily:"var(--mono)" }, title:"No history synced yet" }, "📈 —"),
+                          title: h.count + " days of price history",
+                          style: { fontSize:9, color: h.count >= 7 ? "#34d399" : "#6b7280", fontFamily:"var(--mono)", cursor:"default", whiteSpace:"nowrap" }
+                        }, "📈 " + h.count + "d")
+                      : React.createElement("span", { style:{ fontSize:9, color:"#4b5563", fontFamily:"var(--mono)" }, title:"No price history yet — refreshes daily" }, "📈 —"),
                     React.createElement("button", {
                       title:(function(){
                         var rn = (item.num||"").toLowerCase().trim();
@@ -2648,8 +2542,6 @@ function InventoryTab(_ref21) {
 
   var _ra = useState(false); var refreshingAll = _ra[0]; var setRefreshingAll = _ra[1];
   var _rp = useState(""); var refreshProgress = _rp[0]; var setRefreshProgress = _rp[1];
-  var _sh = useState(false); var syncingHistory = _sh[0]; var setSyncingHistory = _sh[1];
-  var _sp = useState(""); var syncHistProgress = _sp[0]; var setSyncHistProgress = _sp[1];
 
   var del    = function(id){ setInv((inv||[]).filter(function(x){return x.id!==id;})); };
   var update = function(id,changes){ setInv((inv||[]).map(function(x){return x.id===id?Object.assign({},x,changes):x;})); };
@@ -2698,52 +2590,6 @@ function InventoryTab(_ref21) {
   };
 
   // ── Sync all PokeData transaction history ──────────────────────────────
-  var syncAllHistory = async function() {
-    var toSync = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed && i.pokedataId; });
-    // Deduplicate by hist130 key (grouped cards share same key)
-    var seen = {}, unique = [];
-    toSync.forEach(function(c) {
-      var k = hist130StorageKey(c);
-      if (!seen[k]) { seen[k] = true; unique.push(c); }
-    });
-    // Skip cards already synced within the last 23 hours
-    var stale = unique.filter(function(c) {
-      var h = readHist130(c);
-      if (!h || !h.lastSync) return true; // never synced
-      return (Date.now() - h.lastSync) > HIST130_CACHE_MS;
-    });
-
-    if (!stale.length) {
-      setSyncHistProgress("✓ All cards up to date");
-      setTimeout(function(){ setSyncHistProgress(""); }, 4000);
-      return;
-    }
-
-    setSyncingHistory(true);
-    var errors = 0;
-    for (var idx = 0; idx < stale.length; idx++) {
-      var card = stale[idx];
-      setSyncHistProgress((idx+1) + "/" + stale.length + " — " + (card.name||"").slice(0,22));
-      try {
-        await fetch130History(card);
-      } catch(e) {
-        errors++;
-        console.warn("[eBay hist] failed for", card.name, e.message);
-        if (e.message && e.message.includes("No PokeData ID")) {
-          console.warn("[hist] Skipping card with no PokeData ID:", card.name);
-        } else if (e.message && e.message.includes("PokeData transactions error")) {
-          console.warn("[hist] PokeData error for", card.name, ":", e.message);
-        }
-      }
-      // Throttle: PokeData — brief pause to avoid hammering
-      await new Promise(function(r){ setTimeout(r, 500); });
-    }
-    setSyncingHistory(false);
-    setSyncHistProgress("");
-    if (errors > 0) setSyncHistProgress(errors + " errors — check console");
-    // Force re-render so the green checkmarks appear
-    setInv(function(v){ return v ? v.slice() : v; });
-  };
   var handleCSVImport = function(e) {
     var file = e.target.files[0];
     if (!file) return;
@@ -2872,23 +2718,6 @@ function InventoryTab(_ref21) {
           onClick: refreshAllPrices
         }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
 
-        // Sync history
-        React.createElement("button", {
-          style:{background:syncingHistory?"rgba(99,102,241,0.05)":"rgba(99,102,241,0.15)",border:"1px solid rgba(99,102,241,0.4)",borderRadius:7,padding:"7px 14px",color:"#a5b4fc",fontSize:12,fontWeight:600,cursor:syncingHistory?"not-allowed":"pointer"},
-          disabled: syncingHistory,
-          onClick: syncAllHistory,
-          title: "Fetch price history from PokeData for all cards. Requires PokeData login. Populates 3D/7D/30D columns."
-        }, syncingHistory ? ("📈 " + syncHistProgress + "…") : (function(){
-          // Count how many cards need syncing
-          var sportCards = (inv||[]).filter(function(i){ return i.sport===activeSport && !i.sealed; });
-          var seen = {}, uniq = [];
-          sportCards.forEach(function(c){ var k=hist130StorageKey(c); if(!seen[k]){seen[k]=true;uniq.push(c);} });
-          var pending = uniq.filter(function(c){
-            var h = readHist130(c);
-            return !h || !h.lastSync || (Date.now()-h.lastSync) > HIST130_CACHE_MS;
-          }).length;
-          return pending > 0 ? ("📈 Sync History (" + pending + " pending)") : "📈 History ✓";
-        })()),
 
         // Fix missing
         React.createElement("button", {
