@@ -2176,15 +2176,16 @@ function SportBadge(_ref16) {
 // ── Backward-compat shims (used by Watchlist/SearchTab code) ─────────────
 
 // ── fmtMove: global price-movement helper ($ and %) ──────────────────────
-function fmtMove(cur, old) {
+function fmtMove(cur, old, mode) {
   if (!old || !cur) return React.createElement("span", {style:{color:"var(--muted)"}}, "—");
   var d = cur - old;
   var p = (d / old) * 100;
   var cls = d > 0.01 ? "move-up" : d < -0.01 ? "move-down" : "move-flat";
   var sign = d > 0 ? "+" : "";
-  return React.createElement("span", { className:"move-pill "+cls, style:{whiteSpace:"nowrap"} },
-    sign+"$"+Math.abs(d).toFixed(2)+" · "+sign+p.toFixed(1)+"%"
-  );
+  var label = (mode === "%")
+    ? sign + p.toFixed(1) + "%"
+    : sign + "$" + Math.abs(d).toFixed(2);
+  return React.createElement("span", { className:"move-pill "+cls, style:{whiteSpace:"nowrap"} }, label);
 }
 
 // ── 130point historical price database ───────────────────────────────────
@@ -2345,6 +2346,7 @@ function InvSection(_ref_inv) {
       del = _ref_inv.del, update = _ref_inv.update, clearSection = _ref_inv.clearSection;
   var _s = useState(false); var collapsed = _s[0]; var setCollapsed = _s[1];
   var _sm = useState("value"); var sortMode = _sm[0]; var setSortMode = _sm[1];
+  var _mm = useState("$"); var moveMode = _mm[0]; var setMoveMode = _mm[1];
 
   // Group duplicate cards (same name+set+num+grader+grade) into single rows
   var grouped = (function() {
@@ -2391,6 +2393,11 @@ function InvSection(_ref_inv) {
       totalValue>0 && React.createElement("span", { style:{ fontSize:10,fontFamily:"var(--mono)",color:profit>=0?"var(--green)":"var(--red)" } }, (profit>=0?"+":"")+"$"+profit.toFixed(2)),
       totalPaid>0&&totalValue>0 && React.createElement("span", { style:{ fontSize:10,fontFamily:"var(--mono)",color:profit>=0?"var(--green)":"var(--red)" } }, "("+((profit/totalPaid)*100).toFixed(1)+"%)"),
       clearSection && React.createElement("button", { style:{ fontSize:10,padding:"2px 8px",borderRadius:4,border:"1px solid rgba(248,113,113,0.3)",background:"none",color:"var(--red)",cursor:"pointer" }, onClick:function(ev){ev.stopPropagation();if(confirm("Clear all "+title+"?"))clearSection();} }, "Clear"),
+      React.createElement("button", {
+        style:{ fontSize:10,padding:"2px 8px",borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.05)",color:"var(--muted2)",cursor:"pointer",fontFamily:"var(--mono)",fontWeight:600 },
+        onClick:function(ev){ ev.stopPropagation(); setMoveMode(function(m){ return m==="$" ? "%" : "$"; }); },
+        title:"Toggle 3D/7D/30D between $ and % change"
+      }, moveMode),
       React.createElement("span", { style:{ fontSize:10,color:"var(--muted)" } }, collapsed?"▶":"▼")
     ),
     !collapsed && React.createElement("div", { className:"panel", style:{ padding:0 } },
@@ -2456,9 +2463,9 @@ function InvSection(_ref_inv) {
                   React.createElement("td", { className:plClass, style:{ fontSize:11 } },
                     pl!=null?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"—"
                   ),
-                  React.createElement("td", null, fmtMove(cur, p3d)),
-                  React.createElement("td", null, fmtMove(cur, p7d)),
-                  React.createElement("td", null, fmtMove(cur, p30d)),
+                  React.createElement("td", null, fmtMove(cur, p3d, moveMode)),
+                  React.createElement("td", null, fmtMove(cur, p7d, moveMode)),
+                  React.createElement("td", null, fmtMove(cur, p30d, moveMode)),
                   React.createElement("td", null,
                     React.createElement("select", {
                       style:{ fontSize:10,background:"var(--s2)",border:"1px solid var(--border)",borderRadius:4,color:"var(--muted)",padding:"1px 2px" },
