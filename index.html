@@ -263,11 +263,10 @@ var POKEMON_TCG_API_KEY = "tcg_live_0b7bbd4667635153ed895df714aee9dd868c0d8d";
 var TCG_HEADERS = {
   "X-Api-Key": POKEMON_TCG_API_KEY
 };
-var CORS_PROXY = "https://corsproxy.io/?";
 
 // Wrap Pokemon TCG API calls through CORS proxy
 // ── PokeData API helpers (via Render proxy) ───────────────────────────────
-var PD_PROXY = "https://pokedata-proxy.onrender.com";
+var PD_PROXY = "https://poke-proxy.jjparadisefalls.workers.dev";
 function pdSearch(_x, _x2) {
   return _pdSearch.apply(this, arguments);
 }
@@ -1500,41 +1499,10 @@ function ApiKeySettings() {
       ),
       saved2 && /*#__PURE__*/React.createElement("div", { className: "api-key-status" }, "✓ Key saved")
     ),
-    /*#__PURE__*/React.createElement(EbayAppIdField, null)
   );
 }
 
 // ── eBay App ID settings field ────────────────────────────────────────────
-function EbayAppIdField() {
-  var stored = (function(){ try { return localStorage.getItem(EBAY_APP_ID_KEY)||""; } catch(e){ return ""; } })();
-  var _i = useState(""); var ebayInput = _i[0]; var setEbayInput = _i[1];
-  var _s = useState(!!stored); var ebaySaved = _s[0]; var setEbaySaved = _s[1];
-  var ebayDisplay = stored ? stored.slice(0,14)+"..." : "";
-
-  var saveEbay = function() {
-    var v = ebayInput.trim();
-    if (!v) return;
-    try { localStorage.setItem(EBAY_APP_ID_KEY, v); } catch(e) {}
-    setEbaySaved(true);
-    setEbayInput("");
-  };
-
-  return /*#__PURE__*/React.createElement("div", { className: "api-key-section", style:{ borderTop:"1px solid var(--border)", marginTop:0 } },
-    /*#__PURE__*/React.createElement("div", { className: "api-key-label" }, "🛒 eBay App ID (Production)"),
-    /*#__PURE__*/React.createElement("div", { className: "api-key-row" },
-      /*#__PURE__*/React.createElement("input", {
-        className: "api-key-input",
-        type: "text",
-        placeholder: ebaySaved ? ebayDisplay : "JJParadi-...-PRD-...",
-        value: ebayInput,
-        onChange: function(e) { setEbayInput(e.target.value); },
-        onKeyDown: function(e) { if (e.key === "Enter") saveEbay(); }
-      }),
-      /*#__PURE__*/React.createElement("button", { className: "api-key-save", onClick: saveEbay }, "Save")
-    ),
-    ebaySaved && /*#__PURE__*/React.createElement("div", { className: "api-key-status" }, "✓ eBay App ID saved — use 📈 Sync All History to fetch price data")
-  );
-}
 
 
 // ── Pokémon News ─────────────────────────────────────────────────────────────
@@ -1796,7 +1764,6 @@ function PokeNews() {
 var SNAP_PFX   = "cc:snap:";
 var FETCH_PFX  = "cc:lastfetch:";
 var SEARCH_PFX = "cc:searchid:";
-var FETCH_CACHE_MS = 24 * 3600 * 1000; // 24 hours
 var DAY_MS = 86400000;
 
 function gradeSnapKey(pdId, grader, grade) {
@@ -2179,19 +2146,7 @@ async function fetchCardPrice(card) {
 
   var isGraded = card.grader && card.grader.toUpperCase() !== "RAW" && card.grade;
 
-  // Check fetch cache
-  var lastFetch = localStorage.getItem(FETCH_PFX + pdId);
-  var cacheValid = lastFetch && (Date.now() - Number(lastFetch) < FETCH_CACHE_MS);
-
-  if (cacheValid) {
-    var snapHist = getHistory(pdId, card.grader, card.grade);
-    var snapPrice = snapHist ? snapHist.latest : null;
-    if (isGraded && !snapPrice) {
-      cacheValid = false; // graded card has no graded snap yet — force fresh fetch
-    } else {
-      return { pdId: pdId, value: snapPrice || card.value || null, cached: true };
-    }
-  }
+  // No fetch cache — always get fresh price (PokeData Platinum has 180k+ credits)
 
   // Fresh fetch
   var pd = await pdPricing(pdId);
@@ -2219,8 +2174,6 @@ function SportBadge(_ref16) {
 }
 
 // ── Backward-compat shims (used by Watchlist/SearchTab code) ─────────────
-var savePriceSnapshot = saveSnap;
-var getPriceHistory   = getHistory;
 
 // ── fmtMove: global price-movement helper ($ and %) ──────────────────────
 function fmtMove(cur, old) {
@@ -2247,17 +2200,6 @@ function hist130StorageKey(card) {
      (card.set ||"").toLowerCase().trim(),
      (card.num ||"").toLowerCase().trim(),
      gradeTag].join("|");
-}
-
-function build130SearchQuery(card) {
-  var g = (card.grader||"raw").toUpperCase().trim();
-  var isGraded = g && g !== "RAW" && card.grade;
-  var q = (card.name||"");
-  if (card.set) q += " " + card.set;
-  if (card.num) q += " #" + card.num;
-  if (isGraded) q += " " + g + " " + card.grade;
-  else          q += " raw";
-  return q;
 }
 
 // Read hist130 from localStorage for one card. Returns { days, lastSync } or null.
@@ -2331,7 +2273,7 @@ async function fetch130History(card) {
   if (!pdId) throw new Error("No PokeData ID — refresh prices first");
 
   var resp = await fetch(
-    "https://www.pokedata.io/api/transactions?card_id=" + encodeURIComponent(pdId) + "&page=0"
+    "https://poke-proxy.jjparadisefalls.workers.dev/transactions?card_id=" + encodeURIComponent(pdId) + "&page=0"
   );
   if (!resp.ok) throw new Error("PokeData transactions error: " + resp.status);
   var data = await resp.json();
@@ -2821,11 +2763,8 @@ function InventoryTab(_ref21) {
         // If we have a cached pdId, look up existing value from snap history
         var cachedValue = null;
         if (cachedPdId) {
-          var lastFetch = localStorage.getItem(FETCH_PFX + cachedPdId);
-          if (lastFetch && Date.now()-Number(lastFetch) < FETCH_CACHE_MS) {
-            var h = getHistory(cachedPdId, grader, grade);
-            if (h && h.latest) cachedValue = h.latest;
-          }
+          var h = getHistory(cachedPdId, grader, grade);
+          if (h && h.latest) cachedValue = h.latest;
         }
         // Store one record per CSV row with qty — grouping display handles collation
         imported.push({
@@ -3344,7 +3283,7 @@ function WatchlistTab(_ref26) {
                   prices: prices
                 }) : w;
               }));
-              if (price) savePriceSnapshot(card.id, price);
+              if (price) saveSnap(card.id, price);
             }
             _context6.next = 10;
             break;
@@ -3765,7 +3704,7 @@ function DashboardWatchlist(_ref30) {
                   }) : w;
                 });
               });
-              if (price) savePriceSnapshot(id, price);
+              if (price) saveSnap(id, price);
             } else {
               setWl(function (prev) {
                 return prev.map(function (w) {
@@ -3816,7 +3755,7 @@ function DashboardWatchlist(_ref30) {
           while (1) switch (_context9.prev = _context9.next) {
             case 0:
               // Save today's snapshot if we have a price
-              if (card.price) savePriceSnapshot(card.id, Number(card.price));
+              if (card.price) saveSnap(card.id, Number(card.price));
 
               // If price is stale (>6h), refresh from PokeData
               lastFetch = localStorage.getItem("cc:lastfetch:" + card.id);
@@ -3833,7 +3772,7 @@ function DashboardWatchlist(_ref30) {
                 p = pd.pricing;
                 price = ((_p$TCGPlayer8 = p["TCGPlayer"]) === null || _p$TCGPlayer8 === void 0 ? void 0 : _p$TCGPlayer8.value) || ((_p$eBayRaw8 = p["eBay Raw"]) === null || _p$eBayRaw8 === void 0 ? void 0 : _p$eBayRaw8.value) || ((_p$PokedataRaw6 = p["Pokedata Raw"]) === null || _p$PokedataRaw6 === void 0 ? void 0 : _p$PokedataRaw6.value) || null;
                 if (price) {
-                  savePriceSnapshot(card.id, price);
+                  saveSnap(card.id, price);
                   // Update card price in watchlist
                   setWl(function (prev) {
                     return prev.map(function (w) {
@@ -3860,7 +3799,7 @@ function DashboardWatchlist(_ref30) {
               _context9.t0 = _context9["catch"](3);
             case 12:
               // Load history from snapshots
-              hist = getPriceHistory(card.id);
+              hist = getHistory(card.id);
               if (hist) setHistory(function (h) {
                 return _objectSpread(_objectSpread({}, h), {}, _defineProperty({}, card.id, hist));
               });
