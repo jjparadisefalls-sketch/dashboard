@@ -2618,7 +2618,7 @@ function InventoryTab(_ref21) {
 
   var backfillHistory = async function() {
     var cards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed && c.sport === activeSport; });
-    // Deduplicate by pokedataId so we only fetch each card once
+    // Deduplicate by pokedataId — one API fetch covers ALL grades for that card
     var seen = {};
     var unique = cards.filter(function(c){
       if (seen[c.pokedataId]) return false;
@@ -2633,49 +2633,50 @@ function InventoryTab(_ref21) {
       var card = unique[i];
       setBackfillProgress((i+1) + "/" + unique.length + " — " + (card.name||"").substring(0,18));
       try {
-        // Fetch page 0 — 100 rows covers ~6 months of daily data
         var r = await fetch("https://poke-proxy.jjparadisefalls.workers.dev/transactions?card_id=" + card.pokedataId + "&page=0");
         if (!r.ok) { skipped++; continue; }
         var d = await r.json();
         var rows = d.ebay_avg || [];
         if (!rows.length) { skipped++; continue; }
 
+        // Write every grade returned — raw (0), PSA, CGC, BGS all at once
+        // Group rows by grade key first to batch localStorage reads/writes
+        var byKey = {};
         rows.forEach(function(row) {
           var gm = GRADE_MAP[row.psa_grade];
           if (!gm || !row.sold_price || row.sold_price <= 0) return;
-
-          // Parse date from PokeData format "Thu, 02 Oct 2025 00:00:00 GMT"
           var dateObj = new Date(row.date_sold);
           if (isNaN(dateObj.getTime())) return;
-          var dateStr = dateObj.toDateString(); // matches saveSnap format
-          var ts = dateObj.getTime();
-
-          // Build the snap key directly
           var g = gm.grader.toUpperCase().trim();
           var isGraded = g && g !== "RAW" && gm.grade;
           var suffix = isGraded ? (":" + g.toLowerCase() + String(gm.grade).replace(".", "")) : ":raw";
           var key = "cc:snap:" + card.pokedataId + suffix;
+          if (!byKey[key]) byKey[key] = [];
+          byKey[key].push({ date: dateObj.toDateString(), ts: dateObj.getTime(), price: row.sold_price });
+        });
 
-          // Read existing snaps, only add if this date not already present
+        // Write each grade's snaps in one localStorage read+write
+        Object.keys(byKey).forEach(function(key) {
+          var newRows = byKey[key];
           var snaps = [];
           try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
-          var alreadyHas = snaps.some(function(s){ return s.date === dateStr; });
-          if (alreadyHas) return;
-
-          snaps.push({ date: dateStr, ts: ts, price: row.sold_price });
-          // Sort by ts ascending so getHistory find() works correctly
+          var existingDates = {};
+          snaps.forEach(function(s){ existingDates[s.date] = true; });
+          newRows.forEach(function(nr) {
+            if (!existingDates[nr.date]) { snaps.push(nr); saved++; }
+          });
           snaps.sort(function(a,b){ return a.ts - b.ts; });
-          if (snaps.length > 90) snaps = snaps.slice(-90);
-          try { localStorage.setItem(key, JSON.stringify(snaps)); saved++; } catch(e) {}
+          if (snaps.length > 365) snaps = snaps.slice(-365);
+          try { localStorage.setItem(key, JSON.stringify(snaps)); } catch(e) {}
         });
-      } catch(e) { skipped++; }
 
-      await new Promise(function(r){ setTimeout(r, 150); }); // gentle pacing
+      } catch(e) { skipped++; }
+      await new Promise(function(r){ setTimeout(r, 150); });
     }
 
     setBackfilling(false);
     setBackfillProgress("");
-    alert("✅ Backfill complete! " + saved + " historical snaps saved across " + unique.length + " cards (" + skipped + " skipped). Your 3D/7D/30D columns will now populate — refresh the page to see them.");
+    alert("✅ Backfill complete! " + saved + " historical snaps saved across " + unique.length + " cards (" + skipped + " skipped). Refresh the page to see 3D/7D/30D populated.");
   };
 
   // ── Sync all PokeData transaction history ──────────────────────────────
