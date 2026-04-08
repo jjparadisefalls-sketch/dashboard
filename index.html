@@ -2599,75 +2599,99 @@ function InventoryTab(_ref21) {
   };
 
   // ── Backfill historical price snaps from PokeData /api/transactions ───────
-  // Maps PokeData psa_grade codes to the grader/grade pair used by gradeSnapKey
-  var GRADE_MAP = {
-    0:    { grader: "raw",  grade: ""    },
-    6:    { grader: "PSA",  grade: "8"   },
-    7:    { grader: "PSA",  grade: "7"   },
-    8:    { grader: "PSA",  grade: "8.5" },
-    9:    { grader: "PSA",  grade: "9"   },
-    10:   { grader: "PSA",  grade: "10"  },
-    20:   { grader: "CGC",  grade: "8"   },
-    20.5: { grader: "CGC",  grade: "8.5" },
-    21:   { grader: "CGC",  grade: "9"   },
-    21.5: { grader: "CGC",  grade: "9.5" },
-    22:   { grader: "CGC",  grade: "10"  },
-    29:   { grader: "BGS",  grade: "9"   },
-    31:   { grader: "BGS",  grade: "9.5" },
+  // Converts a card's grader+grade to the psa_grade code PokeData uses in ebay_avg
+  var toPsaGrade = function(grader, grade) {
+    var g = (grader || "").toUpperCase().trim();
+    var n = parseFloat(grade) || 0;
+    if (!g || g === "RAW") return 0;
+    if (g === "PSA") {
+      if (n === 10) return 10;
+      if (n === 9)  return 9;
+      if (n === 8)  return 8;   // PSA 8 = psa_grade 8 (PSA 8.5 would be 8 too, approximated)
+      if (n === 7)  return 7;
+      if (n === 6)  return 6;
+      return 10; // default PSA to 10 if unrecognized
+    }
+    if (g === "CGC") {
+      if (n === 10)  return 22;
+      if (n === 9.5) return 21.5;
+      if (n === 9)   return 21;
+      if (n === 8)   return 20;
+      return 22;
+    }
+    if (g === "BGS") {
+      if (n === 9.5) return 31;
+      if (n === 9)   return 29;
+      return 31;
+    }
+    // TAG, SGC, and other graders — treat as PSA equivalent
+    if (n === 10) return 10;
+    if (n === 9)  return 9;
+    return 10;
   };
 
   var backfillHistory = async function() {
+    // Get all unique pdId+gradeKey combos — one fetch per pdId, one snap series per grade
     var cards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed && c.sport === activeSport; });
-    // Deduplicate by pokedataId — one API fetch covers ALL grades for that card
-    var seen = {};
-    var unique = cards.filter(function(c){
-      if (seen[c.pokedataId]) return false;
-      seen[c.pokedataId] = true;
-      return true;
+    if (!cards.length) { alert("No cards with PokeData IDs found."); return; }
+
+    // Group by pokedataId — fetch once per card, write snaps for every unique grader/grade on that card
+    var byPdId = {};
+    cards.forEach(function(c) {
+      if (!byPdId[c.pokedataId]) byPdId[c.pokedataId] = [];
+      // Only add unique grader+grade combos (a card can appear twice with same grade)
+      var snapKey = gradeSnapKey(c.pokedataId, c.grader, c.grade);
+      var already = byPdId[c.pokedataId].some(function(x){ return x.snapKey === snapKey; });
+      if (!already) {
+        byPdId[c.pokedataId].push({
+          snapKey:  snapKey,
+          psaGrade: toPsaGrade(c.grader, c.grade),
+          name:     c.name
+        });
+      }
     });
-    if (!unique.length) { alert("No cards with PokeData IDs found."); return; }
+
+    var pdIds = Object.keys(byPdId);
     setBackfilling(true);
     var saved = 0, skipped = 0;
 
-    for (var i = 0; i < unique.length; i++) {
-      var card = unique[i];
-      setBackfillProgress((i+1) + "/" + unique.length + " — " + (card.name||"").substring(0,18));
+    for (var i = 0; i < pdIds.length; i++) {
+      var pdId = pdIds[i];
+      var gradeEntries = byPdId[pdId];
+      setBackfillProgress((i+1) + "/" + pdIds.length + " — " + (gradeEntries[0].name||"").substring(0,18));
+
       try {
-        var r = await fetch("https://poke-proxy.jjparadisefalls.workers.dev/transactions?card_id=" + card.pokedataId + "&page=0");
+        var r = await fetch("https://poke-proxy.jjparadisefalls.workers.dev/transactions?card_id=" + pdId + "&page=0");
         if (!r.ok) { skipped++; continue; }
         var d = await r.json();
         var rows = d.ebay_avg || [];
         if (!rows.length) { skipped++; continue; }
 
-        // Write every grade returned — raw (0), PSA, CGC, BGS all at once
-        // Group rows by grade key first to batch localStorage reads/writes
-        var byKey = {};
-        rows.forEach(function(row) {
-          var gm = GRADE_MAP[row.psa_grade];
-          if (!gm || !row.sold_price || row.sold_price <= 0) return;
-          var dateObj = new Date(row.date_sold);
-          if (isNaN(dateObj.getTime())) return;
-          var g = gm.grader.toUpperCase().trim();
-          var isGraded = g && g !== "RAW" && gm.grade;
-          var suffix = isGraded ? (":" + g.toLowerCase() + String(gm.grade).replace(".", "")) : ":raw";
-          var key = "cc:snap:" + card.pokedataId + suffix;
-          if (!byKey[key]) byKey[key] = [];
-          byKey[key].push({ date: dateObj.toDateString(), ts: dateObj.getTime(), price: row.sold_price });
-        });
+        // For each unique grade on this card, find matching rows and write snaps
+        gradeEntries.forEach(function(entry) {
+          var matching = rows.filter(function(row) {
+            return row.psa_grade === entry.psaGrade && row.sold_price > 0;
+          });
+          if (!matching.length) return;
 
-        // Write each grade's snaps in one localStorage read+write
-        Object.keys(byKey).forEach(function(key) {
-          var newRows = byKey[key];
+          // Read existing snaps for this key
           var snaps = [];
-          try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
+          try { snaps = JSON.parse(localStorage.getItem(entry.snapKey) || "[]"); } catch(e) {}
           var existingDates = {};
           snaps.forEach(function(s){ existingDates[s.date] = true; });
-          newRows.forEach(function(nr) {
-            if (!existingDates[nr.date]) { snaps.push(nr); saved++; }
+
+          matching.forEach(function(row) {
+            var dateObj = new Date(row.date_sold);
+            if (isNaN(dateObj.getTime())) return;
+            var dateStr = dateObj.toDateString();
+            if (existingDates[dateStr]) return;
+            snaps.push({ date: dateStr, ts: dateObj.getTime(), price: row.sold_price });
+            saved++;
           });
+
           snaps.sort(function(a,b){ return a.ts - b.ts; });
           if (snaps.length > 365) snaps = snaps.slice(-365);
-          try { localStorage.setItem(key, JSON.stringify(snaps)); } catch(e) {}
+          try { localStorage.setItem(entry.snapKey, JSON.stringify(snaps)); } catch(e) {}
         });
 
       } catch(e) { skipped++; }
@@ -2676,7 +2700,7 @@ function InventoryTab(_ref21) {
 
     setBackfilling(false);
     setBackfillProgress("");
-    alert("✅ Backfill complete! " + saved + " historical snaps saved across " + unique.length + " cards (" + skipped + " skipped). Refresh the page to see 3D/7D/30D populated.");
+    alert("✅ Backfill complete! " + saved + " snaps saved across " + pdIds.length + " cards (" + skipped + " skipped). Refresh the page to see 3D/7D/30D populated.");
   };
 
   // ── Sync all PokeData transaction history ──────────────────────────────
