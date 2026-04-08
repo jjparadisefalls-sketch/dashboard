@@ -2549,6 +2549,8 @@ function InventoryTab(_ref21) {
 
   var _ra = useState(false); var refreshingAll = _ra[0]; var setRefreshingAll = _ra[1];
   var _rp = useState(""); var refreshProgress = _rp[0]; var setRefreshProgress = _rp[1];
+  var _bf = useState(false); var backfilling = _bf[0]; var setBackfilling = _bf[1];
+  var _bfp = useState(""); var backfillProgress = _bfp[0]; var setBackfillProgress = _bfp[1];
 
   var del    = function(id){ setInv((inv||[]).filter(function(x){return x.id!==id;})); };
   var update = function(id,changes){ setInv((inv||[]).map(function(x){return x.id===id?Object.assign({},x,changes):x;})); };
@@ -2594,6 +2596,86 @@ function InventoryTab(_ref21) {
     setRefreshingAll(false);
     setRefreshProgress("");
     try { localStorage.setItem("cc:lastManualRefresh", String(Date.now())); } catch(e) {}
+  };
+
+  // ── Backfill historical price snaps from PokeData /api/transactions ───────
+  // Maps PokeData psa_grade codes to the grader/grade pair used by gradeSnapKey
+  var GRADE_MAP = {
+    0:    { grader: "raw",  grade: ""    },
+    6:    { grader: "PSA",  grade: "8.0" },
+    7:    { grader: "PSA",  grade: "7.0" },
+    8:    { grader: "PSA",  grade: "8.5" },
+    9:    { grader: "PSA",  grade: "9.0" },
+    10:   { grader: "PSA",  grade: "10.0"},
+    20:   { grader: "CGC",  grade: "8.0" },
+    20.5: { grader: "CGC",  grade: "8.5" },
+    21:   { grader: "CGC",  grade: "9.0" },
+    21.5: { grader: "CGC",  grade: "9.5" },
+    22:   { grader: "CGC",  grade: "10.0"},
+    29:   { grader: "BGS",  grade: "9.0" },
+    31:   { grader: "BGS",  grade: "9.5" },
+  };
+
+  var backfillHistory = async function() {
+    var cards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed && c.sport === activeSport; });
+    // Deduplicate by pokedataId so we only fetch each card once
+    var seen = {};
+    var unique = cards.filter(function(c){
+      if (seen[c.pokedataId]) return false;
+      seen[c.pokedataId] = true;
+      return true;
+    });
+    if (!unique.length) { alert("No cards with PokeData IDs found."); return; }
+    setBackfilling(true);
+    var saved = 0, skipped = 0;
+
+    for (var i = 0; i < unique.length; i++) {
+      var card = unique[i];
+      setBackfillProgress((i+1) + "/" + unique.length + " — " + (card.name||"").substring(0,18));
+      try {
+        // Fetch page 0 — 100 rows covers ~6 months of daily data
+        var r = await fetch("https://poke-proxy.jjparadisefalls.workers.dev/transactions?card_id=" + card.pokedataId + "&page=0");
+        if (!r.ok) { skipped++; continue; }
+        var d = await r.json();
+        var rows = d.ebay_avg || [];
+        if (!rows.length) { skipped++; continue; }
+
+        rows.forEach(function(row) {
+          var gm = GRADE_MAP[row.psa_grade];
+          if (!gm || !row.sold_price || row.sold_price <= 0) return;
+
+          // Parse date from PokeData format "Thu, 02 Oct 2025 00:00:00 GMT"
+          var dateObj = new Date(row.date_sold);
+          if (isNaN(dateObj.getTime())) return;
+          var dateStr = dateObj.toDateString(); // matches saveSnap format
+          var ts = dateObj.getTime();
+
+          // Build the snap key directly
+          var g = gm.grader.toUpperCase().trim();
+          var isGraded = g && g !== "RAW" && gm.grade;
+          var suffix = isGraded ? (":" + g.toLowerCase() + String(gm.grade).replace(".", "")) : ":raw";
+          var key = "cc:snap:" + card.pokedataId + suffix;
+
+          // Read existing snaps, only add if this date not already present
+          var snaps = [];
+          try { snaps = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
+          var alreadyHas = snaps.some(function(s){ return s.date === dateStr; });
+          if (alreadyHas) return;
+
+          snaps.push({ date: dateStr, ts: ts, price: row.sold_price });
+          // Sort by ts ascending so getHistory find() works correctly
+          snaps.sort(function(a,b){ return a.ts - b.ts; });
+          if (snaps.length > 90) snaps = snaps.slice(-90);
+          try { localStorage.setItem(key, JSON.stringify(snaps)); saved++; } catch(e) {}
+        });
+      } catch(e) { skipped++; }
+
+      await new Promise(function(r){ setTimeout(r, 150); }); // gentle pacing
+    }
+
+    setBackfilling(false);
+    setBackfillProgress("");
+    alert("✅ Backfill complete! " + saved + " historical snaps saved across " + unique.length + " cards (" + skipped + " skipped). Your 3D/7D/30D columns will now populate — refresh the page to see them.");
   };
 
   // ── Sync all PokeData transaction history ──────────────────────────────
@@ -2751,7 +2833,12 @@ function InventoryTab(_ref21) {
           }
         }, "🔧 Fix Missing"),
 
-        // Clear all
+        // Backfill history
+        React.createElement("button", {
+          style:{background:backfilling?"rgba(52,211,153,0.05)":"rgba(52,211,153,0.15)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:7,padding:"7px 14px",color:"#34d399",fontSize:12,fontWeight:600,cursor:backfilling?"not-allowed":"pointer"},
+          disabled: backfilling,
+          onClick: backfillHistory
+        }, backfilling ? ("📊 " + backfillProgress + "…") : "📊 Backfill History"),
         React.createElement("button", {
           style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer"},
           onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
