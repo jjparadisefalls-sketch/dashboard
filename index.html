@@ -2631,29 +2631,40 @@ function InventoryTab(_ref21) {
   };
 
   var backfillHistory = async function() {
-    // Get all unique pdId+gradeKey combos — one fetch per pdId, one snap series per grade
     var cards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed && c.sport === activeSport; });
     if (!cards.length) { alert("No cards with PokeData IDs found."); return; }
 
-    // Group by pokedataId — fetch once per card, write snaps for every unique grader/grade on that card
+    // First: trim any existing snap arrays that are over 90 entries to free space
+    var trimmed = 0;
+    Object.keys(localStorage).filter(function(k){ return k.startsWith("cc:snap:"); }).forEach(function(k) {
+      try {
+        var arr = JSON.parse(localStorage.getItem(k) || "[]");
+        if (arr.length > 90) {
+          arr = arr.slice(-90);
+          localStorage.setItem(k, JSON.stringify(arr));
+          trimmed++;
+        }
+      } catch(e) {}
+    });
+    if (trimmed > 0) console.log("[Backfill] Trimmed", trimmed, "oversized snap arrays");
+
+    // Group by pokedataId — one fetch per unique card
     var byPdId = {};
     cards.forEach(function(c) {
       if (!byPdId[c.pokedataId]) byPdId[c.pokedataId] = [];
-      // Only add unique grader+grade combos (a card can appear twice with same grade)
-      var snapKey = gradeSnapKey(c.pokedataId, c.grader, c.grade);
-      var already = byPdId[c.pokedataId].some(function(x){ return x.snapKey === snapKey; });
-      if (!already) {
-        byPdId[c.pokedataId].push({
-          snapKey:  snapKey,
-          psaGrade: toPsaGrade(c.grader, c.grade),
-          name:     c.name
-        });
-      }
+      var key = gradeSnapKey(c.pokedataId, c.grader, c.grade);
+      var already = byPdId[c.pokedataId].some(function(x){ return x.snapKey === key; });
+      if (!already) byPdId[c.pokedataId].push({
+        snapKey: key,
+        psaGrade: toPsaGrade(c.grader, c.grade),
+        name: c.name
+      });
     });
 
     var pdIds = Object.keys(byPdId);
     setBackfilling(true);
-    var saved = 0, skipped = 0;
+    var saved = 0, skipped = 0, errors = 0;
+    var cutoff = Date.now() - (90 * 24 * 3600 * 1000); // 90 days ago
 
     for (var i = 0; i < pdIds.length; i++) {
       var pdId = pdIds[i];
@@ -2667,40 +2678,51 @@ function InventoryTab(_ref21) {
         var rows = d.ebay_avg || [];
         if (!rows.length) { skipped++; continue; }
 
-        // For each unique grade on this card, find matching rows and write snaps
         gradeEntries.forEach(function(entry) {
           var matching = rows.filter(function(row) {
-            return row.psa_grade === entry.psaGrade && row.sold_price > 0;
+            if (row.psa_grade !== entry.psaGrade || !(row.sold_price > 0)) return false;
+            // Only keep last 90 days
+            var dt = new Date(row.date_sold);
+            return !isNaN(dt.getTime()) && dt.getTime() >= cutoff;
           });
           if (!matching.length) return;
 
-          // Read existing snaps for this key
           var snaps = [];
           try { snaps = JSON.parse(localStorage.getItem(entry.snapKey) || "[]"); } catch(e) {}
           var existingDates = {};
           snaps.forEach(function(s){ existingDates[s.date] = true; });
 
           matching.forEach(function(row) {
-            var dateObj = new Date(row.date_sold);
-            if (isNaN(dateObj.getTime())) return;
-            var dateStr = dateObj.toDateString();
-            if (existingDates[dateStr]) return;
-            snaps.push({ date: dateStr, ts: dateObj.getTime(), price: row.sold_price });
-            saved++;
+            var dt = new Date(row.date_sold);
+            var ds = dt.toDateString();
+            if (!existingDates[ds]) {
+              snaps.push({ date: ds, ts: dt.getTime(), price: row.sold_price });
+              saved++;
+            }
           });
 
           snaps.sort(function(a,b){ return a.ts - b.ts; });
-          if (snaps.length > 365) snaps = snaps.slice(-365);
-          try { localStorage.setItem(entry.snapKey, JSON.stringify(snaps)); } catch(e) {}
-        });
+          if (snaps.length > 90) snaps = snaps.slice(-90);
 
-      } catch(e) { skipped++; }
-      await new Promise(function(r){ setTimeout(r, 150); });
+          try {
+            localStorage.setItem(entry.snapKey, JSON.stringify(snaps));
+          } catch(e) {
+            errors++;
+            console.error("[Backfill] Storage error on", entry.snapKey, e.message);
+          }
+        });
+      } catch(e) { skipped++; console.error("[Backfill] Fetch error on", pdId, e.message); }
+
+      await new Promise(function(res){ setTimeout(res, 150); });
     }
 
     setBackfilling(false);
     setBackfillProgress("");
-    alert("✅ Backfill complete! " + saved + " snaps saved across " + pdIds.length + " cards (" + skipped + " skipped). Refresh the page to see 3D/7D/30D populated.");
+    var msg = "✅ Backfill complete! " + saved + " snaps saved across " + pdIds.length + " cards.";
+    if (skipped) msg += " " + skipped + " skipped.";
+    if (errors) msg += " ⚠️ " + errors + " storage errors — localStorage may be full.";
+    msg += " Refresh the page to see 3D/7D/30D.";
+    alert(msg);
   };
 
   // ── Sync all PokeData transaction history ──────────────────────────────
