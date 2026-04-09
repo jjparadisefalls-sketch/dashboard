@@ -2833,44 +2833,41 @@ function InventoryTab(_ref21) {
         onClick: refreshAllPrices
       }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
 
+      // Fix missing
+      React.createElement("button", {
+        style:{background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:7,padding:"7px 14px",color:"#fbbf24",fontSize:12,fontWeight:600,cursor:"pointer"},
+        title:"Clears cached 'no match' results so Refresh All Prices will retry searching for unmatched cards",
+        onClick:function(){
+          var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
+          var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
+          var noId     = allCards.filter(function(x){return !x.pokedataId;});
+          missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
+          var buildKey = function(x) {
+            var rn = (x.num||"").toLowerCase().trim();
+            var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
+            return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn].join("|");
+          };
+          noId.forEach(function(x){ localStorage.removeItem(SEARCH_PFX+buildKey(x)); });
+          setInv((inv||[]).map(function(x){
+            if (x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
+            return x;
+          }));
+          alert("Cache cleared for "+missing.length+" unpriced + "+noId.length+" unmatched. Hit Refresh All Prices to re-fetch.");
+        }
+      }, "🔧 Fix Missing"),
 
-        // Fix missing — clears NOMATCH cache and resets unmatched cards so Refresh re-searches
-        React.createElement("button", {
-          style:{background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:7,padding:"7px 14px",color:"#fbbf24",fontSize:12,fontWeight:600,cursor:"pointer"},
-          title:"Clears cached 'no match' results so Refresh All Prices will retry searching for unmatched cards",
-          onClick:function(){
-            var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
-            var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
-            var noId     = allCards.filter(function(x){return !x.pokedataId;});
-            // Clear fetch cache for all unpriced cards with a pdId
-            missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
-            // Clear search cache for all cards without a pdId (no match found previously)
-            var buildKey = function(x) {
-              var rn = (x.num||"").toLowerCase().trim();
-              var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
-              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn].join("|");
-            };
-            noId.forEach(function(x){ localStorage.removeItem(SEARCH_PFX+buildKey(x)); });
-            // Also clear pokedataId on unpriced cards so they re-search from scratch
-            setInv((inv||[]).map(function(x){
-              if (x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
-              return x;
-            }));
-            alert("Cache cleared for "+missing.length+" unpriced + "+noId.length+" unmatched. Hit Refresh All Prices to re-fetch.");
-          }
-        }, "🔧 Fix Missing"),
+      // Backfill history
+      React.createElement("button", {
+        style:{background:backfilling?"rgba(52,211,153,0.05)":"rgba(52,211,153,0.15)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:7,padding:"7px 14px",color:"#34d399",fontSize:12,fontWeight:600,cursor:backfilling?"not-allowed":"pointer"},
+        disabled: backfilling,
+        onClick: backfillHistory
+      }, backfilling ? ("📊 " + backfillProgress + "…") : "📊 Backfill History"),
 
-        // Backfill history
-        React.createElement("button", {
-          style:{background:backfilling?"rgba(52,211,153,0.05)":"rgba(52,211,153,0.15)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:7,padding:"7px 14px",color:"#34d399",fontSize:12,fontWeight:600,cursor:backfilling?"not-allowed":"pointer"},
-          disabled: backfilling,
-          onClick: backfillHistory
-        }, backfilling ? ("📊 " + backfillProgress + "…") : "📊 Backfill History"),
-        React.createElement("button", {
-          style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer"},
-          onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
-        }, "🗑 Clear All")
-      )
+      // Clear all
+      React.createElement("button", {
+        style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer"},
+        onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
+      }, "🗑 Clear All")
     ),
 
     // Sections
