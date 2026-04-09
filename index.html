@@ -2631,40 +2631,29 @@ function InventoryTab(_ref21) {
   };
 
   var backfillHistory = async function() {
+    // Get all unique pdId+gradeKey combos — one fetch per pdId, one snap series per grade
     var cards = (inv||[]).filter(function(c){ return c.pokedataId && !c.sealed && c.sport === activeSport; });
     if (!cards.length) { alert("No cards with PokeData IDs found."); return; }
 
-    // First: trim any existing snap arrays that are over 90 entries to free space
-    var trimmed = 0;
-    Object.keys(localStorage).filter(function(k){ return k.startsWith("cc:snap:"); }).forEach(function(k) {
-      try {
-        var arr = JSON.parse(localStorage.getItem(k) || "[]");
-        if (arr.length > 90) {
-          arr = arr.slice(-90);
-          localStorage.setItem(k, JSON.stringify(arr));
-          trimmed++;
-        }
-      } catch(e) {}
-    });
-    if (trimmed > 0) console.log("[Backfill] Trimmed", trimmed, "oversized snap arrays");
-
-    // Group by pokedataId — one fetch per unique card
+    // Group by pokedataId — fetch once per card, write snaps for every unique grader/grade on that card
     var byPdId = {};
     cards.forEach(function(c) {
       if (!byPdId[c.pokedataId]) byPdId[c.pokedataId] = [];
-      var key = gradeSnapKey(c.pokedataId, c.grader, c.grade);
-      var already = byPdId[c.pokedataId].some(function(x){ return x.snapKey === key; });
-      if (!already) byPdId[c.pokedataId].push({
-        snapKey: key,
-        psaGrade: toPsaGrade(c.grader, c.grade),
-        name: c.name
-      });
+      // Only add unique grader+grade combos (a card can appear twice with same grade)
+      var snapKey = gradeSnapKey(c.pokedataId, c.grader, c.grade);
+      var already = byPdId[c.pokedataId].some(function(x){ return x.snapKey === snapKey; });
+      if (!already) {
+        byPdId[c.pokedataId].push({
+          snapKey:  snapKey,
+          psaGrade: toPsaGrade(c.grader, c.grade),
+          name:     c.name
+        });
+      }
     });
 
     var pdIds = Object.keys(byPdId);
     setBackfilling(true);
-    var saved = 0, skipped = 0, errors = 0;
-    var cutoff = Date.now() - (90 * 24 * 3600 * 1000); // 90 days ago
+    var saved = 0, skipped = 0;
 
     for (var i = 0; i < pdIds.length; i++) {
       var pdId = pdIds[i];
@@ -2678,51 +2667,40 @@ function InventoryTab(_ref21) {
         var rows = d.ebay_avg || [];
         if (!rows.length) { skipped++; continue; }
 
+        // For each unique grade on this card, find matching rows and write snaps
         gradeEntries.forEach(function(entry) {
           var matching = rows.filter(function(row) {
-            if (row.psa_grade !== entry.psaGrade || !(row.sold_price > 0)) return false;
-            // Only keep last 90 days
-            var dt = new Date(row.date_sold);
-            return !isNaN(dt.getTime()) && dt.getTime() >= cutoff;
+            return row.psa_grade === entry.psaGrade && row.sold_price > 0;
           });
           if (!matching.length) return;
 
+          // Read existing snaps for this key
           var snaps = [];
           try { snaps = JSON.parse(localStorage.getItem(entry.snapKey) || "[]"); } catch(e) {}
           var existingDates = {};
           snaps.forEach(function(s){ existingDates[s.date] = true; });
 
           matching.forEach(function(row) {
-            var dt = new Date(row.date_sold);
-            var ds = dt.toDateString();
-            if (!existingDates[ds]) {
-              snaps.push({ date: ds, ts: dt.getTime(), price: row.sold_price });
-              saved++;
-            }
+            var dateObj = new Date(row.date_sold);
+            if (isNaN(dateObj.getTime())) return;
+            var dateStr = dateObj.toDateString();
+            if (existingDates[dateStr]) return;
+            snaps.push({ date: dateStr, ts: dateObj.getTime(), price: row.sold_price });
+            saved++;
           });
 
           snaps.sort(function(a,b){ return a.ts - b.ts; });
-          if (snaps.length > 90) snaps = snaps.slice(-90);
-
-          try {
-            localStorage.setItem(entry.snapKey, JSON.stringify(snaps));
-          } catch(e) {
-            errors++;
-            console.error("[Backfill] Storage error on", entry.snapKey, e.message);
-          }
+          if (snaps.length > 365) snaps = snaps.slice(-365);
+          try { localStorage.setItem(entry.snapKey, JSON.stringify(snaps)); } catch(e) {}
         });
-      } catch(e) { skipped++; console.error("[Backfill] Fetch error on", pdId, e.message); }
 
-      await new Promise(function(res){ setTimeout(res, 150); });
+      } catch(e) { skipped++; }
+      await new Promise(function(r){ setTimeout(r, 150); });
     }
 
     setBackfilling(false);
     setBackfillProgress("");
-    var msg = "✅ Backfill complete! " + saved + " snaps saved across " + pdIds.length + " cards.";
-    if (skipped) msg += " " + skipped + " skipped.";
-    if (errors) msg += " ⚠️ " + errors + " storage errors — localStorage may be full.";
-    msg += " Refresh the page to see 3D/7D/30D.";
-    alert(msg);
+    alert("✅ Backfill complete! " + saved + " snaps saved across " + pdIds.length + " cards (" + skipped + " skipped). Refresh the page to see 3D/7D/30D populated.");
   };
 
   // ── Sync all PokeData transaction history ──────────────────────────────
@@ -2837,27 +2815,29 @@ function InventoryTab(_ref21) {
       )
     ),
 
-    // Action toolbar
-    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px",justifyContent:"space-between"} },
-      // Sport tabs
+    // Sport tabs row
+    React.createElement("div", { style:{marginBottom:10} },
       React.createElement("div", { className:"market-tabs" },
         [{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"},{id:"disney",label:"✨ Disney"}].map(function(sp){
           return React.createElement("button", { key:sp.id, className:"market-tab"+(activeSport===sp.id?" active":""), onClick:function(){setActive(sp.id);} }, sp.label);
         })
-      ),
+      )
+    ),
 
-      React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"} },
-        // Refresh
-        React.createElement("button", {
-          style:{background:refreshingAll?"rgba(240,192,64,0.05)":"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--cards)",fontSize:12,fontWeight:600,cursor:refreshingAll?"not-allowed":"pointer"},
-          disabled: refreshingAll,
-          onClick: refreshAllPrices
-        }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
+    // Action toolbar
+    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px"} },
+      // Refresh
+      React.createElement("button", {
+        style:{background:refreshingAll?"rgba(240,192,64,0.05)":"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--cards)",fontSize:12,fontWeight:600,cursor:refreshingAll?"not-allowed":"pointer"},
+        disabled: refreshingAll,
+        onClick: refreshAllPrices
+      }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
 
 
-        // Fix missing
+        // Fix missing — clears NOMATCH cache and resets unmatched cards so Refresh re-searches
         React.createElement("button", {
           style:{background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:7,padding:"7px 14px",color:"#fbbf24",fontSize:12,fontWeight:600,cursor:"pointer"},
+          title:"Clears cached 'no match' results so Refresh All Prices will retry searching for unmatched cards",
           onClick:function(){
             var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
             var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
