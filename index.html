@@ -2101,9 +2101,9 @@ async function fetchCardPrice(card) {
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
   var pdId = cachedId || card.pokedataId || null;
 
-  // If we have a cached/stored ID but also have a card number, verify it's correct
-  // The search cache key encodes name+set+num, so it already uniquely identifies the card.
-  var needsSearch = !pdId;
+  // For PC stamped cards: always re-search — the stored pokedataId is likely the
+  // unstamped variant. The pc-keyed cacheKey ensures we cache the correct stamped ID.
+  var needsSearch = !pdId || isPCStamp;
 
   if (needsSearch) {
     var results = [];
@@ -2833,16 +2833,17 @@ function InventoryTab(_ref21) {
       )
     ),
 
-    // Action toolbar
-    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px",justifyContent:"space-between"} },
-      // Sport tabs
+    // Sport tabs — own row above buttons
+    React.createElement("div", { style:{marginBottom:10} },
       React.createElement("div", { className:"market-tabs" },
         [{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"},{id:"disney",label:"✨ Disney"}].map(function(sp){
           return React.createElement("button", { key:sp.id, className:"market-tab"+(activeSport===sp.id?" active":""), onClick:function(){setActive(sp.id);} }, sp.label);
         })
-      ),
+      )
+    ),
 
-      React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"} },
+    // Action toolbar
+    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px"} },
         // Refresh
         React.createElement("button", {
           style:{background:refreshingAll?"rgba(240,192,64,0.05)":"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--cards)",fontSize:12,fontWeight:600,cursor:refreshingAll?"not-allowed":"pointer"},
@@ -2886,7 +2887,6 @@ function InventoryTab(_ref21) {
           style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer"},
           onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
         }, "🗑 Clear All")
-      )
     ),
 
     // Sections
