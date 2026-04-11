@@ -2090,7 +2090,12 @@ async function fetchCardPrice(card) {
   // Normalise num in cache key: strip leading zeros so "11"=="011", "76"=="076"
   var rawNum = (card.num || "").toLowerCase().trim();
   var normNum = (!isNaN(parseInt(rawNum, 10)) && !/[a-z]/i.test(rawNum)) ? String(parseInt(rawNum, 10)) : rawNum;
-  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum].join("|");
+
+  // Detect Pokemon Center stamp from notes field
+  var isPCStamp = /pokemon\s*center|pc\s*stamp/i.test(card.notes || "");
+
+  // Include stamp in cache key so stamped and unstamped cards never share a cached ID
+  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, isPCStamp ? "pc" : ""].join("|");
 
   // Search cache — but validate the cached ID still matches this card's number
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
@@ -2108,18 +2113,31 @@ async function fetchCardPrice(card) {
       try { var r = await pdSearch(q); return Array.isArray(r) ? r : []; }
       catch(e) { searchError = true; console.warn("[PCT] Proxy error:", e.message); return []; }
     };
-    // Strategy 1: name + number (most precise)
-    if (card.num) results = await safeSearch(card.name + " " + card.num);
-    // Strategy 2: name + set name
-    if (!results.length && card.set) results = await safeSearch(card.name + " " + card.set);
-    // Strategy 3: name + set + number combined
-    if (!results.length && card.set && card.num) results = await safeSearch(card.name + " " + card.set + " " + card.num);
-    // Strategy 4: name only
-    if (!results.length) results = await safeSearch(card.name);
-    // Strategy 5: alpha-prefix num (SWSH134, SM210, GG10) — strip prefix and retry
-    if (!results.length && card.num && /^[a-z]/i.test(card.num)) {
-      var numStripped = card.num.replace(/^[a-z]+/i, "");
-      if (numStripped) results = await safeSearch(card.name + " " + numStripped);
+    if (isPCStamp) {
+      // For PC stamped cards: always search with "Pokemon Center" appended
+      // Strategy 1: name + number + Pokemon Center (most precise)
+      if (card.num) results = await safeSearch(card.name + " " + card.num + " Pokemon Center");
+      // Strategy 2: name + Pokemon Center
+      if (!results.length) results = await safeSearch(card.name + " Pokemon Center");
+      // Filter results to stamped variants only — prefer name containing "pokemon center"
+      var stamped = results.filter(function(r) { return /pokemon\s*center/i.test(r.name || ""); });
+      if (stamped.length) results = stamped;
+      console.log("[PCT] PC stamp search for", card.name, "→", results.length, "results", stamped.length ? "(stamped found)" : "(no stamped variant)");
+    } else {
+      // Standard search strategies
+      // Strategy 1: name + number (most precise)
+      if (card.num) results = await safeSearch(card.name + " " + card.num);
+      // Strategy 2: name + set name
+      if (!results.length && card.set) results = await safeSearch(card.name + " " + card.set);
+      // Strategy 3: name + set + number combined
+      if (!results.length && card.set && card.num) results = await safeSearch(card.name + " " + card.set + " " + card.num);
+      // Strategy 4: name only
+      if (!results.length) results = await safeSearch(card.name);
+      // Strategy 5: alpha-prefix num (SWSH134, SM210, GG10) — strip prefix and retry
+      if (!results.length && card.num && /^[a-z]/i.test(card.num)) {
+        var numStripped = card.num.replace(/^[a-z]+/i, "");
+        if (numStripped) results = await safeSearch(card.name + " " + numStripped);
+      }
     }
     // If ALL searches errored (proxy asleep), bail without caching — will retry next refresh
     if (searchError && !results.length) {
@@ -2128,7 +2146,7 @@ async function fetchCardPrice(card) {
     }
     var match = findBestMatch(results, card);
     if (!match) {
-      console.warn("[PCT] No match for:", card.name, card.set, card.num);
+      console.warn("[PCT] No match for:", card.name, card.set, card.num, isPCStamp ? "(PC stamp)" : "");
       // Only cache NOMATCH when proxy was alive and truly returned no match
       if (results.length > 0) {
         try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
@@ -2815,59 +2833,60 @@ function InventoryTab(_ref21) {
       )
     ),
 
-    // Sport tabs row
-    React.createElement("div", { style:{marginBottom:10} },
+    // Action toolbar
+    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px",justifyContent:"space-between"} },
+      // Sport tabs
       React.createElement("div", { className:"market-tabs" },
         [{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"},{id:"disney",label:"✨ Disney"}].map(function(sp){
           return React.createElement("button", { key:sp.id, className:"market-tab"+(activeSport===sp.id?" active":""), onClick:function(){setActive(sp.id);} }, sp.label);
         })
+      ),
+
+      React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"} },
+        // Refresh
+        React.createElement("button", {
+          style:{background:refreshingAll?"rgba(240,192,64,0.05)":"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--cards)",fontSize:12,fontWeight:600,cursor:refreshingAll?"not-allowed":"pointer"},
+          disabled: refreshingAll,
+          onClick: refreshAllPrices
+        }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
+
+
+        // Fix missing
+        React.createElement("button", {
+          style:{background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:7,padding:"7px 14px",color:"#fbbf24",fontSize:12,fontWeight:600,cursor:"pointer"},
+          onClick:function(){
+            var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
+            var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
+            var noId     = allCards.filter(function(x){return !x.pokedataId;});
+            // Clear fetch cache for all unpriced cards with a pdId
+            missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
+            // Clear search cache for all cards without a pdId (no match found previously)
+            var buildKey = function(x) {
+              var rn = (x.num||"").toLowerCase().trim();
+              var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
+              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn].join("|");
+            };
+            noId.forEach(function(x){ localStorage.removeItem(SEARCH_PFX+buildKey(x)); });
+            // Also clear pokedataId on unpriced cards so they re-search from scratch
+            setInv((inv||[]).map(function(x){
+              if (x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
+              return x;
+            }));
+            alert("Cache cleared for "+missing.length+" unpriced + "+noId.length+" unmatched. Hit Refresh All Prices to re-fetch.");
+          }
+        }, "🔧 Fix Missing"),
+
+        // Backfill history
+        React.createElement("button", {
+          style:{background:backfilling?"rgba(52,211,153,0.05)":"rgba(52,211,153,0.15)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:7,padding:"7px 14px",color:"#34d399",fontSize:12,fontWeight:600,cursor:backfilling?"not-allowed":"pointer"},
+          disabled: backfilling,
+          onClick: backfillHistory
+        }, backfilling ? ("📊 " + backfillProgress + "…") : "📊 Backfill History"),
+        React.createElement("button", {
+          style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer"},
+          onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
+        }, "🗑 Clear All")
       )
-    ),
-
-    // Action toolbar
-    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px"} },
-      // Refresh
-      React.createElement("button", {
-        style:{background:refreshingAll?"rgba(240,192,64,0.05)":"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--cards)",fontSize:12,fontWeight:600,cursor:refreshingAll?"not-allowed":"pointer"},
-        disabled: refreshingAll,
-        onClick: refreshAllPrices
-      }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
-
-      // Fix missing
-      React.createElement("button", {
-        style:{background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:7,padding:"7px 14px",color:"#fbbf24",fontSize:12,fontWeight:600,cursor:"pointer"},
-        title:"Clears cached 'no match' results so Refresh All Prices will retry searching for unmatched cards",
-        onClick:function(){
-          var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
-          var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
-          var noId     = allCards.filter(function(x){return !x.pokedataId;});
-          missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
-          var buildKey = function(x) {
-            var rn = (x.num||"").toLowerCase().trim();
-            var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
-            return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn].join("|");
-          };
-          noId.forEach(function(x){ localStorage.removeItem(SEARCH_PFX+buildKey(x)); });
-          setInv((inv||[]).map(function(x){
-            if (x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
-            return x;
-          }));
-          alert("Cache cleared for "+missing.length+" unpriced + "+noId.length+" unmatched. Hit Refresh All Prices to re-fetch.");
-        }
-      }, "🔧 Fix Missing"),
-
-      // Backfill history
-      React.createElement("button", {
-        style:{background:backfilling?"rgba(52,211,153,0.05)":"rgba(52,211,153,0.15)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:7,padding:"7px 14px",color:"#34d399",fontSize:12,fontWeight:600,cursor:backfilling?"not-allowed":"pointer"},
-        disabled: backfilling,
-        onClick: backfillHistory
-      }, backfilling ? ("📊 " + backfillProgress + "…") : "📊 Backfill History"),
-
-      // Clear all
-      React.createElement("button", {
-        style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer"},
-        onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
-      }, "🗑 Clear All")
     ),
 
     // Sections
