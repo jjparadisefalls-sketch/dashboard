@@ -2007,11 +2007,35 @@ function setsMatch(r, setInput) {
   return false;
 }
 
-function findBestMatch(results, card) {
+function findBestMatch(results, card, isPCStamp) {
   var name = (card.name || "").toLowerCase().trim();
   var num  = (card.num  || "").toLowerCase().trim();
   var set  = (card.set  || "").toLowerCase().trim();
   var eng  = results.filter(function(r) { return r.language === "ENGLISH"; });
+
+  // For PC stamped cards: pick the result whose name contains "pokemon center"
+  // with the same card number — don't use sameName since "Magneton Pokemon Center" !== "Magneton"
+  if (isPCStamp) {
+    var stamped = eng.filter(function(r) { return /pokemon\s*center/i.test(r.name || ""); });
+    if (stamped.length) {
+      // Among stamped variants, prefer one with matching number
+      if (num) {
+        var numMatch = stamped.find(function(r) {
+          var rn = (r.num || "").toLowerCase();
+          var ni = parseInt(num, 10), rni = parseInt(rn, 10);
+          return rn === num || (!isNaN(ni) && !isNaN(rni) && ni === rni);
+        });
+        if (numMatch) {
+          console.log("[PCT] PC stamp matched:", card.name, card.num, "->", numMatch.name, numMatch.num, "id:", numMatch.id);
+          return numMatch;
+        }
+      }
+      console.log("[PCT] PC stamp matched (no num):", card.name, "->", stamped[0].name, "id:", stamped[0].id);
+      return stamped[0];
+    }
+    // No stamped variant found — fall through to normal matching
+    console.warn("[PCT] No stamped variant found for:", card.name, "— falling back to normal match");
+  }
 
   var sameName = function(r) {
     var rn = (r.name || "").toLowerCase();
@@ -2144,7 +2168,7 @@ async function fetchCardPrice(card) {
       console.warn("[PCT] All searches failed (proxy unavailable) for:", card.name, card.set, card.num);
       return { pdId: null, value: null, proxyError: true };
     }
-    var match = findBestMatch(results, card);
+    var match = findBestMatch(results, card, isPCStamp);
     if (!match) {
       console.warn("[PCT] No match for:", card.name, card.set, card.num, isPCStamp ? "(PC stamp)" : "");
       // Only cache NOMATCH when proxy was alive and truly returned no match
