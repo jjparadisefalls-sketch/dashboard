@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eBay Sold Matcher · Daddy&Me Collectibles</title>
+<style>
+:root {
+  --bg:#07090f;--s1:#0e1117;--s2:#151922;--s3:#1c2230;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --fg:#e8eaf0;--muted:#6b7280;--muted2:#9ca3af;
+  --mono:'JetBrains Mono','Fira Mono',monospace;--sans:'Inter',system-ui,sans-serif;
+  --red:#f87171;--orange:#fb923c;--green:#34d399;--yellow:#f0c040;--blue:#60a5fa;--purple:#a78bfa;
+  --red-bg:rgba(248,113,113,0.08);--green-bg:rgba(52,211,153,0.08);--yellow-bg:rgba(240,192,64,0.08);
+  --blue-bg:rgba(96,165,250,0.08);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;min-height:100vh;}
+a{color:var(--blue);text-decoration:none;}
+
+/* ── Topbar ── */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;
+  border-bottom:1px solid var(--border);background:var(--s1);position:sticky;top:0;z-index:100;}
+.logo{font-size:17px;font-weight:700;letter-spacing:-0.02em;}
+.logo span{color:var(--green);}
+.badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;
+  background:rgba(52,211,153,0.15);color:var(--green);border:1px solid rgba(52,211,153,0.3);}
+.page{max-width:1400px;margin:0 auto;padding:24px;}
+
+/* ── Drop zone ── */
+.drop-zone{border:2px dashed var(--border2);border-radius:16px;padding:48px 24px;
+  text-align:center;background:var(--s1);cursor:pointer;transition:all 0.2s;margin-bottom:24px;}
+.drop-zone.drag-over{border-color:var(--green);background:rgba(52,211,153,0.04);}
+.drop-zone.hidden{display:none;}
+.drop-icon{font-size:32px;margin-bottom:14px;}
+.drop-title{font-size:16px;font-weight:600;margin-bottom:8px;}
+.drop-sub{color:var(--muted);font-size:12px;line-height:1.6;}
+.drop-btn{display:inline-block;margin-top:18px;padding:8px 20px;border-radius:8px;
+  font-size:13px;font-weight:600;background:rgba(52,211,153,0.15);
+  border:1px solid rgba(52,211,153,0.3);color:var(--green);cursor:pointer;}
+
+/* ── Progress ── */
+.progress-wrap{display:none;background:var(--s1);border:1px solid var(--border);
+  border-radius:12px;padding:18px 24px;margin-bottom:24px;}
+.progress-wrap.active{display:block;}
+.progress-label{font-size:12px;color:var(--muted2);margin-bottom:10px;}
+.progress-track{height:4px;background:var(--s3);border-radius:2px;overflow:hidden;}
+.progress-bar{height:100%;width:0%;background:var(--green);border-radius:2px;transition:width 0.3s;}
+
+/* ── Summary stats ── */
+.stats-bar{display:none;gap:12px;margin-bottom:20px;}
+.stats-bar.visible{display:flex;flex-wrap:wrap;}
+.stat-card{flex:1;min-width:130px;padding:14px 18px;border-radius:10px;
+  background:var(--s1);border:1px solid var(--border);}
+.stat-num{font-size:22px;font-weight:700;font-family:var(--mono);}
+.stat-label{font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;
+  color:var(--muted);margin-top:3px;}
+
+/* ── Toolbar ── */
+.toolbar{display:none;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.toolbar.visible{display:flex;}
+.filter-btn{padding:6px 12px;border-radius:7px;font-size:11px;font-weight:600;
+  cursor:pointer;background:var(--s1);border:1px solid var(--border);color:var(--muted);
+  transition:all 0.15s;white-space:nowrap;}
+.filter-btn:hover{border-color:var(--border2);color:var(--fg);}
+.filter-btn.active{background:var(--s2);border-color:var(--border2);color:var(--fg);}
+.filter-btn.f-green.active{background:var(--green-bg);border-color:rgba(52,211,153,0.4);color:var(--green);}
+.filter-btn.f-yellow.active{background:var(--yellow-bg);border-color:rgba(240,192,64,0.4);color:var(--yellow);}
+.filter-btn.f-red.active{background:var(--red-bg);border-color:rgba(248,113,113,0.4);color:var(--red);}
+.btn{padding:7px 14px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;
+  transition:all 0.15s;white-space:nowrap;border:1px solid transparent;}
+.btn-green{background:rgba(52,211,153,0.15);border-color:rgba(52,211,153,0.3);color:var(--green);}
+.btn-green:hover{background:rgba(52,211,153,0.25);}
+.btn-green:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-muted{background:var(--s2);border-color:var(--border);color:var(--muted2);}
+.btn-muted:hover{border-color:var(--border2);color:var(--fg);}
+.btn-export{background:rgba(167,139,250,0.15);border-color:rgba(167,139,250,0.3);color:var(--purple);}
+.btn-export:hover{background:rgba(167,139,250,0.25);}
+.toolbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+
+/* ── Table ── */
+.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);margin-bottom:24px;}
+table{width:100%;border-collapse:collapse;background:var(--s1);}
+thead tr{background:var(--s2);border-bottom:1px solid var(--border);}
+th{padding:8px 12px;text-align:left;font-size:10px;font-weight:700;letter-spacing:0.08em;
+  text-transform:uppercase;color:var(--muted);white-space:nowrap;user-select:none;}
+td{padding:6px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,0.015);}
+tr.row-confirmed td{background:rgba(52,211,153,0.04);}
+tr.row-unmatched td{background:rgba(248,113,113,0.03);}
+
+.cell-title{max-width:300px;}
+.title-text{font-size:12px;font-weight:500;line-height:1.3;margin-bottom:3px;}
+.title-meta{display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
+.meta-tag{font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;
+  background:var(--s3);border:1px solid var(--border);color:var(--muted2);
+  letter-spacing:0.04em;text-transform:uppercase;}
+.date-tag{font-size:9px;color:var(--muted);font-family:var(--mono);}
+
+.cell-money{font-family:var(--mono);font-size:12px;font-weight:600;white-space:nowrap;}
+.money-pos{color:var(--green);}
+.money-neg{color:var(--red);}
+.money-na{color:var(--muted);}
+
+.match-cell{max-width:200px;}
+.match-name{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.match-sub{font-size:9px;color:var(--muted);margin-top:1px;}
+.match-conf{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600;}
+.conf-high{background:rgba(52,211,153,0.15);color:var(--green);}
+.conf-med{background:rgba(240,192,64,0.15);color:var(--yellow);}
+.conf-low{background:rgba(248,113,113,0.15);color:var(--red);}
+.match-none{font-size:11px;color:var(--muted);font-style:italic;}
+
+.badge-status{font-size:10px;font-weight:700;padding:3px 7px;border-radius:4px;white-space:nowrap;}
+.badge-confirmed{background:var(--green-bg);border:1px solid rgba(52,211,153,0.3);color:var(--green);}
+.badge-pending{background:var(--yellow-bg);border:1px solid rgba(240,192,64,0.3);color:var(--yellow);}
+.badge-unmatched{background:var(--red-bg);border:1px solid rgba(248,113,113,0.3);color:var(--red);}
+.badge-already{background:var(--blue-bg);border:1px solid rgba(96,165,250,0.3);color:var(--blue);}
+
+.action-btn{font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px;
+  background:var(--s2);border:1px solid var(--border);color:var(--muted2);
+  cursor:pointer;transition:all 0.15s;white-space:nowrap;}
+.action-btn:hover{border-color:var(--border2);color:var(--fg);}
+.action-btn.confirm{background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.3);color:var(--green);}
+.action-btn.confirm:hover{background:rgba(52,211,153,0.22);}
+
+/* ── Paid field ── */
+.paid-input{background:var(--s2);border:1px solid var(--border);border-radius:5px;
+  color:var(--fg);font-size:11px;padding:3px 7px;width:70px;font-family:var(--mono);outline:none;}
+.paid-input:focus{border-color:var(--green);}
+
+/* ── Commit bar ── */
+.commit-bar{display:none;position:sticky;bottom:16px;z-index:50;
+  background:var(--s1);border:1px solid rgba(52,211,153,0.3);border-radius:12px;
+  padding:14px 20px;align-items:center;gap:16px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);}
+.commit-bar.visible{display:flex;}
+.commit-info{font-size:12px;color:var(--muted2);}
+.commit-info strong{color:var(--fg);}
+
+/* ── Modal ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);
+  z-index:200;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--s1);border:1px solid var(--border2);border-radius:14px;
+  padding:24px;width:540px;max-width:95vw;max-height:80vh;overflow-y:auto;}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:4px;}
+.modal-sub{font-size:11px;color:var(--muted);margin-bottom:16px;}
+.modal-search{display:flex;gap:8px;margin-bottom:12px;}
+.modal-search input{flex:1;background:var(--s2);border:1px solid var(--border);
+  border-radius:8px;color:var(--fg);font-size:13px;padding:8px 12px;outline:none;font-family:var(--sans);}
+.modal-search input:focus{border-color:var(--border2);}
+.modal-results{border:1px solid var(--border);border-radius:8px;overflow:hidden;
+  max-height:300px;overflow-y:auto;}
+.modal-row{display:flex;align-items:center;gap:10px;padding:9px 14px;
+  border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s;user-select:none;}
+.modal-row:last-child{border-bottom:none;}
+.modal-row:hover{background:var(--s2);}
+.modal-row.selected{background:rgba(52,211,153,0.08);border-left:3px solid var(--green);padding-left:11px;}
+.mr-name{font-size:13px;font-weight:600;}.mr-set{font-size:11px;color:var(--muted);margin-top:1px;}
+.mr-paid{font-size:11px;font-family:var(--mono);color:var(--green);margin-left:auto;flex-shrink:0;}
+.modal-empty,.modal-searching{padding:20px;text-align:center;color:var(--muted);font-size:12px;}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+
+/* ── Empty ── */
+.empty-state{padding:48px;text-align:center;color:var(--muted);}
+.empty-icon{font-size:28px;margin-bottom:10px;}
+
+/* ── Sold history section ── */
+.section-head{font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--muted);margin:24px 0 12px;display:flex;align-items:center;gap:8px;}
+.history-note{font-size:11px;color:var(--muted);padding:10px 14px;background:var(--s1);
+  border:1px solid var(--border);border-radius:8px;margin-bottom:12px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="logo">💰 <span>Sold</span> Matcher</div>
+    <div class="badge">Daddy&Me Collectibles</div>
+  </div>
+  <div style="font-size:11px;color:var(--muted)" id="lastRunLabel"></div>
+</div>
+
+<div class="page">
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="dropZone">
+    <div class="drop-icon">📦</div>
+    <div class="drop-title">Drop your eBay Orders CSV</div>
+    <div class="drop-sub">
+      Download from: eBay Seller Hub → Orders → All Orders → Download report<br>
+      Only Pokemon cards will be matched. Non-Pokemon orders are filtered automatically.
+    </div>
+    <label class="drop-btn">Choose File
+      <input type="file" accept=".csv" id="fileInput" style="display:none">
+    </label>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label" id="progressLabel">Loading…</div>
+    <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card">
+      <div class="stat-num" id="statTotal">0</div>
+      <div class="stat-label">Pokemon Sales</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--green)" id="statMatched">0</div>
+      <div class="stat-label">Matched to Inventory</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--yellow)" id="statPending">0</div>
+      <div class="stat-label">Needs Review</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--red)" id="statUnmatched">0</div>
+      <div class="stat-label">No Inventory Match</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--muted)" id="statAlready">0</div>
+      <div class="stat-label">Already Recorded</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn f-green" data-filter="matched" onclick="setFilter('matched',this)">✓ Matched</button>
+    <button class="filter-btn f-yellow" data-filter="pending" onclick="setFilter('pending',this)">⚠ Needs Review</button>
+    <button class="filter-btn f-red" data-filter="unmatched" onclick="setFilter('unmatched',this)">✕ No Match</button>
+    <div class="toolbar-right">
+      <button class="btn btn-export" onclick="exportInventoryCSV()">⬇ Export Inventory CSV</button>
+      <button class="btn btn-muted" onclick="triggerRescan()">↺ New CSV</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div id="mainContent"></div>
+
+  <!-- Commit bar -->
+  <div class="commit-bar" id="commitBar">
+    <span class="commit-info">
+      <strong id="commitCount">0</strong> confirmed sales ready to record
+    </span>
+    <button class="btn btn-green" id="commitBtn" onclick="commitSales()">
+      ✓ Record All Confirmed Sales → Dashboard
+    </button>
+    <button class="btn btn-muted" onclick="confirmAll()">Select All Matched</button>
+    <button class="btn btn-export" id="exportBtn" onclick="exportInventoryCSV()" style="display:none">
+      ⬇ Export Updated Inventory CSV
+    </button>
+  </div>
+
+</div>
+
+<!-- Match Override Modal -->
+<div class="modal-overlay" id="matchModal">
+  <div class="modal">
+    <div class="modal-title">🔍 Find Inventory Card</div>
+    <div class="modal-sub" id="matchModalSub">Search your inventory for the correct card.</div>
+    <div class="modal-search">
+      <input type="text" id="matchSearchInput" placeholder="e.g. Blastoise PSA 10  or  Mew 205"
+        oninput="debounceInvSearch()" onkeydown="if(event.key==='Enter')doInvSearch()">
+      <button class="btn btn-green" onclick="doInvSearch()">Search</button>
+    </div>
+    <div id="matchResults"><div class="modal-empty">Type a card name to search your inventory.</div></div>
+    <div class="modal-footer">
+      <button class="btn btn-muted" onclick="closeMatchModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const NON_POKEMON = /\b(topps|bowman|disney|lorcana|baseball|football|basketball|soccer|hockey|nfl|nba|mlb|nhl|panini|donruss|prizm|mosaic|select|optic|fleer|upper\s*deck|score|leaf|funko|star\s*wars|marvel|dc\s*comics|yugioh|yu-gi-oh|magic\s*the\s*gathering|mtg|flesh\s*and\s*blood)\b/i;
+const FEE_RATE = 0.1325; // eBay final value fee ~13.25%
+
+// ── State ──────────────────────────────────────────────────────────────────
+let allRows = [];       // parsed + matched sales
+let currentFilter = 'all';
+let confirmedIds = new Set(); // sale record numbers confirmed by user
+let modalTargetId = null;
+let invSearchTimer = null;
+
+// ── Inventory from localStorage ────────────────────────────────────────────
+function getInventory() {
+  try { return JSON.parse(localStorage.getItem('cc:inventory') || '[]'); }
+  catch(e) { return []; }
+}
+function getSoldHistory() {
+  try { return JSON.parse(localStorage.getItem('cc:sold') || '[]'); }
+  catch(e) { return []; }
+}
+function alreadyRecorded(itemNumber) {
+  return getSoldHistory().some(s => s.ebayItemNumber === itemNumber);
+}
+
+// ── CSV Parsing ────────────────────────────────────────────────────────────
+function splitLine(line) {
+  const cols = []; let s = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { if (q && line[i+1]==='"') { s+='"'; i++; } else q=!q; }
+    else if (c === ',' && !q) { cols.push(s); s = ''; }
+    else s += c;
+  }
+  cols.push(s); return cols;
+}
+
+function parseOrders(text) {
+  const lines = text.split(/\r?\n/);
+  // eBay orders CSV: line 0 = blank, line 1 = headers, line 2 = blank, line 3+ = data
+  let headerLine = '';
+  let dataLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (!l || !l.replace(/,/g,'').trim()) continue;
+    if (!headerLine) { headerLine = lines[i]; continue; }
+    dataLines.push(lines[i]);
+  }
+  const headers = splitLine(headerLine).map(h => h.trim().replace(/^"|"$/g,''));
+  function col(row, name) {
+    const i = headers.findIndex(h => h === name);
+    return i >= 0 ? (row[i] || '').trim().replace(/^"|"$/g,'') : '';
+  }
+  const out = [];
+  for (const line of dataLines) {
+    if (!line.trim() || !line.replace(/,/g,'').trim()) continue;
+    const row = splitLine(line);
+    const recNum = col(row, 'Sales Record Number').trim();
+    if (!recNum) continue;
+    const title = col(row, 'Item Title');
+    if (!title) continue;
+    // Exclude non-Pokemon products and sealed boxes
+    if (NON_POKEMON.test(title)) continue;
+    if (/\bbox\b|\betb\b|\belite\s*trainer\b|\bbooster\s*box\b|\bcollection\s*box\b|\bdisplay\s*box\b/.test(title)) continue;
+    const soldRaw = col(row, 'Sold For').replace(/[$,]/g,'');
+    const soldFor = parseFloat(soldRaw) || 0;
+    const net = soldFor * (1 - FEE_RATE);
+    const dateStr = col(row, 'Sale Date'); // "Apr-13-26"
+    out.push({
+      recNum,
+      itemNumber: col(row, 'Item Number'),
+      title,
+      soldFor,
+      net: parseFloat(net.toFixed(2)),
+      date: parseDate(dateStr),
+      dateStr,
+      match: null,        // matched inventory card
+      confidence: null,
+      status: 'pending',  // pending | matched | unmatched | already
+    });
+  }
+  return out;
+}
+
+function parseDate(s) {
+  if (!s) return null;
+  try {
+    // "Apr-13-26" → "Apr 13 2026"
+    const parts = s.split('-');
+    if (parts.length === 3) {
+      const yr = parseInt(parts[2]) + 2000;
+      return new Date(`${parts[0]} ${parts[1]} ${yr}`);
+    }
+  } catch(e) {}
+  return null;
+}
+
+// ── Card Name / Grade Extraction (reuse from price checker) ───────────────
+function detectGrade(title) {
+  const u = title.toUpperCase(); let m;
+  m=u.match(/\bPSA\s*(\d+(?:\.\d+)?)/); if(m) return{grader:'PSA',grade:parseFloat(m[1])};
+  m=u.match(/\bCGC\s*(\d+(?:\.\d+)?)/); if(m) return{grader:'CGC',grade:parseFloat(m[1])};
+  m=u.match(/\bBGS\s*(\d+(?:\.\d+)?)/); if(m) return{grader:'BGS',grade:parseFloat(m[1])};
+  return{grader:'raw',grade:null};
+}
+
+function extractCardName(title) {
+  let t = title.trim();
+  if (/^\d{4}\s/.test(t)) return '';
+  t = t.replace(/^#\d+\s*(\d{4}\s)?/,'');
+  t = t.replace(/\b(PSA|BGS|CGC|SGC|TAG)\s*\d+(\.\d+)?\b/gi,'');
+  t = t.replace(/\b[A-Z]{0,3}\d{1,3}\/\d{2,4}\b/gi,'').replace(/#\d{2,3}\b/g,'').replace(/\b\d{3,}\b/g,'');
+  const cuts=[/\bScarlet\s*[&]\s*Violet\b/i,/\bObsidian\s*Flames\b/i,/\bPaldean\s*Fates\b/i,
+    /\bTemporal\s*Forces\b/i,/\bStellar\s*Crown\b/i,/\bBrilliant\s*Stars\b/i,/\bLost\s*Origin\b/i,
+    /\bVivid\s*Voltage\b/i,/\bDarkness\s*Ablaze\b/i,/\bChilling\s*Reign\b/i,/\bEvolving\s*Skies\b/i,
+    /\bFusion\s*Strike\b/i,/\bSilver\s*Tempest\b/i,/\bCrown\s*Zenith\b/i,/\bPrismatic\s*Evo/i,
+    /\bHidden\s*Fates\b/i,/\bCelebrations\b/i,/\bPokemon\s*GO\b/i,/\b151\b/,/\bBase\s*Set\b/i,
+    /\bMEW\b/,/\bSVI\b/,/\bSCR\b/,/\bOBF\b/,/\bDestined\s*Rivals\b/i,/\bJourney\s*Together\b/i,
+    /\bWhite\s*Flare\b/i,/\bPhantasmal\s*Flames\b/i,/\bPerfect\s*Order\b/i,/\bSv\d+/i];
+  for (const re of cuts){const m=t.search(re);if(m>2){t=t.substring(0,m);break;}}
+  t=t.replace(/\bPok[eé]mon\s*TCG[:\s]*/gi,'').replace(/\bPok[eé]mon\b/gi,'')
+     .replace(/\b(holo(foil)?|reverse\s*holo|full\s*art|illustration\s*rare|ultra\s*rare|secret\s*rare|special\s*illustration|trainer\s*gallery|ex\s*collection)\b/gi,'')
+     .replace(/\b(near\s*mint|nm-?mt|nm|lp|mp|hp|gem\s*mint|mint|excellent|ungraded)\b/gi,'')
+     .replace(/\b(sealed|japanese|english|card|cards|pack|promo|tcg)\b/gi,'')
+     .replace(/\b\d{4}\b/g,'').replace(/[🔥⭐✨🎯💎]/g,'')
+     .replace(/\s{2,}/g,' ').trim();
+  return t.split(/\s+/).filter(w=>w&&w.length>1&&!/^[-&,*]$/.test(w)).slice(0,4).join(' ').trim();
+}
+
+function extractCardNumber(title) {
+  let m;
+  m=title.match(/\b([A-Z]{0,3}\d{1,3}\/\d{2,4})\b/i); if(m) return m[1].split('/')[0].replace(/^0+/,'');
+  m=title.match(/#(\d{2,3})\b/); if(m) return m[1].replace(/^0+/,'');
+  return null;
+}
+
+// ── Inventory Matching ─────────────────────────────────────────────────────
+function cleanNameForMatch(name) {
+  // Strip set code abbreviations that bleed into extracted name
+  // e.g. "Articuno Sv09" → "Articuno", "Mew GG10" → "Mew"
+  return name
+    .replace(/\b(sv|gg|swsh|sm|xy|bw|dp|ex|pop|promo|tcg)\s*\d+\b/gi, '')
+    .replace(/\b(sv|gg|swsh|sm|xy|bw|dp)\d+\b/gi, '')
+    .replace(/[:\-]+$/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function matchToInventory(saleTitle, inventory) {
+  const rawName = extractCardName(saleTitle).toLowerCase();
+  const cardName = cleanNameForMatch(rawName);
+  const cardNum  = extractCardNumber(saleTitle);
+  const {grader, grade} = detectGrade(saleTitle);
+
+  if (!cardName || cardName.length < 2) return null;
+
+  // Split into meaningful words (length > 2, no set codes)
+  const nameWords = cardName.split(/\s+/).filter(w => w.length > 2);
+
+  // LOOSER candidate filter — any single meaningful word match qualifies
+  // This prevents single-word Pokémon names (Articuno, Mew, etc.) from being filtered out
+  const candidates = inventory.filter(c => {
+    if (!c.name || c.sealed) return false;
+    const cn = c.name.toLowerCase();
+    if (nameWords.length === 0) return false;
+    // At least 1 word must match (for single-word names like Articuno)
+    // For multi-word names (Mew Ex, Charizard Vmax) require 1-of-N match still
+    return nameWords.some(w => cn.includes(w));
+  });
+
+  if (!candidates.length) return null;
+
+  // Score each candidate — higher score = better match
+  const scored = candidates.map(c => {
+    let score = 0;
+    const cn   = c.name.toLowerCase();
+    const cnum = (c.num || '').toString().replace(/^0+/, '');
+
+    // ── Name scoring ──────────────────────────────────────────────────────
+    const cleanCn = cleanNameForMatch(cn);
+    if (cleanCn === cardName)         score += 30; // exact match
+    else if (cn === cardName)         score += 28;
+    else if (cn.includes(cardName) || cardName.includes(cn)) score += 18;
+    else {
+      // Word overlap scoring
+      const invWords = cn.split(/\s+/).filter(w => w.length > 2);
+      const matched  = nameWords.filter(w => cn.includes(w));
+      const ratio    = matched.length / Math.max(nameWords.length, invWords.length);
+      score += Math.round(ratio * 20);
+    }
+
+    // ── Number scoring ────────────────────────────────────────────────────
+    if (cardNum && cnum) {
+      if (cnum === cardNum)                                score += 20; // exact number match — strong signal
+      else if (cnum.includes(cardNum) || cardNum.includes(cnum)) score += 10;
+    } else if (!cardNum && !cnum) {
+      score += 3; // both have no number — neutral boost
+    }
+
+    // ── Grade scoring ─────────────────────────────────────────────────────
+    if (grader !== 'raw' && c.grader) {
+      if ((c.grader || '').toUpperCase() === grader) {
+        score += 8;
+        if (grade && parseFloat(c.grade) === grade) score += 5;
+      }
+    } else if (grader === 'raw' && (!c.grader || c.grader === 'raw' || c.grader === 'Raw')) {
+      score += 3;
+    }
+
+    // ── Set name scoring ──────────────────────────────────────────────────
+    if (c.set) {
+      const cset = c.set.toLowerCase();
+      const title = saleTitle.toLowerCase();
+      // Check if any meaningful set word appears in the title
+      const setWords = cset.split(/[\s\-:]+/).filter(w => w.length > 3);
+      const setHits  = setWords.filter(w => title.includes(w));
+      score += setHits.length * 4;
+    }
+
+    return { card: c, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+
+  // Minimum threshold — must have at least some signal beyond random
+  if (best.score < 4) return null;
+
+  // Confidence tiers
+  const confidence = best.score >= 28 ? 'high'
+                   : best.score >= 14 ? 'medium'
+                   : 'low';
+
+  return { card: best.card, confidence, score: best.score };
+}
+
+// ── Main Scan ──────────────────────────────────────────────────────────────
+function runScan(orders) {
+  const inventory = getInventory();
+  const pokemon = inventory.filter(c => c.sport === 'pokemon' && !c.sealed);
+
+  setProgress(10, `Matching ${orders.length} sales against ${pokemon.length} inventory cards…`);
+
+  allRows = orders.map((row, i) => {
+    // Check if already recorded
+    if (alreadyRecorded(row.itemNumber)) {
+      return { ...row, status: 'already' };
+    }
+    const result = matchToInventory(row.title, pokemon);
+    if (result) {
+      confirmedIds.add(row.recNum); // auto-confirm high-confidence matches
+      return {
+        ...row,
+        match: result.card,
+        confidence: result.confidence,
+        status: result.confidence === 'low' ? 'pending' : 'matched',
+        paidPrice: result.card.paid || null,
+      };
+    }
+    return { ...row, match: null, confidence: null, status: 'unmatched' };
+  });
+
+  // Remove auto-confirmed low confidence
+  allRows.forEach(r => {
+    if (r.status === 'pending') confirmedIds.delete(r.recNum);
+  });
+
+  hideProgress();
+  document.getElementById('statsBar').classList.add('visible');
+  document.getElementById('toolbar').classList.add('visible');
+  renderTable();
+  updateStats();
+  updateCommitBar();
+
+  const now = new Date();
+  document.getElementById('lastRunLabel').textContent =
+    `Scanned ${now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderTable() {
+  let rows = allRows;
+  if (currentFilter !== 'all') rows = rows.filter(r => r.status === currentFilter);
+
+  if (!rows.length) {
+    document.getElementById('mainContent').innerHTML =
+      `<div class="empty-state"><div class="empty-icon">✓</div>No sales in this filter.</div>`;
+    return;
+  }
+
+  const badges = {
+    matched:   '<span class="badge-status badge-confirmed">✓ Matched</span>',
+    pending:   '<span class="badge-status badge-pending">⚠ Low Confidence</span>',
+    unmatched: '<span class="badge-status badge-unmatched">✕ Not Found</span>',
+    already:   '<span class="badge-status badge-already">— Recorded</span>',
+  };
+  const confLabel = { high: '✓ High', medium: '~ Med', low: '? Low' };
+  const confClass = { high: 'conf-high', medium: 'conf-med', low: 'conf-low' };
+
+  const html = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th style="width:30%">eBay Title</th>
+      <th>Sold</th><th>Net</th><th>Date</th>
+      <th>Inventory Match</th><th>Paid</th><th>P&L</th>
+      <th>Status</th><th>Actions</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const rc = r.status === 'matched' ? 'row-confirmed' : r.status === 'unmatched' ? 'row-unmatched' : '';
+      const te = r.title.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const {grader,grade} = detectGrade(r.title);
+      const gradeTag = grader !== 'raw'
+        ? `<span class="meta-tag">${grader} ${grade}</span>` : '';
+      const dateDisp = r.date ? r.date.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : r.dateStr;
+
+      // Match cell
+      let matchCell = `<span class="match-none">—</span>`;
+      if (r.match) {
+        const c = r.match;
+        const cf = confLabel[r.confidence] || '';
+        const cfcls = confClass[r.confidence] || '';
+        const gradeStr = c.grader && c.grader !== 'raw' ? ` ${c.grader} ${c.grade}` : '';
+        matchCell = `<div class="match-name">${c.name}${gradeStr}</div>
+          <div class="match-sub">${c.set||''} ${c.num ? '#'+c.num : ''}</div>
+          <span class="match-conf ${cfcls}">${cf}</span>`;
+      }
+
+      // Paid / P&L
+      const paid = r.paidPrice || (r.match && r.match.paid) || null;
+      const pnl = paid ? (r.net - paid) : null;
+      const pnlDisp = pnl != null
+        ? `<span class="cell-money ${pnl >= 0 ? 'money-pos' : 'money-neg'}">${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(2)}</span>`
+        : `<span class="money-na">—</span>`;
+
+      // Paid input (editable)
+      const paidDisp = r.status === 'already'
+        ? `<span class="money-na">${paid != null ? '$'+paid.toFixed(2) : '—'}</span>`
+        : `<input class="paid-input" type="number" step="0.01" min="0"
+            value="${paid != null ? paid.toFixed(2) : ''}"
+            placeholder="0.00"
+            onchange="updatePaid('${r.recNum}', this.value)"
+            title="Cost paid for this card">`;
+
+      // Actions
+      let actions = '';
+      if (r.status === 'already') {
+        actions = `<span class="money-na" style="font-size:10px">Recorded</span>`;
+      } else if (r.status === 'unmatched' || r.status === 'pending') {
+        const confirmed = confirmedIds.has(r.recNum);
+        actions = `<button class="action-btn" onclick="openMatchModal('${r.recNum}')">🔍 Find</button>
+          ${r.match ? `<button class="action-btn ${confirmed?'confirm':''}" onclick="toggleConfirm('${r.recNum}',this)">${confirmed?'✓ Confirmed':'Confirm'}</button>` : ''}`;
+      } else {
+        const confirmed = confirmedIds.has(r.recNum);
+        actions = `<button class="action-btn" onclick="openMatchModal('${r.recNum}')">🔄 Change</button>
+          <button class="action-btn ${confirmed?'confirm':''}" onclick="toggleConfirm('${r.recNum}',this)">${confirmed?'✓ Confirmed':'Confirm'}</button>`;
+      }
+
+      return `<tr class="${rc}">
+        <td class="cell-title"><div class="title-text">${te}</div><div class="title-meta">${gradeTag}<span class="date-tag">${dateDisp}</span></div></td>
+        <td class="cell-money">$${r.soldFor.toFixed(2)}</td>
+        <td class="cell-money money-pos">$${r.net.toFixed(2)}</td>
+        <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dateDisp}</td>
+        <td class="match-cell">${matchCell}</td>
+        <td>${paidDisp}</td>
+        <td>${pnlDisp}</td>
+        <td>${badges[r.status] || ''}</td>
+        <td style="white-space:nowrap">${actions}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+
+  document.getElementById('mainContent').innerHTML = html;
+}
+
+// ── Interactions ───────────────────────────────────────────────────────────
+function toggleConfirm(recNum, btn) {
+  if (confirmedIds.has(recNum)) {
+    confirmedIds.delete(recNum);
+  } else {
+    confirmedIds.add(recNum);
+  }
+  // Update button without full re-render
+  const confirmed = confirmedIds.has(recNum);
+  btn.textContent = confirmed ? '✓ Confirmed' : 'Confirm';
+  btn.className = `action-btn ${confirmed ? 'confirm' : ''}`;
+  updateCommitBar();
+}
+
+function confirmAll() {
+  allRows.forEach(r => {
+    if (r.status === 'matched') confirmedIds.add(r.recNum);
+  });
+  renderTable();
+  updateCommitBar();
+}
+
+function updatePaid(recNum, value) {
+  const row = allRows.find(r => r.recNum === recNum);
+  if (row) { row.paidPrice = parseFloat(value) || null; }
+}
+
+// ── Match Modal ────────────────────────────────────────────────────────────
+function openMatchModal(recNum) {
+  modalTargetId = recNum;
+  const row = allRows.find(r => r.recNum === recNum);
+  const prefill = extractCardName(row?.title || '');
+  document.getElementById('matchSearchInput').value = prefill || '';
+  document.getElementById('matchModalSub').textContent =
+    `Matching: "${(row?.title || '').substring(0,60)}…"`;
+  document.getElementById('matchResults').innerHTML = '<div class="modal-empty">Type a card name to search.</div>';
+  document.getElementById('matchModal').classList.add('open');
+  if (prefill) { setTimeout(doInvSearch, 100); }
+  else { setTimeout(() => document.getElementById('matchSearchInput').focus(), 100); }
+}
+function closeMatchModal() {
+  document.getElementById('matchModal').classList.remove('open');
+  modalTargetId = null;
+}
+function debounceInvSearch() {
+  clearTimeout(invSearchTimer);
+  invSearchTimer = setTimeout(doInvSearch, 350);
+}
+function doInvSearch() {
+  const q = document.getElementById('matchSearchInput').value.trim().toLowerCase();
+  if (!q || q.length < 2) return;
+  const inventory = getInventory().filter(c => c.sport === 'pokemon' && !c.sealed);
+  const results = inventory.filter(c => {
+    const name = (c.name || '').toLowerCase();
+    const set  = (c.set  || '').toLowerCase();
+    const num  = (c.num  || '').toString();
+    return name.includes(q) || set.includes(q) || num.includes(q) ||
+      q.split(' ').every(w => name.includes(w) || set.includes(w));
+  }).slice(0, 25);
+
+  if (!results.length) {
+    document.getElementById('matchResults').innerHTML =
+      '<div class="modal-empty">No inventory cards found.</div>';
+    return;
+  }
+
+  document.getElementById('matchResults').innerHTML = results.map((c,i) => {
+    const gradeStr = c.grader && c.grader !== 'raw' ? ` · ${c.grader} ${c.grade}` : '';
+    const paidStr = c.paid ? `$${parseFloat(c.paid).toFixed(2)}` : '—';
+    return `<div class="modal-row" onclick="applyMatch(${i})" data-idx="${i}">
+      <div style="flex:1">
+        <div class="mr-name">${c.name}${gradeStr}</div>
+        <div class="mr-set">${c.set||''} ${c.num ? '#'+c.num : ''}</div>
+      </div>
+      <span class="mr-paid">${paidStr}</span>
+    </div>`;
+  }).join('');
+  window._invSearchResults = results;
+}
+
+function applyMatch(idx) {
+  const card = window._invSearchResults?.[idx];
+  if (!card || !modalTargetId) return;
+  const row = allRows.find(r => r.recNum === modalTargetId);
+  if (row) {
+    row.match = card;
+    row.confidence = 'high';
+    row.status = 'matched';
+    row.paidPrice = card.paid || null;
+    confirmedIds.add(row.recNum);
+  }
+  closeMatchModal();
+  renderTable();
+  updateStats();
+  updateCommitBar();
+}
+
+document.getElementById('matchModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('matchModal')) closeMatchModal();
+});
+
+// ── Commit to Dashboard ────────────────────────────────────────────────────
+function commitSales() {
+  const toCommit = allRows.filter(r => confirmedIds.has(r.recNum) && r.match && r.status !== 'already');
+  if (!toCommit.length) { alert('No confirmed sales to record.'); return; }
+
+  const confirmed = confirm(
+    `Record ${toCommit.length} sale${toCommit.length>1?'s':''} to your dashboard?\n\n` +
+    toCommit.slice(0,5).map(r => `• ${r.match.name} → Net $${r.net.toFixed(2)}`).join('\n') +
+    (toCommit.length > 5 ? `\n…and ${toCommit.length-5} more` : '')
+  );
+  if (!confirmed) return;
+
+  // Load current inventory and sold history
+  let inventory = getInventory();
+  let soldHistory = getSoldHistory();
+  const now = new Date().toISOString();
+
+  toCommit.forEach(row => {
+    const paid = row.paidPrice || (row.match && row.match.paid) || null;
+    const pnl  = paid != null ? parseFloat((row.net - paid).toFixed(2)) : null;
+
+    // Add to sold history
+    soldHistory.push({
+      id: `sold_${row.recNum}_${Date.now()}`,
+      ebayItemNumber: row.itemNumber,
+      ebayTitle: row.title,
+      cardName: row.match.name,
+      cardSet: row.match.set || '',
+      cardNum: row.match.num || '',
+      cardGrader: row.match.grader || '',
+      cardGrade: row.match.grade || '',
+      sport: row.match.sport || 'pokemon',
+      soldFor: row.soldFor,
+      net: row.net,
+      paid: paid,
+      pnl: pnl,
+      saleDate: row.dateStr,
+      recordedAt: now,
+    });
+
+    // Remove from inventory (match by name+num+grader+grade as unique key)
+    inventory = inventory.filter(c => {
+      if (c.name !== row.match.name) return true;
+      if ((c.num || '') !== (row.match.num || '')) return true;
+      if ((c.grader || '') !== (row.match.grader || '')) return true;
+      if ((c.grade || '') !== (row.match.grade || '')) return true;
+      return false;
+    });
+
+    // Update row status
+    row.status = 'already';
+    confirmedIds.delete(row.recNum);
+  });
+
+  // Save back to localStorage
+  try {
+    localStorage.setItem('cc:inventory', JSON.stringify(inventory));
+    localStorage.setItem('cc:sold', JSON.stringify(soldHistory));
+  } catch(e) {
+    alert('Storage error: ' + e.message);
+    return;
+  }
+
+  renderTable();
+  updateStats();
+  updateCommitBar();
+  // Show export button now that inventory has changed
+  document.getElementById('exportBtn').style.display = 'inline-flex';
+  alert(`✅ Done! ${toCommit.length} sale${toCommit.length>1?'s':''} recorded.\n\nCards removed from inventory and added to sold history.\n\nClick "Export Updated Inventory CSV" to download your updated inventory file.`);
+}
+
+// ── Export Updated Inventory CSV ───────────────────────────────────────────
+function exportInventoryCSV() {
+  const inventory = getInventory();
+  if (!inventory.length) { alert('No inventory found in dashboard.'); return; }
+
+  // Column headers matching the format expected by your FS spreadsheet
+  const headers = [
+    'Name', 'Set', 'Number', 'Grader', 'Grade', 'QTY',
+    'Paid', 'Status', 'Account', 'Sport', 'Notes',
+    'PokeData ID', 'Market Value', 'Last Updated'
+  ];
+
+  // Sort: sport then name
+  const sorted = inventory.slice().sort((a, b) => {
+    const sportOrder = { pokemon:0, baseball:1, football:2, basketball:3, disney:4 };
+    const sa = sportOrder[a.sport] ?? 9, sb = sportOrder[b.sport] ?? 9;
+    if (sa !== sb) return sa - sb;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  const escape = v => {
+    if (v == null) return '';
+    const s = String(v);
+    // Wrap in quotes if contains comma, quote, or newline
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+
+  const rows = sorted.map(c => [
+    escape(c.name || ''),
+    escape(c.set  || ''),
+    escape(c.num  || ''),
+    escape(c.grader || ''),
+    escape(c.grade  || ''),
+    escape(c.qty || c.quantity || 1),
+    escape(c.paid != null ? c.paid : ''),
+    escape(c.status || ''),
+    escape(c.account || ''),
+    escape(c.sport || ''),
+    escape(c.notes || ''),
+    escape(c.pokedataId || ''),
+    escape(c.value != null ? c.value : ''),
+    escape(c.lastUpdated || ''),
+  ].join(','));
+
+  const csv = [headers.join(','), ...rows].join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().split('T')[0];
+  a.href     = url;
+  a.download = `inventory-updated-${date}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── Stats & UI ─────────────────────────────────────────────────────────────
+function updateStats() {
+  const c = { matched:0, pending:0, unmatched:0, already:0 };
+  allRows.forEach(r => { if(c[r.status]!=null) c[r.status]++; });
+  document.getElementById('statTotal').textContent = allRows.length;
+  document.getElementById('statMatched').textContent = c.matched;
+  document.getElementById('statPending').textContent = c.pending;
+  document.getElementById('statUnmatched').textContent = c.unmatched;
+  document.getElementById('statAlready').textContent = c.already;
+}
+
+function updateCommitBar() {
+  const n = [...confirmedIds].filter(id => {
+    const r = allRows.find(x => x.recNum === id);
+    return r && r.match && r.status !== 'already';
+  }).length;
+  document.getElementById('commitCount').textContent = n;
+  document.getElementById('commitBar').classList.toggle('visible', n > 0);
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active','f-green','f-yellow','f-red'));
+  if (btn) {
+    btn.classList.add('active');
+    if (f==='matched') btn.classList.add('f-green');
+    if (f==='pending') btn.classList.add('f-yellow');
+    if (f==='unmatched') btn.classList.add('f-red');
+  }
+  renderTable();
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progressWrap').classList.add('active');
+  if (pct != null) document.getElementById('progressBar').style.width = pct + '%';
+  if (label)       document.getElementById('progressLabel').textContent = label;
+}
+function hideProgress() { document.getElementById('progressWrap').classList.remove('active'); }
+
+// ── File Handling ──────────────────────────────────────────────────────────
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    setProgress(5, 'Parsing CSV…');
+    document.getElementById('dropZone').classList.add('hidden');
+    setTimeout(() => {
+      const orders = parseOrders(e.target.result);
+      if (!orders.length) {
+        document.getElementById('dropZone').classList.remove('hidden');
+        hideProgress();
+        alert('No Pokemon sales found in this CSV. Make sure you\'re using the eBay Orders report.');
+        return;
+      }
+      runScan(orders);
+    }, 50);
+  };
+  reader.readAsText(file);
+}
+
+function triggerRescan() {
+  allRows = []; confirmedIds.clear();
+  document.getElementById('dropZone').classList.remove('hidden');
+  document.getElementById('statsBar').classList.remove('visible');
+  document.getElementById('toolbar').classList.remove('visible');
+  document.getElementById('commitBar').classList.remove('visible');
+  document.getElementById('mainContent').innerHTML = '';
+}
+
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+</script>
+</body>
+</html>
