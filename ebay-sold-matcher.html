@@ -340,7 +340,7 @@ function parseOrders(text) {
     if (!title) continue;
     // Exclude non-Pokemon products and sealed boxes
     if (NON_POKEMON.test(title)) continue;
-    if (/\bbox\b|\betb\b|\belite\s*trainer\b|\bbooster\s*box\b|\bcollection\s*box\b|\bdisplay\s*box\b/.test(title)) continue;
+    if (/\bbox\b|\betb\b|\belite\s*trainer\b|\bbooster\s*box\b|\bcollection\s*box\b|\bdisplay\s*box\b/i.test(title)) continue;
     const soldRaw = col(row, 'Sold For').replace(/[$,]/g,'');
     const soldFor = parseFloat(soldRaw) || 0;
     const net = soldFor * (1 - FEE_RATE);
