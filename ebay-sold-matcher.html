@@ -638,14 +638,14 @@ function renderTable() {
           <button class="action-btn ${confirmed?'confirm':''}" onclick="toggleConfirm('${r.recNum}',this)">${confirmed?'✓ Confirmed':'Confirm'}</button>`;
       }
 
-      return `<tr class="${rc}">
+      return `<tr class="${rc}" data-recnum="${r.recNum}">
         <td class="cell-title"><div class="title-text">${te}</div><div class="title-meta">${gradeTag}<span class="date-tag">${dateDisp}</span></div></td>
         <td class="cell-money">$${r.soldFor.toFixed(2)}</td>
         <td class="cell-money money-pos">$${r.net.toFixed(2)}</td>
         <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dateDisp}</td>
         <td class="match-cell">${matchCell}</td>
         <td>${paidDisp}</td>
-        <td>${pnlDisp}</td>
+        <td class="cell-money pnl-cell ${pnl != null ? (pnl>=0?'money-pos':'money-neg') : 'money-na'}">${pnl != null ? (pnl>=0?'+':'')+'$'+Math.abs(pnl).toFixed(2) : '—'}</td>
         <td>${badges[r.status] || ''}</td>
         <td style="white-space:nowrap">${actions}</td>
       </tr>`;
@@ -673,18 +673,19 @@ function toggleConfirmNoMatch(recNum, btn) {
   if (!row) return;
   if (confirmedIds.has(recNum)) {
     confirmedIds.delete(recNum);
-    btn.textContent = 'Record Anyway';
-    btn.className = 'action-btn';
-  } else {
-    // Require a paid price before allowing record
-    if (!row.paidPrice) {
-      alert('Please enter a Paid price before recording — this is needed to calculate P&L.');
-      return;
-    }
-    confirmedIds.add(recNum);
-    btn.textContent = '✓ Will Record';
-    btn.className = 'action-btn confirm';
+    row.status = 'unmatched';
+    renderTable();
+    updateCommitBar();
+    return;
   }
+  // Require a paid price before allowing record
+  if (!row.paidPrice) {
+    alert('Please enter a Paid price first — needed to calculate P&L.');
+    return;
+  }
+  confirmedIds.add(recNum);
+  row.status = 'matched'; // treat as matched so it shows confirmed styling
+  renderTable();
   updateCommitBar();
 }
 
@@ -698,7 +699,24 @@ function confirmAll() {
 
 function updatePaid(recNum, value) {
   const row = allRows.find(r => r.recNum === recNum);
-  if (row) { row.paidPrice = parseFloat(value) || null; }
+  if (!row) return;
+  row.paidPrice = parseFloat(value) || null;
+  // Update P&L cell in-place without full re-render
+  const pnl = row.paidPrice != null ? row.net - row.paidPrice : null;
+  const tr = document.querySelector(`tr[data-recnum="${recNum}"]`);
+  if (tr) {
+    const pnlCell = tr.querySelector('.pnl-cell');
+    if (pnlCell) {
+      if (pnl != null) {
+        const pos = pnl >= 0;
+        pnlCell.className = `cell-money pnl-cell ${pos ? 'money-pos' : 'money-neg'}`;
+        pnlCell.textContent = `${pos ? '+' : ''}$${Math.abs(pnl).toFixed(2)}`;
+      } else {
+        pnlCell.className = 'cell-money pnl-cell money-na';
+        pnlCell.textContent = '—';
+      }
+    }
+  }
 }
 
 // ── Match Modal ────────────────────────────────────────────────────────────
