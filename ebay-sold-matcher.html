@@ -623,7 +623,12 @@ function renderTable() {
       let actions = '';
       if (r.status === 'already') {
         actions = `<span class="money-na" style="font-size:10px">Recorded</span>`;
-      } else if (r.status === 'unmatched' || r.status === 'pending') {
+      } else if (r.status === 'unmatched') {
+        const confirmed = confirmedIds.has(r.recNum);
+        // No match at all — offer Find or Record Anyway (with paid price)
+        actions = `<button class="action-btn" onclick="openMatchModal('${r.recNum}')">🔍 Find</button>
+          <button class="action-btn ${confirmed?'confirm':''}" onclick="toggleConfirmNoMatch('${r.recNum}',this)">${confirmed?'✓ Will Record':'Record Anyway'}</button>`;
+      } else if (r.status === 'pending') {
         const confirmed = confirmedIds.has(r.recNum);
         actions = `<button class="action-btn" onclick="openMatchModal('${r.recNum}')">🔍 Find</button>
           ${r.match ? `<button class="action-btn ${confirmed?'confirm':''}" onclick="toggleConfirm('${r.recNum}',this)">${confirmed?'✓ Confirmed':'Confirm'}</button>` : ''}`;
@@ -656,10 +661,30 @@ function toggleConfirm(recNum, btn) {
   } else {
     confirmedIds.add(recNum);
   }
-  // Update button without full re-render
   const confirmed = confirmedIds.has(recNum);
   btn.textContent = confirmed ? '✓ Confirmed' : 'Confirm';
   btn.className = `action-btn ${confirmed ? 'confirm' : ''}`;
+  updateCommitBar();
+}
+
+// For unmatched rows — confirm without an inventory match
+function toggleConfirmNoMatch(recNum, btn) {
+  const row = allRows.find(r => r.recNum === recNum);
+  if (!row) return;
+  if (confirmedIds.has(recNum)) {
+    confirmedIds.delete(recNum);
+    btn.textContent = 'Record Anyway';
+    btn.className = 'action-btn';
+  } else {
+    // Require a paid price before allowing record
+    if (!row.paidPrice) {
+      alert('Please enter a Paid price before recording — this is needed to calculate P&L.');
+      return;
+    }
+    confirmedIds.add(recNum);
+    btn.textContent = '✓ Will Record';
+    btn.className = 'action-btn confirm';
+  }
   updateCommitBar();
 }
 
@@ -752,17 +777,19 @@ document.getElementById('matchModal').addEventListener('click', e => {
 
 // ── Commit to Dashboard ────────────────────────────────────────────────────
 function commitSales() {
-  const toCommit = allRows.filter(r => confirmedIds.has(r.recNum) && r.match && r.status !== 'already');
+  const toCommit = allRows.filter(r => confirmedIds.has(r.recNum) && r.status !== 'already');
   if (!toCommit.length) { alert('No confirmed sales to record.'); return; }
 
   const confirmed = confirm(
     `Record ${toCommit.length} sale${toCommit.length>1?'s':''} to your dashboard?\n\n` +
-    toCommit.slice(0,5).map(r => `• ${r.match.name} → Net $${r.net.toFixed(2)}`).join('\n') +
+    toCommit.slice(0,5).map(r => r.match
+      ? `• ${r.match.name} → Net $${r.net.toFixed(2)}`
+      : `• [No match] ${r.title.substring(0,40)}… → Net $${r.net.toFixed(2)}`
+    ).join('\n') +
     (toCommit.length > 5 ? `\n…and ${toCommit.length-5} more` : '')
   );
   if (!confirmed) return;
 
-  // Load current inventory and sold history
   let inventory = getInventory();
   let soldHistory = getSoldHistory();
   const now = new Date().toISOString();
@@ -771,35 +798,38 @@ function commitSales() {
     const paid = row.paidPrice || (row.match && row.match.paid) || null;
     const pnl  = paid != null ? parseFloat((row.net - paid).toFixed(2)) : null;
 
-    // Add to sold history
+    // Use inventory match data if available, otherwise use title-extracted data
+    const cardName   = row.match ? row.match.name   : extractCardName(row.title) || row.title.substring(0,50);
+    const cardSet    = row.match ? (row.match.set   || '') : '';
+    const cardNum    = row.match ? (row.match.num   || '') : (extractCardNumber(row.title) || '');
+    const cardGrader = row.match ? (row.match.grader|| '') : (detectGrade(row.title).grader || '');
+    const cardGrade  = row.match ? (row.match.grade || '') : (detectGrade(row.title).grade  || '');
+    const sport      = row.match ? (row.match.sport || 'pokemon') : 'pokemon';
+
     soldHistory.push({
       id: `sold_${row.recNum}_${Date.now()}`,
       ebayItemNumber: row.itemNumber,
       ebayTitle: row.title,
-      cardName: row.match.name,
-      cardSet: row.match.set || '',
-      cardNum: row.match.num || '',
-      cardGrader: row.match.grader || '',
-      cardGrade: row.match.grade || '',
-      sport: row.match.sport || 'pokemon',
+      cardName, cardSet, cardNum, cardGrader, cardGrade, sport,
       soldFor: row.soldFor,
       net: row.net,
-      paid: paid,
-      pnl: pnl,
+      paid, pnl,
       saleDate: row.dateStr,
       recordedAt: now,
+      noInventoryMatch: !row.match, // flag for reference
     });
 
-    // Remove from inventory (match by name+num+grader+grade as unique key)
-    inventory = inventory.filter(c => {
-      if (c.name !== row.match.name) return true;
-      if ((c.num || '') !== (row.match.num || '')) return true;
-      if ((c.grader || '') !== (row.match.grader || '')) return true;
-      if ((c.grade || '') !== (row.match.grade || '')) return true;
-      return false;
-    });
+    // Only remove from inventory if we had a match
+    if (row.match) {
+      inventory = inventory.filter(c => {
+        if (c.name !== row.match.name) return true;
+        if ((c.num    || '') !== (row.match.num    || '')) return true;
+        if ((c.grader || '') !== (row.match.grader || '')) return true;
+        if ((c.grade  || '') !== (row.match.grade  || '')) return true;
+        return false;
+      });
+    }
 
-    // Update row status
     row.status = 'already';
     confirmedIds.delete(row.recNum);
   });
@@ -895,7 +925,7 @@ function updateStats() {
 function updateCommitBar() {
   const n = [...confirmedIds].filter(id => {
     const r = allRows.find(x => x.recNum === id);
-    return r && r.match && r.status !== 'already';
+    return r && r.status !== 'already';
   }).length;
   document.getElementById('commitCount').textContent = n;
   document.getElementById('commitBar').classList.toggle('visible', n > 0);
