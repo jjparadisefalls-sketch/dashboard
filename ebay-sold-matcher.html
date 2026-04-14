@@ -616,7 +616,7 @@ function renderTable() {
         : `<input class="paid-input" type="number" step="0.01" min="0"
             value="${paid != null ? paid.toFixed(2) : ''}"
             placeholder="0.00"
-            onchange="updatePaid('${r.recNum}', this.value)"
+            oninput="updatePaid('${r.recNum}', this.value)"
             title="Cost paid for this card">`;
 
       // Actions
