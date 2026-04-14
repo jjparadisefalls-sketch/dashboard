@@ -2008,34 +2008,28 @@ function setsMatch(r, setInput) {
 }
 
 function findBestMatch(results, card, isPCStamp) {
+  if (isPCStamp) {
+    var eng0 = results.filter(function(r){ return r.language === "ENGLISH"; });
+    var stamped = eng0.filter(function(r){ return /pokemon\s*center/i.test(r.name || ""); });
+    if (stamped.length) {
+      var num0 = (card.num || "").toLowerCase().trim();
+      if (num0) {
+        var nm = stamped.find(function(r){
+          var rn = (r.num||"").toLowerCase();
+          var ni=parseInt(num0,10),rni=parseInt(rn,10);
+          return rn===num0||(!isNaN(ni)&&!isNaN(rni)&&ni===rni);
+        });
+        if (nm) { console.log("[PCT] PC stamp matched:",card.name,"->",nm.name,"id:",nm.id); return nm; }
+      }
+      console.log("[PCT] PC stamp matched:",card.name,"->",stamped[0].name,"id:",stamped[0].id);
+      return stamped[0];
+    }
+    console.warn("[PCT] No stamped variant for:",card.name,"- falling back");
+  }
   var name = (card.name || "").toLowerCase().trim();
   var num  = (card.num  || "").toLowerCase().trim();
   var set  = (card.set  || "").toLowerCase().trim();
   var eng  = results.filter(function(r) { return r.language === "ENGLISH"; });
-
-  // For PC stamped cards: pick the result whose name contains "pokemon center"
-  // with the same card number — don't use sameName since "Magneton Pokemon Center" !== "Magneton"
-  if (isPCStamp) {
-    var stamped = eng.filter(function(r) { return /pokemon\s*center/i.test(r.name || ""); });
-    if (stamped.length) {
-      // Among stamped variants, prefer one with matching number
-      if (num) {
-        var numMatch = stamped.find(function(r) {
-          var rn = (r.num || "").toLowerCase();
-          var ni = parseInt(num, 10), rni = parseInt(rn, 10);
-          return rn === num || (!isNaN(ni) && !isNaN(rni) && ni === rni);
-        });
-        if (numMatch) {
-          console.log("[PCT] PC stamp matched:", card.name, card.num, "->", numMatch.name, numMatch.num, "id:", numMatch.id);
-          return numMatch;
-        }
-      }
-      console.log("[PCT] PC stamp matched (no num):", card.name, "->", stamped[0].name, "id:", stamped[0].id);
-      return stamped[0];
-    }
-    // No stamped variant found — fall through to normal matching
-    console.warn("[PCT] No stamped variant found for:", card.name, "— falling back to normal match");
-  }
 
   var sameName = function(r) {
     var rn = (r.name || "").toLowerCase();
@@ -2125,8 +2119,7 @@ async function fetchCardPrice(card) {
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
   var pdId = cachedId || card.pokedataId || null;
 
-  // For PC stamped cards: always re-search — the stored pokedataId is likely the
-  // unstamped variant. The pc-keyed cacheKey ensures we cache the correct stamped ID.
+  // For PC stamped cards: always re-search so we use the stamped variant ID.
   var needsSearch = !pdId || isPCStamp;
 
   if (needsSearch) {
@@ -4544,7 +4537,12 @@ function App() {
     }, "(", (inv || []).filter(function (i) {
       return i.sport === s.id;
     }).length, ")"));
-  }))), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("button", {
+    key: "sold",
+    className: "sidebar-nav-btn ".concat(view === "sold" ? "active" : ""),
+    onClick: function onClick() { return setView("sold"); }
+  }, React.createElement("span", { style:{opacity:0.7} }, "💰"), " Sold History"),
+  /*#__PURE__*/React.createElement("div", {
     className: "account-filters"
   }, /*#__PURE__*/React.createElement("div", {
     className: "sidebar-label"
@@ -4608,7 +4606,7 @@ function App() {
     className: "topbar"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "topbar-title"
-  }, view === "dashboard" ? acctFilter === "all" ? "All Accounts" : (_ACCOUNTS$acctFilter = ACCOUNTS[acctFilter]) === null || _ACCOUNTS$acctFilter === void 0 ? void 0 : _ACCOUNTS$acctFilter.label : view === "pokemon" ? "Pokémon Market" : view === "inventory" ? "Card Inventory \xB7 ".concat(((_SPORTS_MAP$invSport = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport === void 0 ? void 0 : _SPORTS_MAP$invSport.emoji) || "", " ").concat(((_SPORTS_MAP$invSport2 = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport2 === void 0 ? void 0 : _SPORTS_MAP$invSport2.label) || "") : "Dashboard"), /*#__PURE__*/React.createElement("div", {
+  }, view === "sold" ? "💰 Sold History" : view === "dashboard" ? (acctFilter === "all" ? "All Accounts" : (_ACCOUNTS$acctFilter = ACCOUNTS[acctFilter]) === null || _ACCOUNTS$acctFilter === void 0 ? void 0 : _ACCOUNTS$acctFilter.label) : view === "pokemon" ? "Pokémon Market" : view === "inventory" ? "Card Inventory \xB7 ".concat(((_SPORTS_MAP$invSport = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport === void 0 ? void 0 : _SPORTS_MAP$invSport.emoji) || "", " ").concat(((_SPORTS_MAP$invSport2 = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport2 === void 0 ? void 0 : _SPORTS_MAP$invSport2.label) || "") : "Dashboard"), /*#__PURE__*/React.createElement("div", {
     className: "topbar-date"
   }, dateStr)), acctFilter !== "all" && view === "dashboard" && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4640,7 +4638,7 @@ function App() {
     invReady: invReady,
     activeSport: invSport,
     setActiveSport: setInvSport
-  })) : view === "dashboard" ? /*#__PURE__*/React.createElement("div", {
+  })) : view === "sold" ? /*#__PURE__*/React.createElement(SoldHistory, null) : view === "dashboard" ? /*#__PURE__*/React.createElement("div", {
     className: "two-col"
   }, /*#__PURE__*/React.createElement(Appointments, {
     filter: acctFilter,
@@ -4688,6 +4686,55 @@ function App() {
       return setCalModal(null);
     }
   }));
+}
+// Sold History View
+function SoldHistory() {
+  var _us1=useState([]),_us1a=_slicedToArray(_us1,2),sold=_us1a[0],setSold=_us1a[1];
+  var _us2=useState("all"),_us2a=_slicedToArray(_us2,2),sportFilter=_us2a[0],setSportFilter=_us2a[1];
+  useEffect(function(){ try{setSold(JSON.parse(localStorage.getItem("cc:sold")||"[]"));}catch(e){} },[]);
+  var filtered=sportFilter==="all"?sold:sold.filter(function(s){return s.sport===sportFilter;});
+  var totalNet=filtered.reduce(function(a,s){return a+(s.net||0);},0);
+  var totalPnl=filtered.reduce(function(a,s){return a+(s.pnl||0);},0);
+  var totalPaid=filtered.reduce(function(a,s){return a+(s.paid||0);},0);
+  var sorted=filtered.slice().sort(function(a,b){return(b.recordedAt||"").localeCompare(a.recordedAt||"");});
+  return React.createElement("div",null,
+    React.createElement("div",{className:"stats-row",style:{marginBottom:20}},
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Sales"),React.createElement("div",{className:"stat-value"},filtered.length)),
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Net Revenue"),React.createElement("div",{className:"stat-value",style:{color:"var(--green)"}},"$"+totalNet.toFixed(2))),
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Cost"),React.createElement("div",{className:"stat-value",style:{color:"var(--muted)"}},totalPaid>0?"$"+totalPaid.toFixed(2):"—")),
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total P&L"),React.createElement("div",{className:"stat-value "+(totalPnl>=0?"profit-pos":"profit-neg")},(totalPnl>=0?"+":"")+"$"+Math.abs(totalPnl).toFixed(2)))
+    ),
+    React.createElement("div",{className:"market-tabs",style:{marginBottom:16}},
+      [{id:"all",label:"All Sports"},{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"}].map(function(sp){
+        return React.createElement("button",{key:sp.id,className:"market-tab"+(sportFilter===sp.id?" active":""),onClick:function(){setSportFilter(sp.id);}},sp.label);
+      })
+    ),
+    sorted.length===0
+      ?React.createElement("div",{className:"empty"},React.createElement("div",{className:"empty-icon"},"📦"),"No sold cards yet. Use the eBay Sold Matcher to import sales.")
+      :React.createElement("div",{className:"panel",style:{padding:0}},
+          React.createElement("table",{className:"inv-table"},
+            React.createElement("thead",null,
+              React.createElement("tr",null,["Card","Set","#","Grade","Sale Date","Sold","Net","Paid","P&L"].map(function(h){return React.createElement("th",{key:h},h);}))
+            ),
+            React.createElement("tbody",null,
+              sorted.map(function(s,i){
+                var pos=s.pnl!=null&&s.pnl>=0;
+                return React.createElement("tr",{key:i},
+                  React.createElement("td",{style:{fontWeight:600,maxWidth:160}},s.cardName||(s.ebayTitle||"").substring(0,40)),
+                  React.createElement("td",{style:{color:"var(--muted)"}},s.cardSet||"—"),
+                  React.createElement("td",{style:{fontFamily:"var(--mono)",fontSize:10}},s.cardNum||"—"),
+                  React.createElement("td",null,s.cardGrader&&s.cardGrader!=="raw"?React.createElement("span",{className:"inv-grade grade-psa"},s.cardGrader," ",s.cardGrade):React.createElement("span",{className:"inv-grade grade-raw"},"Raw")),
+                  React.createElement("td",{style:{color:"var(--muted)",fontFamily:"var(--mono)",fontSize:10}},s.saleDate||"—"),
+                  React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.soldFor?"$"+s.soldFor.toFixed(2):"—"),
+                  React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.net?"$"+s.net.toFixed(2):"—"),
+                  React.createElement("td",{style:{fontFamily:"var(--mono)",color:"var(--muted)"}},s.paid!=null?"$"+s.paid.toFixed(2):"—"),
+                  React.createElement("td",{className:s.pnl!=null?(pos?"profit-pos":"profit-neg"):"profit-neu"},s.pnl!=null?(pos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2):"—")
+                );
+              })
+            )
+          )
+        )
+  );
 }
 document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(document.getElementById("root")).render( /*#__PURE__*/React.createElement(App, null)); });
 </script>
