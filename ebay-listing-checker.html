@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eBay Listing Checker · Daddy&Me Collectibles</title>
+<style>
+:root {
+  --bg:#07090f;--s1:#0e1117;--s2:#151922;--s3:#1c2130;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --fg:#e8eaf0;--muted:#6b7280;--muted2:#9ca3af;
+  --mono:'JetBrains Mono','Fira Mono',monospace;--sans:'Inter',system-ui,sans-serif;
+  --red:#f87171;--orange:#fb923c;--green:#34d399;--yellow:#f0c040;--blue:#60a5fa;
+  --red-bg:rgba(248,113,113,0.08);--orange-bg:rgba(251,146,60,0.08);--green-bg:rgba(52,211,153,0.08);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;min-height:100vh;}
+a{color:var(--blue);text-decoration:none;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--s1);position:sticky;top:0;z-index:100;}
+.logo{font-size:18px;font-weight:700;letter-spacing:-0.02em;}.logo span{color:var(--yellow);}
+.badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:rgba(240,192,64,0.15);color:var(--yellow);border:1px solid rgba(240,192,64,0.3);}
+.page{max-width:1400px;margin:0 auto;padding:24px;}
+.drop-zone{border:2px dashed var(--border2);border-radius:16px;padding:56px 24px;text-align:center;background:var(--s1);cursor:pointer;transition:all 0.2s;margin-bottom:24px;}
+.drop-zone.drag-over{border-color:var(--yellow);background:rgba(240,192,64,0.05);}
+.drop-zone.hidden{display:none;}
+.drop-icon{font-size:36px;margin-bottom:16px;}.drop-title{font-size:16px;font-weight:600;margin-bottom:8px;}
+.drop-sub{color:var(--muted);font-size:12px;line-height:1.6;}
+.drop-btn{display:inline-block;margin-top:20px;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;background:rgba(240,192,64,0.15);border:1px solid rgba(240,192,64,0.3);color:var(--yellow);cursor:pointer;}
+.progress-wrap{display:none;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:24px;}
+.progress-wrap.active{display:block;}
+.progress-label{font-size:12px;color:var(--muted2);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.progress-track{height:4px;background:var(--s3);border-radius:2px;overflow:hidden;}
+.progress-bar{height:100%;width:0%;background:var(--yellow);border-radius:2px;transition:width 0.3s;}
+.stats-bar{display:none;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+.stats-bar.visible{display:flex;}
+.stat-card{flex:1;min-width:120px;padding:14px 18px;border-radius:10px;background:var(--s1);border:1px solid var(--border);cursor:pointer;transition:all 0.15s;}
+.stat-num{font-size:24px;font-weight:700;font-family:var(--mono);}.stat-label{font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);margin-top:3px;}
+.stat-card.active-red{background:var(--red-bg);border-color:rgba(248,113,113,0.3);}
+.stat-card.active-orange{background:var(--orange-bg);border-color:rgba(251,146,60,0.3);}
+.stat-card.active-green{background:var(--green-bg);border-color:rgba(52,211,153,0.3);}
+.stat-card.active-red .stat-num{color:var(--red);}.stat-card.active-orange .stat-num{color:var(--orange);}.stat-card.active-green .stat-num{color:var(--green);}
+.toolbar{display:none;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.toolbar.visible{display:flex;}
+.search-in{flex:1;min-width:180px;max-width:260px;background:var(--s1);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:12px;padding:7px 12px;outline:none;font-family:var(--sans);}
+.search-in:focus{border-color:var(--border2);}
+.filter-btn{padding:6px 12px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;background:var(--s1);border:1px solid var(--border);color:var(--muted);transition:all 0.15s;white-space:nowrap;}
+.filter-btn:hover{border-color:var(--border2);color:var(--fg);}
+.filter-btn.active{background:var(--s2);border-color:var(--border2);color:var(--fg);}
+.filter-btn.f-red.active{background:var(--red-bg);border-color:rgba(248,113,113,0.4);color:var(--red);}
+.filter-btn.f-orange.active{background:var(--orange-bg);border-color:rgba(251,146,60,0.4);color:var(--orange);}
+.filter-btn.f-green.active{background:var(--green-bg);border-color:rgba(52,211,153,0.4);color:var(--green);}
+.toolbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.btn{padding:6px 14px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.15s;white-space:nowrap;border:1px solid transparent;}
+.btn-yellow{background:rgba(240,192,64,0.12);border-color:rgba(240,192,64,0.25);color:var(--yellow);}.btn-yellow:hover{background:rgba(240,192,64,0.22);}
+.btn-red{background:rgba(248,113,113,0.12);border-color:rgba(248,113,113,0.25);color:var(--red);}.btn-red:hover{background:rgba(248,113,113,0.22);}
+.btn-blue{background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.25);color:var(--blue);}.btn-blue:hover{background:rgba(96,165,250,0.22);}
+.btn-muted{background:var(--s2);border-color:var(--border);color:var(--muted2);}.btn-muted:hover{border-color:var(--border2);color:var(--fg);}
+.btn:disabled{opacity:0.4;cursor:not-allowed;}
+.sel-toolbar{display:none;align-items:center;gap:10px;padding:9px 14px;background:rgba(96,165,250,0.07);border:1px solid rgba(96,165,250,0.2);border-radius:8px;margin-bottom:12px;}
+.sel-toolbar.visible{display:flex;}
+.sel-count{font-size:12px;font-weight:600;color:var(--blue);}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--s1);border:1px solid var(--border2);border-radius:14px;padding:24px;width:560px;max-width:95vw;max-height:80vh;overflow-y:auto;}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:4px;}.modal-sub{font-size:11px;color:var(--muted);margin-bottom:16px;}
+.modal-search{display:flex;gap:8px;margin-bottom:14px;}
+.modal-search input{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:13px;padding:8px 12px;outline:none;font-family:var(--sans);}
+.modal-search input:focus{border-color:var(--border2);}
+.modal-results{border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:320px;overflow-y:auto;}
+.modal-result-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s;user-select:none;}
+.modal-result-row:last-child{border-bottom:none;}
+.modal-result-row:hover{background:var(--s2);}
+.modal-result-row.selected{background:rgba(96,165,250,0.1);border-left:3px solid var(--blue);padding-left:11px;}
+.mr-name{font-size:13px;font-weight:600;}.mr-set{font-size:11px;color:var(--muted);margin-top:1px;}.mr-num{font-family:var(--mono);font-size:10px;color:var(--muted2);}
+.modal-empty,.modal-searching{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
+table{width:100%;border-collapse:collapse;background:var(--s1);}
+thead tr{background:var(--s2);border-bottom:1px solid var(--border);}
+th{padding:6px 14px;text-align:left;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap;user-select:none;}
+td{padding:4px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr.row-red td{background:rgba(248,113,113,0.04);}
+tr.row-orange td{background:rgba(251,146,60,0.04);}
+tr:hover td{background:rgba(255,255,255,0.015)!important;}
+tr.row-checked td{background:rgba(96,165,250,0.07)!important;}
+.cb-cell{width:36px;padding:10px 8px 10px 14px;}.row-cb{width:15px;height:15px;cursor:pointer;accent-color:var(--blue);}
+.cell-title{max-width:320px;}.title-text{font-size:12px;font-weight:500;line-height:1.3;margin-bottom:2px;}
+.title-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.meta-tag{font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:var(--s3);border:1px solid var(--border);color:var(--muted2);letter-spacing:0.05em;text-transform:uppercase;}
+.meta-tag.psa{background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.3);color:var(--blue);}
+.meta-tag.cgc{background:rgba(167,139,250,0.12);border-color:rgba(167,139,250,0.3);color:#a78bfa;}
+.meta-tag.bgs{background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.3);color:#fbbf24;}
+.meta-tag.tag{background:rgba(52,211,153,0.12);border-color:rgba(52,211,153,0.3);color:var(--green);}
+.item-id{font-size:9px;color:var(--muted);font-family:var(--mono);}
+.cell-price,.cell-market,.cell-suggest{font-family:var(--mono);font-size:13px;font-weight:600;white-space:nowrap;}
+.cell-diff{font-family:var(--mono);font-size:12px;white-space:nowrap;}
+.diff-down{color:var(--red);}.diff-warn{color:var(--orange);}.diff-up{color:var(--green);}.diff-na{color:var(--muted);}
+.badge-status{font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;white-space:nowrap;}
+.badge-red{background:var(--red-bg);border:1px solid rgba(248,113,113,0.3);color:var(--red);}
+.badge-orange{background:var(--orange-bg);border:1px solid rgba(251,146,60,0.3);color:var(--orange);}
+.badge-green{background:var(--green-bg);border:1px solid rgba(52,211,153,0.3);color:var(--green);}
+.badge-nodata{background:var(--s3);border:1px solid var(--border);color:var(--muted);}
+.pd-match{font-size:10px;color:var(--muted2);max-width:150px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pd-miss{font-size:10px;color:var(--muted);font-style:italic;}
+.pd-clickable{cursor:pointer;border-radius:4px;padding:1px 4px;margin:-1px -4px;transition:all 0.15s;display:inline-block;}
+.pd-clickable:hover{background:rgba(96,165,250,0.12);color:var(--blue)!important;font-style:normal!important;}
+.pd-edit-icon{font-size:9px;opacity:0.5;margin-right:2px;}
+.match-quality{font-size:9px;color:var(--muted);margin-top:1px;}
+.suggest-price{color:var(--yellow);}
+.grade-key{font-size:9px;color:var(--muted);padding:1px 4px;background:var(--s2);border:1px solid var(--border);border-radius:3px;font-family:var(--mono);margin-left:4px;}
+.action-link{font-size:11px;font-weight:600;padding:4px 10px;border-radius:5px;background:var(--s2);border:1px solid var(--border);color:var(--muted2);transition:all 0.15s;}
+.action-link:hover{border-color:var(--border2);color:var(--fg);}
+.action-btn-replace{font-size:11px;padding:4px 8px;border-radius:5px;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.25);color:var(--blue);cursor:pointer;transition:all 0.15s;}
+.action-btn-replace:hover{background:rgba(96,165,250,0.22);}
+.threshold-note{font-size:11px;color:var(--muted);padding:8px 14px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;display:none;align-items:center;gap:16px;flex-wrap:wrap;}
+.threshold-note.visible{display:flex;}
+.tn-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;}
+.empty-state{padding:60px;text-align:center;color:var(--muted);}
+.empty-icon{font-size:32px;margin-bottom:12px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="logo">⚡ <span>eBay</span> Listing Checker</div>
+    <div class="badge">Daddy&Me Collectibles</div>
+  </div>
+  <div style="font-size:11px;color:var(--muted)" id="lastRunLabel"></div>
+</div>
+
+<div class="page">
+  <div class="drop-zone" id="dropZone">
+    <div class="drop-icon">📋</div>
+    <div class="drop-title">Drop your eBay Active Listings CSV</div>
+    <div class="drop-sub">Download from: eBay Seller Hub → Reports → Active Listings<br>
+      <strong style="color:var(--orange)">⚠ Do not open in Excel first</strong> — it corrupts item IDs</div>
+    <label class="drop-btn">Choose File<input type="file" accept=".csv" id="fileInput" style="display:none"></label>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label" id="progressLabel">Starting…</div>
+    <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+  </div>
+
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card" onclick="setFilter('all',this)">
+      <div class="stat-num" id="statTotal">0</div><div class="stat-label">Total Listings</div>
+    </div>
+    <div class="stat-card" id="statRedCard" onclick="setFilter('red',this)">
+      <div class="stat-num" style="color:var(--red)" id="statRed">0</div><div class="stat-label">⚠ At / Below Market</div>
+    </div>
+    <div class="stat-card" id="statOrangeCard" onclick="setFilter('orange',this)">
+      <div class="stat-num" style="color:var(--orange)" id="statOrange">0</div><div class="stat-label">⬇ Within 15% Market</div>
+    </div>
+    <div class="stat-card" id="statGreenCard" onclick="setFilter('green',this)">
+      <div class="stat-num" style="color:var(--green)" id="statGreen">0</div><div class="stat-label">✓ Above Market</div>
+    </div>
+    <div class="stat-card" id="statNodataCard" onclick="setFilter('nodata',this)">
+      <div class="stat-num" style="color:var(--muted)" id="statNoData">0</div><div class="stat-label">No Match</div>
+    </div>
+  </div>
+
+  <div class="toolbar" id="toolbar">
+    <input class="search-in" id="searchInput" placeholder="Search listings…" oninput="renderTable()">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn f-red" data-filter="red" onclick="setFilter('red',this)">⚠ At/Below</button>
+    <button class="filter-btn f-orange" data-filter="orange" onclick="setFilter('orange',this)">⬇ Near Market</button>
+    <button class="filter-btn f-green" data-filter="green" onclick="setFilter('green',this)">✓ Healthy</button>
+    <button class="filter-btn" data-filter="nodata" onclick="setFilter('nodata',this)">No Match</button>
+    <div class="toolbar-right">
+      <select id="sortSelect" class="search-in" style="max-width:150px;flex:unset" onchange="renderTable()">
+        <option value="status">Sort: Status</option>
+        <option value="diff">Sort: Diff %</option>
+        <option value="price_hi">Sort: Price ↓</option>
+        <option value="price_lo">Sort: Price ↑</option>
+      </select>
+      <button class="btn btn-yellow" onclick="triggerRescan()">↺ New CSV</button>
+    </div>
+  </div>
+
+  <!-- Selection action bar — appears when rows are checked -->
+  <div class="sel-toolbar" id="selToolbar">
+    <span class="sel-count" id="selCount">0 selected</span>
+    <button class="btn btn-red" onclick="deleteChecked()">🗑 Delete Selected</button>
+    <button class="btn btn-muted" onclick="clearAllChecked()">✕ Deselect All</button>
+  </div>
+
+  <div class="threshold-note" id="thresholdNote">
+    <span><span class="tn-dot" style="background:var(--red)"></span><span style="color:var(--red)">At/Below</span> — listed ≤0% above market</span>
+    <span><span class="tn-dot" style="background:var(--orange)"></span><span style="color:var(--orange)">Near market</span> — listed 0–15% above</span>
+    <span><span class="tn-dot" style="background:var(--green)"></span><span style="color:var(--green)">Healthy</span> — listed &gt;15% above market</span>
+    <span style="margin-left:auto;color:var(--muted)">Suggest = market × 1.20</span>
+  </div>
+
+  <div id="mainContent"></div>
+</div>
+
+<!-- Replace Match Modal -->
+<div class="modal-overlay" id="replaceModal">
+  <div class="modal">
+    <div class="modal-title">🔄 Replace PokeData Match</div>
+    <div class="modal-sub" id="replaceModalSub">Type card name + number for best results (e.g. <strong>Mew 193</strong>). Double-click a result to apply instantly.</div>
+    <div class="modal-search">
+      <input type="text" id="modalSearchInput" placeholder="e.g. Mew 193  or  Charizard 025" oninput="debounceModalSearch()" onkeydown="if(event.key==='Enter')doModalSearch()">
+      <button class="btn btn-blue" onclick="doModalSearch()">Search</button>
+    </div>
+    <div id="modalResults"><div class="modal-empty">Type a card name to search PokeData.</div></div>
+    <div class="modal-footer">
+      <button class="btn btn-muted" onclick="closeReplaceModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const WORKER='https://poke-proxy.jjparadisefalls.workers.dev';
+const SUGGEST_MARGIN=1.20;
+const NEAR_PCT=15;
+let allResults=[],pdCache={},priceCache={},currentFilter='all';
+let checkedIds=new Set(),lastCheckedVisIdx=null,selectedReplaceCard=null,modalTimer=null;
+let _modalPool=[], _singleReplaceRid=null; // _singleReplaceRid = inline single-row replace
+
+function rid(r){return r.itemId||r.title.substring(0,60);}
+
+// CSV
+function splitLine(line){const c=[];let s='',q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(q&&line[i+1]==='"'){s+='"';i++;}else q=!q;}else if(ch===','&&!q){c.push(s);s='';}else s+=ch;}c.push(s);return c;}
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return[];
+  const hdr=splitLine(lines[0]).map(h=>h.trim().toLowerCase().replace(/[^a-z0-9]/g,''));
+  function fc(ns){for(const n of ns){const i=hdr.findIndex(h=>h===n||h.includes(n));if(i>=0)return i;}return -1;}
+  const ti=fc(['title','itemtitle']),ii=fc(['itemnumber','itemid','number']),pi=fc(['currentprice','price','buynow']);
+  if(ti===-1)return[];
+  const out=[];
+  for(let i=1;i<lines.length;i++){
+    const c=splitLine(lines[i]);
+    const title=(c[ti]||'').trim().replace(/^"+|"+$/g,'');
+    if(!title)continue;
+    // Skip non-Pokemon listings by keyword
+    const tl=title.toLowerCase();
+    if(/\b(topps|bowman|disney|lorcana|baseball|football|basketball|soccer|hockey|nfl|nba|mlb|nhl|mls|panini|donruss|prizm|mosaic|select|optic|chronicles|fleer|upper\s*deck|score|leaf|stadium\s*club)\b/.test(tl))continue;
+    const itemId=ii>=0?parseId(c[ii]):'';
+    const price=pi>=0?parseFloat((c[pi]||'').replace(/[",$\s]/g,''))||null:null;
+    out.push({title,itemId,price,ebayUrl:itemId?`https://www.ebay.com/itm/${itemId}`:''});
+  }
+  return out;
+}
+function parseId(r){if(!r)return'';const s=r.trim().replace(/"/g,'');if(/e\+/i.test(s))return'';return s.replace(/[^0-9]/g,'');}
+
+// Grade / name / number
+function detectGrade(t){const u=t.toUpperCase();let m;
+  m=u.match(/\bPSA\s*(\d+(?:\.\d+)?)/);if(m)return{grader:'PSA',grade:parseFloat(m[1])};
+  m=u.match(/\bBGS\s*(\d+(?:\.\d+)?)/);if(m)return{grader:'BGS',grade:parseFloat(m[1])};
+  m=u.match(/\bCGC\s*(\d+(?:\.\d+)?)/);if(m)return{grader:'CGC',grade:parseFloat(m[1])};
+  m=u.match(/\bSGC\s*(\d+(?:\.\d+)?)/);if(m)return{grader:'SGC',grade:parseFloat(m[1])};
+  m=u.match(/\bTAG\s*(\d+(?:\.\d+)?)/);if(m)return{grader:'TAG',grade:parseFloat(m[1])};
+  return{grader:'raw',grade:null};}
+function extractNum(t){let m;
+  m=t.match(/\b([A-Z]{0,3}\d{1,3}\/\d{2,4})\b/i);if(m)return m[1];
+  m=t.match(/\b(SWSH|SM|XY|BW|DP|SV)\d+\b/i);if(m)return m[0];
+  m=t.match(/#(\d{2,3})\b/);if(m)return m[1];
+  return null;}
+function extractName(title){
+  let t=title.trim();
+  if(/^\d{4}\s/.test(t))return'';
+  t=t.replace(/^#\d+\s*(\d{4}\s)?/,'');
+  if(/^\d{4}\s/.test(t.trim()))return'';
+  t=t.replace(/\b(PSA|BGS|CGC|SGC|TAG)\s*\d+(\.\d+)?\b/gi,'');
+  t=t.replace(/\b[A-Z]{0,3}\d{1,3}\/\d{2,4}\b/gi,'').replace(/#\d{2,3}\b/g,'').replace(/\b\d{3,}\b/g,'');
+  const cuts=[/\bScarlet\s*[&]\s*Violet\b/i,/\bObsidian\s*Flames\b/i,/\bPaldean\s*Fates\b/i,
+    /\bTemporal\s*Forces\b/i,/\bStellar\s*Crown\b/i,/\bBrilliant\s*Stars\b/i,/\bLost\s*Origin\b/i,
+    /\bVivid\s*Voltage\b/i,/\bDarkness\s*Ablaze\b/i,/\bChilling\s*Reign\b/i,/\bEvolving\s*Skies\b/i,
+    /\bFusion\s*Strike\b/i,/\bSilver\s*Tempest\b/i,/\bCrown\s*Zenith\b/i,/\bPrismatic\s*Evo/i,
+    /\bHidden\s*Fates\b/i,/\bCelebrations\b/i,/\bTeam\s*Up\b/i,/\bCosmic\s*Eclipse\b/i,
+    /\bPokemon\s*GO\b/i,/\b151\b/,/\bBase\s*Set\b/i,/\bMEW\b/,/\bSVI\b/,/\bSCR\b/,/\bOBF\b/,
+    /\bPerfect\s*Order\b/i,/\bAscended\s*Heroes\b/i];
+  for(const re of cuts){const m=t.search(re);if(m>2){t=t.substring(0,m);break;}}
+  t=t.replace(/\bPok[eé]mon\s*TCG[:\s]*/gi,'').replace(/\bPok[eé]mon\b/gi,'')
+     .replace(/\b(holo(foil)?|reverse\s*holo|full\s*art|illustration\s*rare|ultra\s*rare|secret\s*rare|rainbow\s*rare|special\s*illustration|trainer\s*gallery)\b/gi,'')
+     .replace(/\b(near\s*mint|nm-?mt|nm|lp|mp|hp|gem\s*mint|mint|excellent|ungraded|graded)\b/gi,'')
+     .replace(/\b(sealed|chinese|japanese|english|card|cards|pack|promo|tcg)\b/gi,'')
+     .replace(/\b(rare|common|uncommon)\b/gi,'').replace(/\b\d{4}\b/g,'')
+     .replace(/\s{2,}/g,' ').trim().replace(/\b(EX|NM|GX|V|VMAX|VSTAR)\s*$/i,'').trim();
+  return t.split(/\s+/).filter(w=>w&&w.length>1&&!/^[-&,]$/.test(w)).slice(0,4).join(' ').trim();
+}
+
+// API
+async function searchCard(name){
+  const k=name.toLowerCase().trim();if(pdCache[k]!==undefined)return pdCache[k];
+  try{const r=await fetch(`${WORKER}/search?query=${encodeURIComponent(name)}`);const d=await r.json();pdCache[k]=Array.isArray(d)?d:[];}
+  catch{pdCache[k]=[];}return pdCache[k];}
+async function getPricing(id){
+  if(priceCache[id]!==undefined)return priceCache[id];
+  try{const r=await fetch(`${WORKER}/pricing?id=${id}`);priceCache[id]=await r.json();}
+  catch{priceCache[id]=null;}return priceCache[id];}
+
+// Match
+async function findCard(title){
+  const name=extractName(title),num=extractNum(title);
+  if(!name||name.length<2)return{card:null,confidence:'none'};
+  let cands=[];
+  if(num){const n=num.split('/')[0].replace(/^0+/,'');cands=await searchCard(name+' '+n);
+    if(cands.length){const m=score(cands,title,num);if(m&&m._s>=12)return{card:m,confidence:'high'};}}
+  cands=await searchCard(name);
+  if(cands.length){const m=score(cands,title,num);if(m&&m._s>=8)return{card:m,confidence:m._s>=15?'high':'medium'};if(m)return{card:m,confidence:'low'};}
+  const sn=name.split(' ').slice(0,2).join(' ');
+  if(sn!==name&&sn.length>=3){cands=await searchCard(sn);if(cands.length){const m=score(cands,title,num);if(m&&m._s>=6)return{card:m,confidence:'low'};}}
+  return{card:null,confidence:'none'};}
+function score(cands,title,num){
+  if(!cands?.length)return null;
+  const eng=cands.filter(c=>c.language==='ENGLISH');
+  const pool=eng.length?eng:cands;
+  const t=title.toLowerCase().replace(/pokémon/g,'pokemon');
+  const sc=pool.map(c=>{let s=0;
+    const cn=(c.name||'').toLowerCase(),cs=(c.set_name||'').toLowerCase(),cnum=(c.num||'').toLowerCase().replace(/^0+/,'');
+    if(t.includes(cn))s+=10;else{const nw=cn.split(/\s+/).filter(w=>w.length>2);s+=nw.filter(w=>t.includes(w)).length*3;}
+    cs.split(/[\s:/]+/).filter(w=>w.length>3).forEach(w=>{if(t.includes(w))s+=3;});
+    if(num){const n=num.toLowerCase().replace(/^0+/,'').split('/')[0];if(cnum===n||cnum.includes(n)||t.includes(cnum))s+=6;}
+    if(cnum&&(t.includes('/'+cnum)||t.includes('#'+cnum)))s+=4;
+    return{...c,_s:s};});
+  sc.sort((a,b)=>b._s-a._s);return sc[0]._s>0?sc[0]:pool[0];}
+
+// Price
+function pickPrice(pd,grader,grade){
+  if(!pd)return{price:null,key:null};
+  const p=pd.pricing||pd;
+  if(grader!=='raw'&&grade!=null){
+    for(const k of[`${grader} ${grade.toFixed(1)}`,`${grader} ${grade}`,`${grader} ${Math.floor(grade)}`])
+      if(p[k]?.value>0)return{price:p[k].value,key:k};}
+  if(p['eBay Raw']?.value>0)return{price:p['eBay Raw'].value,key:'eBay Raw'};
+  if(p['Pokedata Raw']?.value>0)return{price:p['Pokedata Raw'].value,key:'Pokedata Raw'};
+  if(p['TCGPlayer']?.value>0)return{price:p['TCGPlayer'].value,key:'TCGPlayer'};
+  return{price:null,key:null};}
+function classify(my,mkt){if(!my||!mkt)return'nodata';const p=((my-mkt)/mkt)*100;if(p<=0)return'red';if(p<=NEAR_PCT)return'orange';return'green';}
+
+// Scan
+async function runScan(listings){
+  allResults=[];pdCache={};priceCache={};checkedIds=new Set();lastCheckedVisIdx=null;
+  ['statsBar','toolbar','thresholdNote','selToolbar'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+  document.getElementById('mainContent').innerHTML='';
+  setProgress(2,`Loaded ${listings.length} listings — matching to PokeData…`);
+  const results=[];
+  for(let i=0;i<listings.length;i++){
+    const L=listings[i];
+    setProgress(2+Math.round((i/listings.length)*95),`[${i+1}/${listings.length}] ${L.title.substring(0,55)}…`);
+    const{grader,grade}=detectGrade(L.title);
+    const{card:pdCard,confidence}=await findCard(L.title);
+    let marketPrice=null,priceKey=null;
+    if(pdCard){const pd=await getPricing(pdCard.id);const{price,key}=pickPrice(pd,grader,grade);marketPrice=price;priceKey=key;}
+    const status=classify(L.price,marketPrice);
+    const diffPct=(L.price&&marketPrice)?((L.price-marketPrice)/marketPrice)*100:null;
+    const suggest=marketPrice?marketPrice*SUGGEST_MARGIN:null;
+    results.push({...L,grader,grade,pdCard,confidence,marketPrice,priceKey,status,diffPct,suggest});
+    if((i+1)%5===0||i===listings.length-1){allResults=results.slice();renderTable();updateStats();}
+  }
+  hideProgress();
+  ['statsBar','toolbar','thresholdNote'].forEach(id=>document.getElementById(id).classList.add('visible'));
+  const now=new Date();
+  document.getElementById('lastRunLabel').textContent=`Last scan: ${now.toLocaleDateString()} ${now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+  try{localStorage.setItem('elc:results',JSON.stringify(allResults));localStorage.setItem('elc:lastRun',now.toISOString());}catch(e){}
+}
+
+// Render
+function visRows(){
+  const s=(document.getElementById('searchInput')?.value||'').toLowerCase();
+  const sort=document.getElementById('sortSelect')?.value||'status';
+  let rows=allResults.map((r,i)=>({...r,_i:i}));
+  if(currentFilter!=='all')rows=rows.filter(r=>r.status===currentFilter);
+  if(s)rows=rows.filter(r=>r.title.toLowerCase().includes(s));
+  const ord={red:0,orange:1,green:2,nodata:3};
+  rows.sort((a,b)=>{
+    if(sort==='status'){const d=(ord[a.status]??4)-(ord[b.status]??4);if(d!==0)return d;return(a.diffPct??999)-(b.diffPct??999);}
+    if(sort==='diff')return(a.diffPct??999)-(b.diffPct??999);
+    if(sort==='price_hi')return(b.price??0)-(a.price??0);
+    if(sort==='price_lo')return(a.price??0)-(b.price??0);
+    return 0;});
+  return rows;}
+
+function renderTable(){
+  const rows=visRows();
+  if(!rows.length){document.getElementById('mainContent').innerHTML=`<div class="empty-state"><div class="empty-icon">🔍</div>No listings match.</div>`;return;}
+  const cf={high:'✓',medium:'~',low:'?',none:''};
+  const html=`<div class="table-wrap"><table>
+  <thead><tr>
+    <th style="width:36px;padding:10px 8px 10px 14px"><input type="checkbox" id="masterCb" class="row-cb" onclick="toggleAll(this)"></th>
+    <th style="width:33%">Listing</th><th>My Price</th><th>Market</th><th>Diff</th><th>Suggest</th><th>Status</th><th>PokeData Match</th><th></th>
+  </tr></thead>
+  <tbody>${rows.map((r,vi)=>{
+    const id=rid(r),checked=checkedIds.has(id);
+    const rc=checked?'row-checked':r.status==='red'?'row-red':r.status==='orange'?'row-orange':'';
+    const mp=r.price!=null?`$${r.price.toFixed(2)}`:`<span class="diff-na">—</span>`;
+    let ms=`<span class="diff-na">—</span>`;
+    if(r.marketPrice)ms=`$${r.marketPrice.toFixed(2)}${r.priceKey?`<span class="grade-key">${r.priceKey}</span>`:''}`;
+    let ds=`<span class="diff-na">—</span>`;
+    if(r.diffPct!=null){
+      const sg=r.diffPct>=0?'+':'';
+      const cl=r.diffPct<=0?'diff-down':r.diffPct<=NEAR_PCT?'diff-warn':'diff-up';
+      const dd=r.price&&r.marketPrice?`<div style="font-size:10px;color:var(--muted)">${(r.price-r.marketPrice)>=0?'+':''}$${Math.abs(r.price-r.marketPrice).toFixed(2)}</div>`:'';
+      ds=`<span class="${cl}">${sg}${r.diffPct.toFixed(1)}%</span>${dd}`;}
+    const ss=r.suggest?`<span class="suggest-price">$${r.suggest.toFixed(2)}</span>`:`<span class="diff-na">—</span>`;
+    const badges={red:'<span class="badge-status badge-red">⚠ At/Below</span>',orange:'<span class="badge-status badge-orange">⬇ Near Mkt</span>',green:'<span class="badge-status badge-green">✓ Healthy</span>',nodata:'<span class="badge-status badge-nodata">No Data</span>'};
+    const gc=r.grader==='PSA'?'psa':r.grader==='CGC'?'cgc':r.grader==='BGS'?'bgs':r.grader==='TAG'?'tag':'';
+    const gt=r.grader!=='raw'?`<span class="meta-tag ${gc}">${r.grader} ${r.grade}</span>`:`<span class="meta-tag">Raw</span>`;
+    const pd=r.pdCard
+      ?`<span class="pd-match pd-clickable" title="Click to fix match" onclick="openInlineReplace('${rid(r).replace(/'/g,"\\'")}','${(r.pdCard.name+' '+(r.pdCard.num||'')).trim().replace(/'/g,"\\'")}')"><span class="pd-edit-icon">✎</span> ${cf[r.confidence]||''} ${r.pdCard.name} ${r.pdCard.num}</span><div class="match-quality">${r.pdCard.set_name||''}</div>`
+      :`<span class="pd-miss pd-clickable" title="Click to search for match" onclick="openInlineReplace('${rid(r).replace(/'/g,"\\'")}','${extractName(r.title).replace(/'/g,"\\'")}')">✎ No match — click to fix</span>`;
+    const replaceBtn=`<button class="action-btn-replace" onclick="openInlineReplace('${id.replace(/'/g,"\\'")}','${(r.pdCard?(r.pdCard.name+' '+(r.pdCard.num||'')).trim():extractName(r.title)).replace(/'/g,"\\'")}')">🔄</button>`;
+    const edit=r.ebayUrl?`<a href="${r.ebayUrl}" target="_blank" class="action-link">Edit ↗</a>`:`<span class="diff-na">—</span>`;
+    const te=r.title.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const iid=r.itemId?`<span class="item-id">${r.itemId}</span>`:'';
+    // Escape id for use in attribute
+    const esc=id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return`<tr class="${rc}">
+      <td style="width:36px;padding:10px 8px 10px 14px"><input type="checkbox" class="row-cb" ${checked?'checked':''} data-rid="${id.replace(/"/g,'&quot;')}" data-vi="${vi}" onchange="toggleRow(this)" onclick="handleClick(event,this)"></td>
+      <td class="cell-title"><div class="title-text">${te}</div><div class="title-meta">${gt}${iid}</div></td>
+      <td class="cell-price">${mp}</td><td class="cell-market">${ms}</td>
+      <td class="cell-diff">${ds}</td><td class="cell-suggest">${ss}</td>
+      <td>${badges[r.status]||badges.nodata}</td><td>${pd}</td><td style="white-space:nowrap">${replaceBtn} ${edit}</td>
+    </tr>`;}).join('')}
+  </tbody></table></div>`;
+  document.getElementById('mainContent').innerHTML=html;
+  syncMasterCb();}
+
+// Checkbox interactions
+function toggleRow(cb){
+  const id=cb.dataset.rid;
+  if(cb.checked)checkedIds.add(id);else checkedIds.delete(id);
+  const tr=cb.closest('tr');
+  if(tr){if(cb.checked)tr.className='row-checked';else{const r=allResults.find(x=>rid(x)===id);tr.className=r?(r.status==='red'?'row-red':r.status==='orange'?'row-orange':''):'';}}
+  updateSelBar();syncMasterCb();lastCheckedVisIdx=parseInt(cb.dataset.vi);}
+
+function handleClick(e,cb){
+  const vi=parseInt(cb.dataset.vi);
+  if(e.shiftKey&&lastCheckedVisIdx!==null){
+    e.preventDefault();
+    const rows=visRows();
+    const lo=Math.min(lastCheckedVisIdx,vi),hi=Math.max(lastCheckedVisIdx,vi);
+    const shouldCheck=cb.checked;
+    for(let i=lo;i<=hi;i++){const r=rows[i];if(!r)continue;if(shouldCheck)checkedIds.add(rid(r));else checkedIds.delete(rid(r));}
+    renderTable();updateSelBar();lastCheckedVisIdx=vi;return;}
+  lastCheckedVisIdx=vi;}
+
+function toggleAll(masterCb){
+  visRows().forEach(r=>masterCb.checked?checkedIds.add(rid(r)):checkedIds.delete(rid(r)));
+  renderTable();updateSelBar();}
+
+function clearAllChecked(){checkedIds.clear();lastCheckedVisIdx=null;renderTable();updateSelBar();}
+
+function updateSelBar(){
+  const n=checkedIds.size;
+  document.getElementById('selCount').textContent=`${n} selected`;
+  document.getElementById('selToolbar').classList.toggle('visible',n>0);}
+
+function syncMasterCb(){
+  const cb=document.getElementById('masterCb');if(!cb)return;
+  const rows=visRows(),ids=rows.map(r=>rid(r));
+  const all=ids.length>0&&ids.every(id=>checkedIds.has(id));
+  const some=ids.some(id=>checkedIds.has(id));
+  cb.checked=all;cb.indeterminate=!all&&some;}
+
+// Delete
+function deleteChecked(){
+  const n=checkedIds.size;if(!n)return;
+  if(!confirm(`Remove ${n} listing${n>1?'s':''} from this view?`))return;
+  allResults=allResults.filter(r=>!checkedIds.has(rid(r)));
+  checkedIds.clear();lastCheckedVisIdx=null;
+  renderTable();updateStats();updateSelBar();
+  try{localStorage.setItem('elc:results',JSON.stringify(allResults));}catch(e){}}
+
+// Replace modal
+// Open modal for a SINGLE row (inline click on match cell)
+function openInlineReplace(rowRid, prefill){
+  _singleReplaceRid=rowRid;
+  selectedReplaceCard=null;_modalPool=[];
+  document.getElementById('modalSearchInput').value=prefill||'';
+  document.getElementById('replaceModalSub').textContent='Double-click a card to apply it instantly, or refine the search below.';
+  document.getElementById('replaceModal').classList.add('open');
+  if(prefill&&prefill.length>=2){
+    document.getElementById('modalResults').innerHTML='<div class="modal-searching">Searching PokeData…</div>';
+    doModalSearch();
+  } else {
+    document.getElementById('modalResults').innerHTML='<div class="modal-empty">Type a card name to search PokeData.</div>';
+    setTimeout(()=>document.getElementById('modalSearchInput').focus(),100);
+  }
+}
+function closeReplaceModal(){document.getElementById('replaceModal').classList.remove('open');selectedReplaceCard=null;_singleReplaceRid=null;}
+function debounceModalSearch(){clearTimeout(modalTimer);modalTimer=setTimeout(doModalSearch,400);}
+async function doModalSearch(){
+  const raw=document.getElementById('modalSearchInput').value.trim();
+  if(!raw||raw.length<2)return;
+  document.getElementById('modalResults').innerHTML='<div class="modal-searching">Searching PokeData…</div>';
+
+  // Multi-strategy: try several query forms and merge unique results
+  // Handles inputs like "Mew 193", "Mew ex 193", "Mew MEW 193", "Mew ultra rare 193"
+  const seen=new Set();
+  let merged=[];
+  function addCands(arr){
+    if(!arr)return;
+    const eng=arr.filter(c=>c.language==='ENGLISH');
+    const pool=eng.length?eng:arr;
+    pool.forEach(c=>{if(!seen.has(c.id)){seen.add(c.id);merged.push(c);}});
+  }
+
+  // Extract number if present (e.g. "193" from "Mew 193" or "Mew ex 193")
+  const numMatch=raw.match(/\b(\d{1,3}(?:\/\d{2,4})?)\b/);
+  const num=numMatch?numMatch[1]:null;
+  // Strip the number + noise words to get just the name
+  const nameOnly=raw.replace(/\b\d{1,3}(?:\/\d{2,4})?\b/,'')
+                     .replace(/\b(ultra\s*rare|secret\s*rare|rare|holo|ex|gx|vmax|vstar|v|full\s*art|illustration|special|promo)\b/gi,'')
+                     .replace(/\b(151|mew|svi|scr|obf|svp|swsh|sm|xy|bw)\b/gi,w=>w) // keep set codes
+                     .replace(/\s{2,}/g,' ').trim();
+
+  // Strategy 1: full query as typed
+  addCands(await searchCard(raw));
+  // Strategy 2: name + number only
+  if(num&&nameOnly&&nameOnly!==raw) addCands(await searchCard(nameOnly+' '+num));
+  // Strategy 3: name only (broadest)
+  if(nameOnly&&nameOnly!==raw&&nameOnly.length>=2) addCands(await searchCard(nameOnly));
+  // Strategy 4: if number provided, try just number with first word
+  if(num){const firstWord=raw.split(/\s+/)[0];if(firstWord.length>=2) addCands(await searchCard(firstWord+' '+num));}
+
+  if(!merged.length){
+    document.getElementById('modalResults').innerHTML='<div class="modal-empty">No cards found. Try just the card name (e.g. "Mew") or name and number (e.g. "Mew 193").</div>';
+    return;
+  }
+
+  // Sort: exact number match first, then name match, then rest
+  if(num){
+    const n=num.split('/')[0].replace(/^0+/,'');
+    merged.sort((a,b)=>{
+      const am=(a.num||'').replace(/^0+/,'')===n?0:1;
+      const bm=(b.num||'').replace(/^0+/,'')===n?0:1;
+      return am-bm;
+    });
+  }
+
+  _modalPool=merged.slice(0,30);
+  document.getElementById('modalResults').innerHTML=_modalPool.map((c,i)=>`
+    <div class="modal-result-row" onclick="selectCard(${i})" ondblclick="applyCard(${i})" title="Double-click to apply">
+      <div style="flex:1"><div class="mr-name">${c.name}</div><div class="mr-set">${c.set_name||''} <span class="mr-num">#${c.num||''}</span></div></div>
+      <span class="mr-num" style="color:var(--muted)">id:${c.id}</span>
+    </div>`).join('');}
+function selectCard(i){
+  selectedReplaceCard=_modalPool[i];
+  document.querySelectorAll('.modal-result-row').forEach((r,j)=>r.classList.toggle('selected',j===i));}
+async function applyCard(i){
+  selectCard(i);
+  await confirmReplace();}
+async function confirmReplace(){
+  if(!selectedReplaceCard)return;
+  const card=selectedReplaceCard;closeReplaceModal();
+  const pd=await getPricing(card.id);
+
+  // Determine which rows to update: single inline OR bulk checked
+  const targetIds=_singleReplaceRid ? new Set([_singleReplaceRid]) : new Set(checkedIds);
+
+  allResults=allResults.map(r=>{
+    if(!targetIds.has(rid(r)))return r;
+    const{price,key}=pickPrice(pd,r.grader,r.grade);
+    const status=classify(r.price,price);
+    const diffPct=(r.price&&price)?((r.price-price)/price)*100:null;
+    const suggest=price?price*SUGGEST_MARGIN:null;
+    return{...r,pdCard:card,confidence:'high',marketPrice:price,priceKey:key,status,diffPct,suggest};});
+
+  if(!_singleReplaceRid){checkedIds.clear();lastCheckedVisIdx=null;}
+  _singleReplaceRid=null;
+  renderTable();updateStats();updateSelBar();
+  try{localStorage.setItem('elc:results',JSON.stringify(allResults));}catch(e){}}
+document.getElementById('replaceModal').addEventListener('click',e=>{if(e.target===document.getElementById('replaceModal'))closeReplaceModal();});
+
+// Stats
+function updateStats(){
+  const c={red:0,orange:0,green:0,nodata:0};
+  allResults.forEach(r=>c[r.status]=(c[r.status]||0)+1);
+  document.getElementById('statTotal').textContent=allResults.length;
+  document.getElementById('statRed').textContent=c.red;
+  document.getElementById('statOrange').textContent=c.orange;
+  document.getElementById('statGreen').textContent=c.green;
+  document.getElementById('statNoData').textContent=c.nodata;}
+
+function setFilter(f,btn){
+  currentFilter=f;
+  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.remove('active','f-red','f-orange','f-green'));
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('active-red','active-orange','active-green'));
+  if(btn){btn.classList.add('active');if(f==='red')btn.classList.add('f-red');if(f==='orange')btn.classList.add('f-orange');if(f==='green')btn.classList.add('f-green');}
+  if(f==='red')document.getElementById('statRedCard').classList.add('active-red');
+  if(f==='orange')document.getElementById('statOrangeCard').classList.add('active-orange');
+  if(f==='green')document.getElementById('statGreenCard').classList.add('active-green');
+  renderTable();}
+
+function setProgress(p,l){document.getElementById('progressWrap').classList.add('active');if(p!=null)document.getElementById('progressBar').style.width=p+'%';if(l)document.getElementById('progressLabel').textContent=l;}
+function hideProgress(){document.getElementById('progressWrap').classList.remove('active');}
+
+function handleFile(f){if(!f)return;const r=new FileReader();r.onload=e=>{const l=parseCSV(e.target.result);if(!l.length){alert("Couldn't parse CSV. Make sure you're using the eBay Seller Hub active listings export.");return;}document.getElementById('dropZone').classList.add('hidden');runScan(l);};r.readAsText(f);}
+function triggerRescan(){document.getElementById('dropZone').classList.remove('hidden');['statsBar','toolbar','thresholdNote','selToolbar'].forEach(id=>document.getElementById(id).classList.remove('visible'));document.getElementById('mainContent').innerHTML='';}
+document.getElementById('fileInput').addEventListener('change',e=>handleFile(e.target.files[0]));
+const dz=document.getElementById('dropZone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');handleFile(e.dataTransfer.files[0]);});
+
+(function init(){
+  try{const s=localStorage.getItem('elc:results'),lr=localStorage.getItem('elc:lastRun');
+    if(s){allResults=JSON.parse(s);if(allResults.length>0){
+      document.getElementById('dropZone').classList.add('hidden');
+      ['statsBar','toolbar','thresholdNote'].forEach(id=>document.getElementById(id).classList.add('visible'));
+      updateStats();renderTable();
+      if(lr){const d=new Date(lr);document.getElementById('lastRunLabel').textContent=`Last scan: ${d.toLocaleDateString()} ${d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;}}}}
+  catch(e){}})();
+</script>
+</body>
+</html>
