@@ -4521,7 +4521,12 @@ function App() {
     }, "(", (inv || []).filter(function (i) {
       return i.sport === s.id;
     }).length, ")"));
-  }))), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("button", {
+    key: "sold",
+    className: "sidebar-nav-btn ".concat(view === "sold" ? "active" : ""),
+    onClick: function onClick() { return setView("sold"); }
+  }, React.createElement("span", { style:{opacity:0.7} }, "💰"), " Sold History"),
+  /*#__PURE__*/React.createElement("div", {
     className: "account-filters"
   }, /*#__PURE__*/React.createElement("div", {
     className: "sidebar-label"
@@ -4585,7 +4590,7 @@ function App() {
     className: "topbar"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "topbar-title"
-  }, view === "dashboard" ? acctFilter === "all" ? "All Accounts" : (_ACCOUNTS$acctFilter = ACCOUNTS[acctFilter]) === null || _ACCOUNTS$acctFilter === void 0 ? void 0 : _ACCOUNTS$acctFilter.label : view === "pokemon" ? "Pokémon Market" : view === "inventory" ? "Card Inventory \xB7 ".concat(((_SPORTS_MAP$invSport = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport === void 0 ? void 0 : _SPORTS_MAP$invSport.emoji) || "", " ").concat(((_SPORTS_MAP$invSport2 = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport2 === void 0 ? void 0 : _SPORTS_MAP$invSport2.label) || "") : "Dashboard"), /*#__PURE__*/React.createElement("div", {
+  }, view === "sold" ? "💰 Sold History" : view === "dashboard" ? (acctFilter === "all" ? "All Accounts" : (_ACCOUNTS$acctFilter = ACCOUNTS[acctFilter]) === null || _ACCOUNTS$acctFilter === void 0 ? void 0 : _ACCOUNTS$acctFilter.label) : view === "pokemon" ? "Pokémon Market" : view === "inventory" ? "Card Inventory \xB7 ".concat(((_SPORTS_MAP$invSport = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport === void 0 ? void 0 : _SPORTS_MAP$invSport.emoji) || "", " ").concat(((_SPORTS_MAP$invSport2 = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport2 === void 0 ? void 0 : _SPORTS_MAP$invSport2.label) || "") : "Dashboard"), /*#__PURE__*/React.createElement("div", {
     className: "topbar-date"
   }, dateStr)), acctFilter !== "all" && view === "dashboard" && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4617,7 +4622,7 @@ function App() {
     invReady: invReady,
     activeSport: invSport,
     setActiveSport: setInvSport
-  })) : view === "dashboard" ? /*#__PURE__*/React.createElement("div", {
+  })) : view === "sold" ? /*#__PURE__*/React.createElement(SoldHistory, null) : view === "dashboard" ? /*#__PURE__*/React.createElement("div", {
     className: "two-col"
   }, /*#__PURE__*/React.createElement(Appointments, {
     filter: acctFilter,
@@ -4666,6 +4671,90 @@ function App() {
     }
   }));
 }
+// Sold History View
+function SoldHistory() {
+  var _us1=useState([]),_us1a=_slicedToArray(_us1,2),sold=_us1a[0],setSold=_us1a[1];
+  var _us2=useState("all"),_us2a=_slicedToArray(_us2,2),sportFilter=_us2a[0],setSportFilter=_us2a[1];
+  var _us3=useState(true),_us3a=_slicedToArray(_us3,2),singlesOpen=_us3a[0],setSinglesOpen=_us3a[1];
+  var _us4=useState(true),_us4a=_slicedToArray(_us4,2),sealedOpen=_us4a[0],setSealedOpen=_us4a[1];
+  useEffect(function(){ try{setSold(JSON.parse(localStorage.getItem("cc:sold")||"[]"));}catch(e){} },[]);
+  var filtered=sportFilter==="all"?sold:sold.filter(function(s){return s.sport===sportFilter;});
+  var singles=filtered.filter(function(s){return s.sealedType!=="sealed";});
+  var sealedRows=filtered.filter(function(s){return s.sealedType==="sealed";});
+  function sub(arr){return{count:arr.length,net:arr.reduce(function(a,s){return a+(s.net||0);},0),paid:arr.reduce(function(a,s){return a+(s.paid||0);},0),pnl:arr.reduce(function(a,s){return a+(s.pnl||0);},0)};}
+  var ss=sub(singles),se=sub(sealedRows);
+  var grandNet=ss.net+se.net,grandPaid=ss.paid+se.paid,grandPnl=ss.pnl+se.pnl;
+  function sortDesc(arr){return arr.slice().sort(function(a,b){return(b.recordedAt||"").localeCompare(a.recordedAt||"");});}
+  function SectionHead(props){
+    var s=props.sub,pos=s.pnl>=0;
+    return React.createElement("div",{onClick:props.toggle,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:"var(--s2)",border:"1px solid var(--border)",borderLeft:"3px solid "+props.color,borderRadius:10,marginBottom:8,cursor:"pointer",userSelect:"none"}},
+      React.createElement("span",{style:{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:8}},props.icon," ",props.title,React.createElement("span",{style:{fontSize:10,color:"var(--muted)",fontWeight:400}},s.count+" sales")),
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:16}},
+        React.createElement("div",{style:{display:"flex",gap:14,fontSize:11,fontFamily:"var(--mono)"}},
+          React.createElement("div",{style:{textAlign:"right"}},React.createElement("div",{style:{color:"var(--green)",fontWeight:700}},"$"+s.net.toFixed(2)),React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.05em"}},"Net")),
+          React.createElement("div",{style:{textAlign:"right"}},React.createElement("div",{style:{color:"var(--muted)",fontWeight:700}},s.paid>0?"$"+s.paid.toFixed(2):"—"),React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.05em"}},"Cost")),
+          React.createElement("div",{style:{textAlign:"right"}},React.createElement("div",{style:{color:pos?"var(--green)":"var(--red)",fontWeight:700}},(pos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2)),React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.05em"}},"P&L"))
+        ),
+        React.createElement("span",{style:{fontSize:11,color:"var(--muted)",display:"inline-block",transform:props.isOpen?"rotate(180deg)":"rotate(0deg)"}},"▼")
+      )
+    );
+  }
+  function SoldTable(props){
+    var arr=props.arr,isSingle=props.isSingle;
+    if(!arr.length)return React.createElement("div",{className:"empty",style:{padding:"16px 20px"}},"— No records yet");
+    var cols=isSingle?["Card","Set","#","Grade","Date","Sold","Net","Paid","P&L"]:["Product","Date","Sold","Net","Paid","P&L"];
+    return React.createElement("div",{className:"panel",style:{padding:0,marginBottom:16}},
+      React.createElement("table",{className:"inv-table"},
+        React.createElement("thead",null,React.createElement("tr",null,cols.map(function(h){return React.createElement("th",{key:h},h);}))),
+        React.createElement("tbody",null,sortDesc(arr).map(function(s,i){
+          var pos=s.pnl!=null&&s.pnl>=0;
+          if(isSingle){return React.createElement("tr",{key:i},
+            React.createElement("td",{style:{fontWeight:600,maxWidth:150}},s.cardName||(s.ebayTitle||"").substring(0,40)),
+            React.createElement("td",{style:{color:"var(--muted)"}},s.cardSet||"—"),
+            React.createElement("td",{style:{fontFamily:"var(--mono)",fontSize:10}},s.cardNum||"—"),
+            React.createElement("td",null,s.cardGrader&&s.cardGrader!=="raw"?React.createElement("span",{className:"inv-grade grade-psa"},s.cardGrader," ",s.cardGrade):React.createElement("span",{className:"inv-grade grade-raw"},"Raw")),
+            React.createElement("td",{style:{color:"var(--muted)",fontFamily:"var(--mono)",fontSize:10}},s.saleDate||"—"),
+            React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.soldFor?"$"+s.soldFor.toFixed(2):"—"),
+            React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.net?"$"+s.net.toFixed(2):"—"),
+            React.createElement("td",{style:{fontFamily:"var(--mono)",color:"var(--muted)"}},s.paid!=null?"$"+s.paid.toFixed(2):"—"),
+            React.createElement("td",{className:s.pnl!=null?(pos?"profit-pos":"profit-neg"):"profit-neu"},s.pnl!=null?(pos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2):"—")
+          );}
+          return React.createElement("tr",{key:i},
+            React.createElement("td",{style:{fontWeight:500,maxWidth:280}},s.ebayTitle||(s.cardName||"").substring(0,60)),
+            React.createElement("td",{style:{color:"var(--muted)",fontFamily:"var(--mono)",fontSize:10}},s.saleDate||"—"),
+            React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.soldFor?"$"+s.soldFor.toFixed(2):"—"),
+            React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.net?"$"+s.net.toFixed(2):"—"),
+            React.createElement("td",{style:{fontFamily:"var(--mono)",color:"var(--muted)"}},s.paid!=null?"$"+s.paid.toFixed(2):"—"),
+            React.createElement("td",{className:s.pnl!=null?(pos?"profit-pos":"profit-neg"):"profit-neu"},s.pnl!=null?(pos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2):"—")
+          );
+        }))
+      )
+    );
+  }
+  return React.createElement("div",null,
+    React.createElement("div",{className:"stats-row",style:{marginBottom:20}},
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Sales"),React.createElement("div",{className:"stat-value"},filtered.length)),
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Net Revenue"),React.createElement("div",{className:"stat-value",style:{color:"var(--green)"}},"$"+grandNet.toFixed(2))),
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Cost"),React.createElement("div",{className:"stat-value",style:{color:"var(--muted)"}},grandPaid>0?"$"+grandPaid.toFixed(2):"—")),
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total P&L"),React.createElement("div",{className:"stat-value "+(grandPnl>=0?"profit-pos":"profit-neg")},(grandPnl>=0?"+":"")+"$"+Math.abs(grandPnl).toFixed(2)))
+    ),
+    React.createElement("div",{className:"market-tabs",style:{marginBottom:16}},
+      [{id:"all",label:"All Sports"},{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"}].map(function(sp){
+        return React.createElement("button",{key:sp.id,className:"market-tab"+(sportFilter===sp.id?" active":""),onClick:function(){setSportFilter(sp.id);}},sp.label);
+      })
+    ),
+    sold.length===0
+      ?React.createElement("div",{className:"empty"},React.createElement("div",{className:"empty-icon"},"📦"),"No sold records yet. Use the eBay Sold Matcher or Sealed Matcher to import sales.")
+      :React.createElement("div",null,
+          React.createElement(SectionHead,{title:"Singles",icon:"🃏",color:"var(--green)",sub:ss,isOpen:singlesOpen,toggle:function(){setSinglesOpen(!singlesOpen);}}),
+          singlesOpen&&React.createElement(SoldTable,{arr:singles,isSingle:true}),
+          React.createElement("div",{style:{marginTop:12}}),
+          React.createElement(SectionHead,{title:"Sealed",icon:"📦",color:"#a78bfa",sub:se,isOpen:sealedOpen,toggle:function(){setSealedOpen(!sealedOpen);}}),
+          sealedOpen&&React.createElement(SoldTable,{arr:sealedRows,isSingle:false})
+        )
+  );
+}
+
 document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(document.getElementById("root")).render( /*#__PURE__*/React.createElement(App, null)); });
 </script>
 <body>
@@ -4845,7 +4934,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
       }
 
       var body = {
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 400,
         messages: [{ role: 'user', content: prompt }]
       };
@@ -4939,7 +5028,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1200,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
           messages: [{ role: 'user', content: prompt }]
