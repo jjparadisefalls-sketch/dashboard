@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eBay Sealed Matcher · Daddy&Me Collectibles</title>
+<style>
+:root {
+  --bg:#07090f;--s1:#0e1117;--s2:#151922;--s3:#1c2230;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --fg:#e8eaf0;--muted:#6b7280;--muted2:#9ca3af;
+  --mono:'JetBrains Mono','Fira Mono',monospace;--sans:'Inter',system-ui,sans-serif;
+  --red:#f87171;--orange:#fb923c;--green:#34d399;--yellow:#f0c040;--blue:#60a5fa;--purple:#a78bfa;
+  --red-bg:rgba(248,113,113,0.08);--green-bg:rgba(52,211,153,0.08);--purple-bg:rgba(167,139,250,0.08);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;min-height:100vh;}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;
+  border-bottom:1px solid var(--border);background:var(--s1);position:sticky;top:0;z-index:100;}
+.logo{font-size:17px;font-weight:700;letter-spacing:-0.02em;}
+.logo span{color:var(--purple);}
+.badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;
+  background:rgba(167,139,250,0.15);color:var(--purple);border:1px solid rgba(167,139,250,0.3);}
+.page{max-width:1400px;margin:0 auto;padding:24px;}
+
+.drop-zone{border:2px dashed var(--border2);border-radius:16px;padding:48px 24px;
+  text-align:center;background:var(--s1);cursor:pointer;transition:all 0.2s;margin-bottom:24px;}
+.drop-zone.drag-over{border-color:var(--purple);background:rgba(167,139,250,0.04);}
+.drop-zone.hidden{display:none;}
+.drop-icon{font-size:32px;margin-bottom:14px;}
+.drop-title{font-size:16px;font-weight:600;margin-bottom:8px;}
+.drop-sub{color:var(--muted);font-size:12px;line-height:1.6;}
+.kw-list{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:12px;}
+.kw{font-size:10px;font-weight:600;padding:2px 8px;border-radius:5px;
+  background:rgba(167,139,250,0.12);color:var(--purple);border:1px solid rgba(167,139,250,0.25);}
+.drop-btn{display:inline-block;margin-top:18px;padding:8px 20px;border-radius:8px;
+  font-size:13px;font-weight:600;background:rgba(167,139,250,0.15);
+  border:1px solid rgba(167,139,250,0.3);color:var(--purple);cursor:pointer;}
+
+.progress-wrap{display:none;background:var(--s1);border:1px solid var(--border);
+  border-radius:12px;padding:18px 24px;margin-bottom:24px;}
+.progress-wrap.active{display:block;}
+.progress-label{font-size:12px;color:var(--muted2);margin-bottom:10px;}
+.progress-track{height:4px;background:var(--s3);border-radius:2px;overflow:hidden;}
+.progress-bar{height:100%;width:0%;background:var(--purple);border-radius:2px;transition:width 0.3s;}
+
+.stats-bar{display:none;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+.stats-bar.visible{display:flex;}
+.stat-card{flex:1;min-width:120px;padding:14px 18px;border-radius:10px;background:var(--s1);border:1px solid var(--border);}
+.stat-num{font-size:22px;font-weight:700;font-family:var(--mono);}
+.stat-label{font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);margin-top:3px;}
+
+.toolbar{display:none;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.toolbar.visible{display:flex;}
+.search-in{flex:1;min-width:180px;max-width:260px;background:var(--s1);border:1px solid var(--border);
+  border-radius:8px;color:var(--fg);font-size:12px;padding:7px 12px;outline:none;font-family:var(--sans);}
+.search-in:focus{border-color:var(--border2);}
+.btn{padding:7px 14px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;
+  transition:all 0.15s;white-space:nowrap;border:1px solid transparent;}
+.btn-purple{background:rgba(167,139,250,0.15);border-color:rgba(167,139,250,0.3);color:var(--purple);}
+.btn-purple:hover{background:rgba(167,139,250,0.25);}
+.btn-purple:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-muted{background:var(--s2);border-color:var(--border);color:var(--muted2);}
+.btn-muted:hover{border-color:var(--border2);color:var(--fg);}
+.btn-export{background:rgba(96,165,250,0.12);border-color:rgba(96,165,250,0.25);color:var(--blue);}
+.btn-export:hover{background:rgba(96,165,250,0.22);}
+.toolbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+
+.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);margin-bottom:24px;}
+table{width:100%;border-collapse:collapse;background:var(--s1);}
+thead tr{background:var(--s2);border-bottom:1px solid var(--border);}
+th{padding:8px 12px;text-align:left;font-size:10px;font-weight:700;letter-spacing:0.08em;
+  text-transform:uppercase;color:var(--muted);white-space:nowrap;user-select:none;}
+td{padding:5px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,0.015);}
+tr.row-confirmed td{background:rgba(167,139,250,0.05);}
+tr.row-already td{background:rgba(100,116,139,0.04);}
+
+.cell-title{max-width:320px;}
+.title-text{font-size:12px;font-weight:500;line-height:1.3;margin-bottom:2px;}
+.date-tag{font-size:9px;color:var(--muted);font-family:var(--mono);}
+
+.cell-money{font-family:var(--mono);font-size:12px;font-weight:600;white-space:nowrap;}
+.money-pos{color:var(--green);}.money-neg{color:var(--red);}.money-na{color:var(--muted);}
+
+.badge-status{font-size:10px;font-weight:700;padding:3px 7px;border-radius:4px;white-space:nowrap;}
+.badge-confirmed{background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);color:var(--purple);}
+.badge-pending{background:rgba(240,192,64,0.12);border:1px solid rgba(240,192,64,0.3);color:var(--yellow);}
+.badge-already{background:rgba(100,116,139,0.1);border:1px solid rgba(100,116,139,0.2);color:var(--muted);}
+
+.action-btn{font-size:11px;font-weight:600;padding:3px 9px;border-radius:5px;
+  background:var(--s2);border:1px solid var(--border);color:var(--muted2);
+  cursor:pointer;transition:all 0.15s;white-space:nowrap;}
+.action-btn:hover{border-color:var(--border2);color:var(--fg);}
+.action-btn.confirm{background:rgba(167,139,250,0.12);border-color:rgba(167,139,250,0.3);color:var(--purple);}
+.action-btn.confirm:hover{background:rgba(167,139,250,0.22);}
+
+.paid-input{background:var(--s2);border:1px solid var(--border);border-radius:5px;
+  color:var(--fg);font-size:11px;padding:3px 7px;width:70px;font-family:var(--mono);outline:none;}
+.paid-input:focus{border-color:var(--purple);}
+
+.commit-bar{display:none;position:sticky;bottom:16px;z-index:50;
+  background:var(--s1);border:1px solid rgba(167,139,250,0.3);border-radius:12px;
+  padding:14px 20px;align-items:center;gap:16px;box-shadow:0 8px 32px rgba(0,0,0,0.5);}
+.commit-bar.visible{display:flex;}
+.commit-info{font-size:12px;color:var(--muted2);}
+.commit-info strong{color:var(--fg);}
+
+.empty-state{padding:48px;text-align:center;color:var(--muted);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="logo">📦 <span>Sealed</span> Matcher</div>
+    <div class="badge">Daddy&Me Collectibles</div>
+  </div>
+  <div style="font-size:11px;color:var(--muted)" id="lastRunLabel"></div>
+</div>
+
+<div class="page">
+
+  <div class="drop-zone" id="dropZone">
+    <div class="drop-icon">📦</div>
+    <div class="drop-title">Drop your eBay Orders CSV</div>
+    <div class="drop-sub">Automatically filters to sealed Pokemon products only.<br>
+      Non-Pokemon sports cards and singles are excluded.</div>
+    <div class="kw-list">
+      <span class="kw">Box</span><span class="kw">Booster Box</span><span class="kw">ETB</span>
+      <span class="kw">Elite Trainer</span><span class="kw">Bundle</span>
+      <span class="kw">Collection Box</span><span class="kw">Tin</span>
+      <span class="kw">Blister</span><span class="kw">Display Box</span>
+    </div>
+    <label class="drop-btn">Choose File
+      <input type="file" accept=".csv" id="fileInput" style="display:none">
+    </label>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label" id="progressLabel">Loading…</div>
+    <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+  </div>
+
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--purple)" id="statTotal">0</div>
+      <div class="stat-label">Sealed Sales Found</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--green)" id="statNet">$0</div>
+      <div class="stat-label">Total Net Revenue</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--yellow)" id="statConfirmed">0</div>
+      <div class="stat-label">Confirmed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--muted)" id="statAlready">0</div>
+      <div class="stat-label">Already Recorded</div>
+    </div>
+  </div>
+
+  <div class="toolbar" id="toolbar">
+    <input class="search-in" id="searchInput" placeholder="Search titles…" oninput="renderTable()">
+    <div class="toolbar-right">
+      <button class="btn btn-muted" onclick="triggerRescan()">↺ New CSV</button>
+    </div>
+  </div>
+
+  <div id="mainContent"></div>
+
+  <div class="commit-bar" id="commitBar">
+    <span class="commit-info"><strong id="commitCount">0</strong> sealed sales ready to record</span>
+    <button class="btn btn-purple" onclick="commitSales()">📦 Record All Confirmed → Dashboard</button>
+    <button class="btn btn-muted" onclick="confirmAll()">Select All</button>
+  </div>
+
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+// QUALIFYING: must contain at least one of these to be considered sealed
+const IS_SEALED = /\bbox\b|\betb\b|\belite\s*trainer\b|\bbooster\s*box\b|\bcollection\s*box\b|\bdisplay\s*box\b|\bbundle\b|\btin\b|\bblister\b|\bbooster\s*pack\b|\bpremium\s*collection\b|\bspecial\s*collection\b/i;
+
+// DISQUALIFYING: exclude sports, brands, non-Pokemon
+const NON_POKEMON = /\b(topps|bowman|disney|lorcana|baseball|football|basketball|soccer|hockey|nfl|nba|mlb|nhl|mls|panini|donruss|prizm|mosaic|select|optic|fleer|upper\s*deck|score|leaf|funko|star\s*wars|marvel|yugioh|yu-gi-oh|magic\s*the\s*gathering|mtg)\b/i;
+
+const FEE_RATE = 0.1325;
+
+// ── State ──────────────────────────────────────────────────────────────────
+let allRows = [];
+let confirmedIds = new Set();
+
+function getSoldHistory() {
+  try { return JSON.parse(localStorage.getItem('cc:sold') || '[]'); } catch(e) { return []; }
+}
+function alreadyRecorded(itemNumber) {
+  return getSoldHistory().some(s => s.ebayItemNumber === itemNumber);
+}
+
+// ── CSV Parsing ────────────────────────────────────────────────────────────
+function splitLine(line) {
+  const cols = []; let s = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { if (q && line[i+1]==='"') { s+='"'; i++; } else q=!q; }
+    else if (c === ',' && !q) { cols.push(s); s = ''; }
+    else s += c;
+  }
+  cols.push(s); return cols;
+}
+
+function parseOrders(text) {
+  const lines = text.split(/\r?\n/);
+  let headerLine = '', dataLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (!l || !l.replace(/,/g,'').trim()) continue;
+    if (!headerLine) { headerLine = lines[i]; continue; }
+    dataLines.push(lines[i]);
+  }
+  const headers = splitLine(headerLine).map(h => h.trim().replace(/^"|"$/g,''));
+  function col(row, name) {
+    const i = headers.findIndex(h => h === name);
+    return i >= 0 ? (row[i] || '').trim().replace(/^"|"$/g,'') : '';
+  }
+  const out = [];
+  for (const line of dataLines) {
+    if (!line.trim() || !line.replace(/,/g,'').trim()) continue;
+    const row = splitLine(line);
+    const recNum = col(row, 'Sales Record Number').trim();
+    if (!recNum) continue;
+    const title = col(row, 'Item Title');
+    if (!title) continue;
+    // Must be sealed AND not a disqualified product
+    if (!IS_SEALED.test(title)) continue;
+    if (NON_POKEMON.test(title)) continue;
+    const soldRaw = col(row, 'Sold For').replace(/[$,]/g,'');
+    const soldFor = parseFloat(soldRaw) || 0;
+    const net = parseFloat((soldFor * (1 - FEE_RATE)).toFixed(2));
+    const dateStr = col(row, 'Sale Date');
+    out.push({
+      recNum,
+      itemNumber: col(row, 'Item Number'),
+      title,
+      soldFor,
+      net,
+      date: parseDate(dateStr),
+      dateStr,
+      status: 'pending',
+    });
+  }
+  return out;
+}
+
+function parseDate(s) {
+  if (!s) return null;
+  try {
+    const parts = s.split('-');
+    if (parts.length === 3) return new Date(`${parts[0]} ${parts[1]} ${parseInt(parts[2])+2000}`);
+  } catch(e) {}
+  return null;
+}
+
+// ── Scan ───────────────────────────────────────────────────────────────────
+function runScan(orders) {
+  allRows = orders.map(row => {
+    if (alreadyRecorded(row.itemNumber)) return { ...row, status: 'already' };
+    return { ...row, status: 'pending' };
+  });
+  hideProgress();
+  document.getElementById('statsBar').classList.add('visible');
+  document.getElementById('toolbar').classList.add('visible');
+  renderTable();
+  updateStats();
+  updateCommitBar();
+  const now = new Date();
+  document.getElementById('lastRunLabel').textContent =
+    `Scanned ${now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderTable() {
+  let rows = allRows;
+  const search = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  if (search) rows = rows.filter(r => r.title.toLowerCase().includes(search));
+
+  if (!rows.length) {
+    document.getElementById('mainContent').innerHTML =
+      `<div class="empty-state"><div class="empty-icon">📦</div>No sealed sales found.</div>`;
+    return;
+  }
+
+  const html = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th style="width:40%">eBay Title</th>
+      <th>Sold</th><th>Net</th><th>Date</th>
+      <th>Paid (Cost)</th><th>P&L</th><th>Status</th><th>Action</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const confirmed = confirmedIds.has(r.recNum);
+      const rc = r.status==='already' ? 'row-already' : confirmed ? 'row-confirmed' : '';
+      const te = r.title.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const dateDisp = r.date
+        ? r.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+        : r.dateStr;
+
+      const paid = r.paidPrice || null;
+      const pnl  = paid != null ? r.net - paid : null;
+
+      const paidCell = r.status === 'already'
+        ? `<span class="money-na">${paid!=null?'$'+paid.toFixed(2):'—'}</span>`
+        : `<input class="paid-input" type="number" step="0.01" min="0"
+            value="${paid!=null?paid.toFixed(2):''}" placeholder="0.00"
+            oninput="updatePaid('${r.recNum}',this.value)"
+            data-recnum="${r.recNum}">`;
+
+      const pnlCell = pnl != null
+        ? `<span class="cell-money ${pnl>=0?'money-pos':'money-neg'}">${pnl>=0?'+':''}$${Math.abs(pnl).toFixed(2)}</span>`
+        : `<span class="money-na">—</span>`;
+
+      const statusBadge = r.status === 'already'
+        ? '<span class="badge-status badge-already">— Recorded</span>'
+        : confirmed
+          ? '<span class="badge-status badge-confirmed">✓ Confirmed</span>'
+          : '<span class="badge-status badge-pending">Pending</span>';
+
+      const actionBtn = r.status === 'already'
+        ? '<span class="money-na" style="font-size:10px">Done</span>'
+        : `<button class="action-btn ${confirmed?'confirm':''}"
+            onclick="toggleConfirm('${r.recNum}',this)">${confirmed?'✓ Confirmed':'Confirm'}</button>`;
+
+      return `<tr class="${rc}" data-recnum="${r.recNum}">
+        <td class="cell-title"><div class="title-text">${te}</div><div class="date-tag">${dateDisp}</div></td>
+        <td class="cell-money">$${r.soldFor.toFixed(2)}</td>
+        <td class="cell-money money-pos">$${r.net.toFixed(2)}</td>
+        <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dateDisp}</td>
+        <td>${paidCell}</td>
+        <td class="cell-money pnl-cell">${pnlCell}</td>
+        <td>${statusBadge}</td>
+        <td>${actionBtn}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+
+  document.getElementById('mainContent').innerHTML = html;
+}
+
+// ── Interactions ───────────────────────────────────────────────────────────
+function toggleConfirm(recNum, btn) {
+  if (confirmedIds.has(recNum)) {
+    confirmedIds.delete(recNum);
+    btn.textContent = 'Confirm';
+    btn.className = 'action-btn';
+  } else {
+    confirmedIds.add(recNum);
+    btn.textContent = '✓ Confirmed';
+    btn.className = 'action-btn confirm';
+  }
+  const tr = document.querySelector(`tr[data-recnum="${recNum}"]`);
+  if (tr) tr.className = confirmedIds.has(recNum) ? 'row-confirmed' : '';
+  updateCommitBar();
+  updateStats();
+}
+
+function confirmAll() {
+  allRows.forEach(r => { if (r.status !== 'already') confirmedIds.add(r.recNum); });
+  renderTable();
+  updateCommitBar();
+  updateStats();
+}
+
+function updatePaid(recNum, value) {
+  const row = allRows.find(r => r.recNum === recNum);
+  if (!row) return;
+  row.paidPrice = parseFloat(value) || null;
+  // Update P&L in-place
+  const pnl = row.paidPrice != null ? row.net - row.paidPrice : null;
+  const tr = document.querySelector(`tr[data-recnum="${recNum}"]`);
+  if (tr) {
+    const cell = tr.querySelector('.pnl-cell');
+    if (cell) {
+      cell.innerHTML = pnl != null
+        ? `<span class="cell-money ${pnl>=0?'money-pos':'money-neg'}">${pnl>=0?'+':''}$${Math.abs(pnl).toFixed(2)}</span>`
+        : `<span class="money-na">—</span>`;
+    }
+  }
+}
+
+// ── Commit ─────────────────────────────────────────────────────────────────
+function commitSales() {
+  const toCommit = allRows.filter(r => confirmedIds.has(r.recNum) && r.status !== 'already');
+  if (!toCommit.length) { alert('No confirmed sales to record.'); return; }
+
+  const ok = confirm(
+    `Record ${toCommit.length} sealed sale${toCommit.length>1?'s':''} to your dashboard?\n\n` +
+    toCommit.slice(0,5).map(r => `• ${r.title.substring(0,50)} → Net $${r.net.toFixed(2)}`).join('\n') +
+    (toCommit.length > 5 ? `\n…and ${toCommit.length-5} more` : '')
+  );
+  if (!ok) return;
+
+  let soldHistory;
+  try { soldHistory = JSON.parse(localStorage.getItem('cc:sold') || '[]'); }
+  catch(e) { soldHistory = []; }
+
+  const now = new Date().toISOString();
+  toCommit.forEach(row => {
+    const paid = row.paidPrice || null;
+    const pnl  = paid != null ? parseFloat((row.net - paid).toFixed(2)) : null;
+    soldHistory.push({
+      id: `sold_${row.recNum}_${Date.now()}`,
+      ebayItemNumber: row.itemNumber,
+      ebayTitle: row.title,
+      cardName: row.title.substring(0, 60),
+      cardSet: '', cardNum: '', cardGrader: '', cardGrade: '',
+      sport: 'pokemon',
+      sealedType: 'sealed',    // ← tells dashboard to show in Sealed section
+      soldFor: row.soldFor,
+      net: row.net,
+      paid, pnl,
+      saleDate: row.dateStr,
+      recordedAt: now,
+    });
+    row.status = 'already';
+    confirmedIds.delete(row.recNum);
+  });
+
+  try { localStorage.setItem('cc:sold', JSON.stringify(soldHistory)); }
+  catch(e) { alert('Storage error: ' + e.message); return; }
+
+  renderTable();
+  updateStats();
+  updateCommitBar();
+  alert(`✅ Done! ${toCommit.length} sealed sale${toCommit.length>1?'s':''} recorded to dashboard.\n\nReload your dashboard and click 💰 Sold History to see them.`);
+}
+
+// ── Stats & UI ─────────────────────────────────────────────────────────────
+function updateStats() {
+  const active = allRows.filter(r => r.status !== 'already');
+  const already = allRows.filter(r => r.status === 'already');
+  const conf = active.filter(r => confirmedIds.has(r.recNum));
+  const totalNet = active.reduce((a,r) => a + r.net, 0);
+  document.getElementById('statTotal').textContent     = allRows.length;
+  document.getElementById('statNet').textContent       = '$'+totalNet.toFixed(2);
+  document.getElementById('statConfirmed').textContent = conf.length;
+  document.getElementById('statAlready').textContent   = already.length;
+}
+
+function updateCommitBar() {
+  const n = [...confirmedIds].filter(id => {
+    const r = allRows.find(x => x.recNum === id);
+    return r && r.status !== 'already';
+  }).length;
+  document.getElementById('commitCount').textContent = n;
+  document.getElementById('commitBar').classList.toggle('visible', n > 0);
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progressWrap').classList.add('active');
+  if (pct != null) document.getElementById('progressBar').style.width = pct + '%';
+  if (label)       document.getElementById('progressLabel').textContent = label;
+}
+function hideProgress() { document.getElementById('progressWrap').classList.remove('active'); }
+
+// ── File Handling ──────────────────────────────────────────────────────────
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    setProgress(5, 'Parsing CSV…');
+    document.getElementById('dropZone').classList.add('hidden');
+    setTimeout(() => {
+      const orders = parseOrders(e.target.result);
+      if (!orders.length) {
+        document.getElementById('dropZone').classList.remove('hidden');
+        hideProgress();
+        alert('No sealed Pokemon products found. Make sure you\'re using the eBay Orders CSV and that your listings include keywords like Box, ETB, Bundle, Tin, etc.');
+        return;
+      }
+      setProgress(80, `Found ${orders.length} sealed sales. Checking for duplicates…`);
+      runScan(orders);
+    }, 50);
+  };
+  reader.readAsText(file);
+}
+
+function triggerRescan() {
+  allRows = []; confirmedIds.clear();
+  document.getElementById('dropZone').classList.remove('hidden');
+  document.getElementById('statsBar').classList.remove('visible');
+  document.getElementById('toolbar').classList.remove('visible');
+  document.getElementById('commitBar').classList.remove('visible');
+  document.getElementById('mainContent').innerHTML = '';
+  const si = document.getElementById('searchInput');
+  if (si) si.value = '';
+}
+
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+</script>
+</body>
+</html>
