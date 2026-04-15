@@ -1540,13 +1540,14 @@ function PokeNews() {
     ];
 
     var ts = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    var todayFull = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
     var allResults = [];
     var creatorIdx = 0;
 
     function fetchTranscript(creator) {
-      return fetch("https://poke-transcript.jjparadisefalls.workers.dev", {
+      return fetch("https://poke-transcript.jjparadisefalls.workers.dev?t=" + Date.now(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
         body: JSON.stringify({ creator: creator.name, handle: creator.handle })
       }).then(function(r) { return r.json(); }).catch(function() { return {}; });
     }
@@ -1561,16 +1562,16 @@ function PokeNews() {
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "No markdown, no extra text, just the JSON object.";
       } else {
-        prompt = "You are a Pokemon TCG market advisor. Search the web for the most recent content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
+        prompt = "You are a Pokemon TCG market advisor. Today is " + todayFull + ". Search the web for the most recent content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
           (creatorData.videoTitle ? "Their latest video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n\n" : "") +
-          "Find their most convicted trade recommendation from this video or recent content.\n\n" +
+          "Find their most convicted trade recommendation from this week or recent content (prioritize content from the last 7 days).\n\n" +
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "If nothing found, return: { \"text\": \"\" }\n" +
           "No markdown, no extra text, just the JSON object.";
       }
 
       var body = {
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-4-6",
         max_tokens: 300,
         messages: [{ role: "user", content: prompt }]
       };
@@ -1621,7 +1622,7 @@ function PokeNews() {
 
     function runMarketNews() {
       setRmmStatus("🌐 Searching market news...");
-      var prompt = "You are a Pokemon TCG market advisor. Search the web RIGHT NOW for the latest Pokemon TCG market news.\n\n" +
+      var prompt = "You are a Pokemon TCG market advisor. Today is " + todayFull + ". Search the web RIGHT NOW for the latest Pokemon TCG market news from the past 7 days.\n\n" +
         "Return ONLY a JSON array of 6-8 items (no markdown, just raw JSON).\n" +
         "Each item: { \"text\": \"...\" }\n\n" +
         "RULES:\n" +
@@ -1634,7 +1635,7 @@ function PokeNews() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 1200,
           tools: [{ type: "web_search_20250305", name: "web_search" }],
           messages: [{ role: "user", content: prompt }]
@@ -2007,25 +2008,7 @@ function setsMatch(r, setInput) {
   return false;
 }
 
-function findBestMatch(results, card, isPCStamp) {
-  if (isPCStamp) {
-    var eng0 = results.filter(function(r){ return r.language === "ENGLISH"; });
-    var stamped = eng0.filter(function(r){ return /pokemon\s*center/i.test(r.name || ""); });
-    if (stamped.length) {
-      var num0 = (card.num || "").toLowerCase().trim();
-      if (num0) {
-        var nm = stamped.find(function(r){
-          var rn = (r.num||"").toLowerCase();
-          var ni=parseInt(num0,10),rni=parseInt(rn,10);
-          return rn===num0||(!isNaN(ni)&&!isNaN(rni)&&ni===rni);
-        });
-        if (nm) { console.log("[PCT] PC stamp matched:",card.name,"->",nm.name,"id:",nm.id); return nm; }
-      }
-      console.log("[PCT] PC stamp matched:",card.name,"->",stamped[0].name,"id:",stamped[0].id);
-      return stamped[0];
-    }
-    console.warn("[PCT] No stamped variant for:",card.name,"- falling back");
-  }
+function findBestMatch(results, card) {
   var name = (card.name || "").toLowerCase().trim();
   var num  = (card.num  || "").toLowerCase().trim();
   var set  = (card.set  || "").toLowerCase().trim();
@@ -2119,8 +2102,9 @@ async function fetchCardPrice(card) {
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
   var pdId = cachedId || card.pokedataId || null;
 
-  // For PC stamped cards: always re-search so we use the stamped variant ID.
-  var needsSearch = !pdId || isPCStamp;
+  // If we have a cached/stored ID but also have a card number, verify it's correct
+  // The search cache key encodes name+set+num, so it already uniquely identifies the card.
+  var needsSearch = !pdId;
 
   if (needsSearch) {
     var results = [];
@@ -2161,7 +2145,7 @@ async function fetchCardPrice(card) {
       console.warn("[PCT] All searches failed (proxy unavailable) for:", card.name, card.set, card.num);
       return { pdId: null, value: null, proxyError: true };
     }
-    var match = findBestMatch(results, card, isPCStamp);
+    var match = findBestMatch(results, card);
     if (!match) {
       console.warn("[PCT] No match for:", card.name, card.set, card.num, isPCStamp ? "(PC stamp)" : "");
       // Only cache NOMATCH when proxy was alive and truly returned no match
@@ -2850,17 +2834,16 @@ function InventoryTab(_ref21) {
       )
     ),
 
-    // Sport tabs — own row above buttons
-    React.createElement("div", { style:{marginBottom:10} },
+    // Action toolbar
+    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px",justifyContent:"space-between"} },
+      // Sport tabs
       React.createElement("div", { className:"market-tabs" },
         [{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"},{id:"disney",label:"✨ Disney"}].map(function(sp){
           return React.createElement("button", { key:sp.id, className:"market-tab"+(activeSport===sp.id?" active":""), onClick:function(){setActive(sp.id);} }, sp.label);
         })
-      )
-    ),
+      ),
 
-    // Action toolbar
-    React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap",padding:"0 4px"} },
+      React.createElement("div", { style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"} },
         // Refresh
         React.createElement("button", {
           style:{background:refreshingAll?"rgba(240,192,64,0.05)":"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--cards)",fontSize:12,fontWeight:600,cursor:refreshingAll?"not-allowed":"pointer"},
@@ -2904,6 +2887,7 @@ function InventoryTab(_ref21) {
           style:{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:7,padding:"7px 14px",color:"var(--red)",fontSize:12,fontWeight:600,cursor:"pointer"},
           onClick:function(){ if(confirm("Clear all "+activeSport+" inventory? This cannot be undone.")) setInv((inv||[]).filter(function(x){return x.sport!==activeSport;})); }
         }, "🗑 Clear All")
+      )
     ),
 
     // Sections
@@ -4537,12 +4521,7 @@ function App() {
     }, "(", (inv || []).filter(function (i) {
       return i.sport === s.id;
     }).length, ")"));
-  }))), /*#__PURE__*/React.createElement("button", {
-    key: "sold",
-    className: "sidebar-nav-btn ".concat(view === "sold" ? "active" : ""),
-    onClick: function onClick() { return setView("sold"); }
-  }, React.createElement("span", { style:{opacity:0.7} }, "💰"), " Sold History"),
-  /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "account-filters"
   }, /*#__PURE__*/React.createElement("div", {
     className: "sidebar-label"
@@ -4606,7 +4585,7 @@ function App() {
     className: "topbar"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "topbar-title"
-  }, view === "sold" ? "💰 Sold History" : view === "dashboard" ? (acctFilter === "all" ? "All Accounts" : (_ACCOUNTS$acctFilter = ACCOUNTS[acctFilter]) === null || _ACCOUNTS$acctFilter === void 0 ? void 0 : _ACCOUNTS$acctFilter.label) : view === "pokemon" ? "Pokémon Market" : view === "inventory" ? "Card Inventory \xB7 ".concat(((_SPORTS_MAP$invSport = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport === void 0 ? void 0 : _SPORTS_MAP$invSport.emoji) || "", " ").concat(((_SPORTS_MAP$invSport2 = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport2 === void 0 ? void 0 : _SPORTS_MAP$invSport2.label) || "") : "Dashboard"), /*#__PURE__*/React.createElement("div", {
+  }, view === "dashboard" ? acctFilter === "all" ? "All Accounts" : (_ACCOUNTS$acctFilter = ACCOUNTS[acctFilter]) === null || _ACCOUNTS$acctFilter === void 0 ? void 0 : _ACCOUNTS$acctFilter.label : view === "pokemon" ? "Pokémon Market" : view === "inventory" ? "Card Inventory \xB7 ".concat(((_SPORTS_MAP$invSport = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport === void 0 ? void 0 : _SPORTS_MAP$invSport.emoji) || "", " ").concat(((_SPORTS_MAP$invSport2 = SPORTS_MAP[invSport]) === null || _SPORTS_MAP$invSport2 === void 0 ? void 0 : _SPORTS_MAP$invSport2.label) || "") : "Dashboard"), /*#__PURE__*/React.createElement("div", {
     className: "topbar-date"
   }, dateStr)), acctFilter !== "all" && view === "dashboard" && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4638,7 +4617,7 @@ function App() {
     invReady: invReady,
     activeSport: invSport,
     setActiveSport: setInvSport
-  })) : view === "sold" ? /*#__PURE__*/React.createElement(SoldHistory, null) : view === "dashboard" ? /*#__PURE__*/React.createElement("div", {
+  })) : view === "dashboard" ? /*#__PURE__*/React.createElement("div", {
     className: "two-col"
   }, /*#__PURE__*/React.createElement(Appointments, {
     filter: acctFilter,
@@ -4686,117 +4665,6 @@ function App() {
       return setCalModal(null);
     }
   }));
-}
-// Sold History View
-function SoldHistory() {
-  var _us1=useState([]),_us1a=_slicedToArray(_us1,2),sold=_us1a[0],setSold=_us1a[1];
-  var _us2=useState("all"),_us2a=_slicedToArray(_us2,2),sportFilter=_us2a[0],setSportFilter=_us2a[1];
-  var _us3=useState(true),_us3a=_slicedToArray(_us3,2),singlesOpen=_us3a[0],setSinglesOpen=_us3a[1];
-  var _us4=useState(true),_us4a=_slicedToArray(_us4,2),sealedOpen=_us4a[0],setSealedOpen=_us4a[1];
-  useEffect(function(){ try{setSold(JSON.parse(localStorage.getItem("cc:sold")||"[]"));}catch(e){} },[]);
-
-  var filtered=sportFilter==="all"?sold:sold.filter(function(s){return s.sport===sportFilter;});
-  var singles=filtered.filter(function(s){return s.sealedType!=="sealed";});
-  var sealedItems=filtered.filter(function(s){return s.sealedType==="sealed";});
-
-  function subtotals(arr){
-    return{
-      count:arr.length,
-      net:arr.reduce(function(a,s){return a+(s.net||0);},0),
-      paid:arr.reduce(function(a,s){return a+(s.paid||0);},0),
-      pnl:arr.reduce(function(a,s){return a+(s.pnl||0);},0)
-    };
-  }
-  var st=subtotals(singles),se=subtotals(sealedItems);
-  var grandNet=st.net+se.net,grandPaid=st.paid+se.paid,grandPnl=st.pnl+se.pnl;
-  var sorted=function(arr){return arr.slice().sort(function(a,b){return(b.recordedAt||"").localeCompare(a.recordedAt||"");});};
-
-  function renderTable(arr){
-    if(!arr.length) return React.createElement("div",{className:"empty",style:{padding:"20px"}},"— No sales recorded yet");
-    return React.createElement("div",{className:"panel",style:{padding:0}},
-      React.createElement("table",{className:"inv-table"},
-        React.createElement("thead",null,
-          React.createElement("tr",null,["Card","Set","#","Grade","Date","Sold","Net","Paid","P&L"].map(function(h){return React.createElement("th",{key:h},h);}))
-        ),
-        React.createElement("tbody",null,
-          sorted(arr).map(function(s,i){
-            var pos=s.pnl!=null&&s.pnl>=0;
-            return React.createElement("tr",{key:i},
-              React.createElement("td",{style:{fontWeight:600,maxWidth:160}},s.cardName||(s.ebayTitle||"").substring(0,40)),
-              React.createElement("td",{style:{color:"var(--muted)"}},s.cardSet||"—"),
-              React.createElement("td",{style:{fontFamily:"var(--mono)",fontSize:10}},s.cardNum||"—"),
-              React.createElement("td",null,s.cardGrader&&s.cardGrader!=="raw"?React.createElement("span",{className:"inv-grade grade-psa"},s.cardGrader," ",s.cardGrade):React.createElement("span",{className:"inv-grade grade-raw"},"Raw")),
-              React.createElement("td",{style:{color:"var(--muted)",fontFamily:"var(--mono)",fontSize:10}},s.saleDate||"—"),
-              React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.soldFor?"$"+s.soldFor.toFixed(2):"—"),
-              React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.net?"$"+s.net.toFixed(2):"—"),
-              React.createElement("td",{style:{fontFamily:"var(--mono)",color:"var(--muted)"}},s.paid!=null?"$"+s.paid.toFixed(2):"—"),
-              React.createElement("td",{className:s.pnl!=null?(pos?"profit-pos":"profit-neg"):"profit-neu"},s.pnl!=null?(pos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2):"—")
-            );
-          })
-        )
-      )
-    );
-  }
-
-  function SectionHeader(props){
-    var s=props.subtotals,pnlPos=s.pnl>=0;
-    return React.createElement("div",{
-      onClick:props.onToggle,
-      style:{display:"flex",alignItems:"center",justifyContent:"space-between",
-        padding:"12px 16px",background:"var(--s2)",border:"1px solid var(--border)",
-        borderLeft:"3px solid "+props.color,borderRadius:10,marginBottom:8,
-        cursor:"pointer",userSelect:"none"}
-    },
-      React.createElement("span",{style:{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:8}},
-        props.icon," ",props.title,
-        React.createElement("span",{style:{fontSize:10,color:"var(--muted)",fontWeight:400}},s.count+" sales")
-      ),
-      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:20}},
-        React.createElement("div",{style:{display:"flex",gap:16,fontSize:11,fontFamily:"var(--mono)"}},
-          React.createElement("div",{style:{textAlign:"right"}},
-            React.createElement("div",{style:{color:"var(--green)",fontWeight:700}},"$"+s.net.toFixed(2)),
-            React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em"}},"Net")
-          ),
-          React.createElement("div",{style:{textAlign:"right"}},
-            React.createElement("div",{style:{color:"var(--muted)",fontWeight:700}},s.paid>0?"$"+s.paid.toFixed(2):"—"),
-            React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em"}},"Cost")
-          ),
-          React.createElement("div",{style:{textAlign:"right"}},
-            React.createElement("div",{style:{color:pnlPos?"var(--green)":"var(--red)",fontWeight:700}},(pnlPos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2)),
-            React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em"}},"P&L")
-          )
-        ),
-        React.createElement("span",{style:{fontSize:11,color:"var(--muted)",transition:"transform 0.2s",transform:props.isOpen?"rotate(180deg)":"rotate(0deg)"}},"▼")
-      )
-    );
-  }
-
-  return React.createElement("div",null,
-    // Grand total stats
-    React.createElement("div",{className:"stats-row",style:{marginBottom:20}},
-      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Sales"),React.createElement("div",{className:"stat-value"},filtered.length)),
-      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Net Revenue"),React.createElement("div",{className:"stat-value",style:{color:"var(--green)"}},"$"+grandNet.toFixed(2))),
-      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Cost"),React.createElement("div",{className:"stat-value",style:{color:"var(--muted)"}},grandPaid>0?"$"+grandPaid.toFixed(2):"—")),
-      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total P&L"),React.createElement("div",{className:"stat-value "+(grandPnl>=0?"profit-pos":"profit-neg")},(grandPnl>=0?"+":"")+"$"+Math.abs(grandPnl).toFixed(2)))
-    ),
-    // Sport filter tabs
-    React.createElement("div",{className:"market-tabs",style:{marginBottom:16}},
-      [{id:"all",label:"All Sports"},{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"}].map(function(sp){
-        return React.createElement("button",{key:sp.id,className:"market-tab"+(sportFilter===sp.id?" active":""),onClick:function(){setSportFilter(sp.id);}},sp.label);
-      })
-    ),
-    sold.length===0
-      ? React.createElement("div",{className:"empty"},React.createElement("div",{className:"empty-icon"},"📦"),"No sold cards yet. Use the eBay Sold Matcher to import sales.")
-      : React.createElement("div",null,
-          // Singles section
-          React.createElement(SectionHeader,{title:"Singles",icon:"🃏",color:"var(--green)",subtotals:st,isOpen:singlesOpen,onToggle:function(){setSinglesOpen(!singlesOpen);}}),
-          singlesOpen && renderTable(singles),
-          // Sealed section
-          React.createElement("div",{style:{marginTop:16}}),
-          React.createElement(SectionHeader,{title:"Sealed",icon:"📦",color:"var(--purple)",subtotals:se,isOpen:sealedOpen,onToggle:function(){setSealedOpen(!sealedOpen);}}),
-          sealedOpen && renderTable(sealedItems)
-        )
-  );
 }
 document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(document.getElementById("root")).render( /*#__PURE__*/React.createElement(App, null)); });
 </script>
