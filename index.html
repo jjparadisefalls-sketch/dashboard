@@ -4691,48 +4691,110 @@ function App() {
 function SoldHistory() {
   var _us1=useState([]),_us1a=_slicedToArray(_us1,2),sold=_us1a[0],setSold=_us1a[1];
   var _us2=useState("all"),_us2a=_slicedToArray(_us2,2),sportFilter=_us2a[0],setSportFilter=_us2a[1];
+  var _us3=useState(true),_us3a=_slicedToArray(_us3,2),singlesOpen=_us3a[0],setSinglesOpen=_us3a[1];
+  var _us4=useState(true),_us4a=_slicedToArray(_us4,2),sealedOpen=_us4a[0],setSealedOpen=_us4a[1];
   useEffect(function(){ try{setSold(JSON.parse(localStorage.getItem("cc:sold")||"[]"));}catch(e){} },[]);
+
   var filtered=sportFilter==="all"?sold:sold.filter(function(s){return s.sport===sportFilter;});
-  var totalNet=filtered.reduce(function(a,s){return a+(s.net||0);},0);
-  var totalPnl=filtered.reduce(function(a,s){return a+(s.pnl||0);},0);
-  var totalPaid=filtered.reduce(function(a,s){return a+(s.paid||0);},0);
-  var sorted=filtered.slice().sort(function(a,b){return(b.recordedAt||"").localeCompare(a.recordedAt||"");});
+  var singles=filtered.filter(function(s){return s.sealedType!=="sealed";});
+  var sealedItems=filtered.filter(function(s){return s.sealedType==="sealed";});
+
+  function subtotals(arr){
+    return{
+      count:arr.length,
+      net:arr.reduce(function(a,s){return a+(s.net||0);},0),
+      paid:arr.reduce(function(a,s){return a+(s.paid||0);},0),
+      pnl:arr.reduce(function(a,s){return a+(s.pnl||0);},0)
+    };
+  }
+  var st=subtotals(singles),se=subtotals(sealedItems);
+  var grandNet=st.net+se.net,grandPaid=st.paid+se.paid,grandPnl=st.pnl+se.pnl;
+  var sorted=function(arr){return arr.slice().sort(function(a,b){return(b.recordedAt||"").localeCompare(a.recordedAt||"");});};
+
+  function renderTable(arr){
+    if(!arr.length) return React.createElement("div",{className:"empty",style:{padding:"20px"}},"— No sales recorded yet");
+    return React.createElement("div",{className:"panel",style:{padding:0}},
+      React.createElement("table",{className:"inv-table"},
+        React.createElement("thead",null,
+          React.createElement("tr",null,["Card","Set","#","Grade","Date","Sold","Net","Paid","P&L"].map(function(h){return React.createElement("th",{key:h},h);}))
+        ),
+        React.createElement("tbody",null,
+          sorted(arr).map(function(s,i){
+            var pos=s.pnl!=null&&s.pnl>=0;
+            return React.createElement("tr",{key:i},
+              React.createElement("td",{style:{fontWeight:600,maxWidth:160}},s.cardName||(s.ebayTitle||"").substring(0,40)),
+              React.createElement("td",{style:{color:"var(--muted)"}},s.cardSet||"—"),
+              React.createElement("td",{style:{fontFamily:"var(--mono)",fontSize:10}},s.cardNum||"—"),
+              React.createElement("td",null,s.cardGrader&&s.cardGrader!=="raw"?React.createElement("span",{className:"inv-grade grade-psa"},s.cardGrader," ",s.cardGrade):React.createElement("span",{className:"inv-grade grade-raw"},"Raw")),
+              React.createElement("td",{style:{color:"var(--muted)",fontFamily:"var(--mono)",fontSize:10}},s.saleDate||"—"),
+              React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.soldFor?"$"+s.soldFor.toFixed(2):"—"),
+              React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.net?"$"+s.net.toFixed(2):"—"),
+              React.createElement("td",{style:{fontFamily:"var(--mono)",color:"var(--muted)"}},s.paid!=null?"$"+s.paid.toFixed(2):"—"),
+              React.createElement("td",{className:s.pnl!=null?(pos?"profit-pos":"profit-neg"):"profit-neu"},s.pnl!=null?(pos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2):"—")
+            );
+          })
+        )
+      )
+    );
+  }
+
+  function SectionHeader(props){
+    var s=props.subtotals,pnlPos=s.pnl>=0;
+    return React.createElement("div",{
+      onClick:props.onToggle,
+      style:{display:"flex",alignItems:"center",justifyContent:"space-between",
+        padding:"12px 16px",background:"var(--s2)",border:"1px solid var(--border)",
+        borderLeft:"3px solid "+props.color,borderRadius:10,marginBottom:8,
+        cursor:"pointer",userSelect:"none"}
+    },
+      React.createElement("span",{style:{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:8}},
+        props.icon," ",props.title,
+        React.createElement("span",{style:{fontSize:10,color:"var(--muted)",fontWeight:400}},s.count+" sales")
+      ),
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:20}},
+        React.createElement("div",{style:{display:"flex",gap:16,fontSize:11,fontFamily:"var(--mono)"}},
+          React.createElement("div",{style:{textAlign:"right"}},
+            React.createElement("div",{style:{color:"var(--green)",fontWeight:700}},"$"+s.net.toFixed(2)),
+            React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em"}},"Net")
+          ),
+          React.createElement("div",{style:{textAlign:"right"}},
+            React.createElement("div",{style:{color:"var(--muted)",fontWeight:700}},s.paid>0?"$"+s.paid.toFixed(2):"—"),
+            React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em"}},"Cost")
+          ),
+          React.createElement("div",{style:{textAlign:"right"}},
+            React.createElement("div",{style:{color:pnlPos?"var(--green)":"var(--red)",fontWeight:700}},(pnlPos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2)),
+            React.createElement("div",{style:{color:"var(--muted)",fontSize:9,textTransform:"uppercase",letterSpacing:"0.06em"}},"P&L")
+          )
+        ),
+        React.createElement("span",{style:{fontSize:11,color:"var(--muted)",transition:"transform 0.2s",transform:props.isOpen?"rotate(180deg)":"rotate(0deg)"}},"▼")
+      )
+    );
+  }
+
   return React.createElement("div",null,
+    // Grand total stats
     React.createElement("div",{className:"stats-row",style:{marginBottom:20}},
       React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Sales"),React.createElement("div",{className:"stat-value"},filtered.length)),
-      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Net Revenue"),React.createElement("div",{className:"stat-value",style:{color:"var(--green)"}},"$"+totalNet.toFixed(2))),
-      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Cost"),React.createElement("div",{className:"stat-value",style:{color:"var(--muted)"}},totalPaid>0?"$"+totalPaid.toFixed(2):"—")),
-      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total P&L"),React.createElement("div",{className:"stat-value "+(totalPnl>=0?"profit-pos":"profit-neg")},(totalPnl>=0?"+":"")+"$"+Math.abs(totalPnl).toFixed(2)))
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Net Revenue"),React.createElement("div",{className:"stat-value",style:{color:"var(--green)"}},"$"+grandNet.toFixed(2))),
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total Cost"),React.createElement("div",{className:"stat-value",style:{color:"var(--muted)"}},grandPaid>0?"$"+grandPaid.toFixed(2):"—")),
+      React.createElement("div",{className:"stat-card"},React.createElement("div",{className:"stat-label"},"Total P&L"),React.createElement("div",{className:"stat-value "+(grandPnl>=0?"profit-pos":"profit-neg")},(grandPnl>=0?"+":"")+"$"+Math.abs(grandPnl).toFixed(2)))
     ),
+    // Sport filter tabs
     React.createElement("div",{className:"market-tabs",style:{marginBottom:16}},
       [{id:"all",label:"All Sports"},{id:"pokemon",label:"⚡ Pokémon"},{id:"baseball",label:"⚾ Baseball"},{id:"football",label:"🏈 Football"},{id:"basketball",label:"🏀 Basketball"}].map(function(sp){
         return React.createElement("button",{key:sp.id,className:"market-tab"+(sportFilter===sp.id?" active":""),onClick:function(){setSportFilter(sp.id);}},sp.label);
       })
     ),
-    sorted.length===0
-      ?React.createElement("div",{className:"empty"},React.createElement("div",{className:"empty-icon"},"📦"),"No sold cards yet. Use the eBay Sold Matcher to import sales.")
-      :React.createElement("div",{className:"panel",style:{padding:0}},
-          React.createElement("table",{className:"inv-table"},
-            React.createElement("thead",null,
-              React.createElement("tr",null,["Card","Set","#","Grade","Sale Date","Sold","Net","Paid","P&L"].map(function(h){return React.createElement("th",{key:h},h);}))
-            ),
-            React.createElement("tbody",null,
-              sorted.map(function(s,i){
-                var pos=s.pnl!=null&&s.pnl>=0;
-                return React.createElement("tr",{key:i},
-                  React.createElement("td",{style:{fontWeight:600,maxWidth:160}},s.cardName||(s.ebayTitle||"").substring(0,40)),
-                  React.createElement("td",{style:{color:"var(--muted)"}},s.cardSet||"—"),
-                  React.createElement("td",{style:{fontFamily:"var(--mono)",fontSize:10}},s.cardNum||"—"),
-                  React.createElement("td",null,s.cardGrader&&s.cardGrader!=="raw"?React.createElement("span",{className:"inv-grade grade-psa"},s.cardGrader," ",s.cardGrade):React.createElement("span",{className:"inv-grade grade-raw"},"Raw")),
-                  React.createElement("td",{style:{color:"var(--muted)",fontFamily:"var(--mono)",fontSize:10}},s.saleDate||"—"),
-                  React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.soldFor?"$"+s.soldFor.toFixed(2):"—"),
-                  React.createElement("td",{className:"profit-pos",style:{fontFamily:"var(--mono)"}},s.net?"$"+s.net.toFixed(2):"—"),
-                  React.createElement("td",{style:{fontFamily:"var(--mono)",color:"var(--muted)"}},s.paid!=null?"$"+s.paid.toFixed(2):"—"),
-                  React.createElement("td",{className:s.pnl!=null?(pos?"profit-pos":"profit-neg"):"profit-neu"},s.pnl!=null?(pos?"+":"")+"$"+Math.abs(s.pnl).toFixed(2):"—")
-                );
-              })
-            )
-          )
+    sold.length===0
+      ? React.createElement("div",{className:"empty"},React.createElement("div",{className:"empty-icon"},"📦"),"No sold cards yet. Use the eBay Sold Matcher to import sales.")
+      : React.createElement("div",null,
+          // Singles section
+          React.createElement(SectionHeader,{title:"Singles",icon:"🃏",color:"var(--green)",subtotals:st,isOpen:singlesOpen,onToggle:function(){setSinglesOpen(!singlesOpen);}}),
+          singlesOpen && renderTable(singles),
+          // Sealed section
+          React.createElement("div",{style:{marginTop:16}}),
+          React.createElement(SectionHeader,{title:"Sealed",icon:"📦",color:"var(--purple)",subtotals:se,isOpen:sealedOpen,onToggle:function(){setSealedOpen(!sealedOpen);}}),
+          sealedOpen && renderTable(sealedItems)
         )
   );
 }
