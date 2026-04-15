@@ -1540,7 +1540,6 @@ function PokeNews() {
     ];
 
     var ts = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    var todayFull = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
     var allResults = [];
     var creatorIdx = 0;
 
@@ -1562,9 +1561,9 @@ function PokeNews() {
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "No markdown, no extra text, just the JSON object.";
       } else {
-        prompt = "You are a Pokemon TCG market advisor. Today is " + todayFull + ". Search the web for the most recent content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
+        prompt = "You are a Pokemon TCG market advisor. Search the web for the most recent content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
           (creatorData.videoTitle ? "Their latest video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n\n" : "") +
-          "Find their most convicted trade recommendation from this week or recent content (prioritize content from the last 7 days).\n\n" +
+          "Find their most convicted trade recommendation from this video or recent content.\n\n" +
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "If nothing found, return: { \"text\": \"\" }\n" +
           "No markdown, no extra text, just the JSON object.";
@@ -1622,7 +1621,7 @@ function PokeNews() {
 
     function runMarketNews() {
       setRmmStatus("🌐 Searching market news...");
-      var prompt = "You are a Pokemon TCG market advisor. Today is " + todayFull + ". Search the web RIGHT NOW for the latest Pokemon TCG market news from the past 7 days.\n\n" +
+      var prompt = "You are a Pokemon TCG market advisor. Search the web RIGHT NOW for the latest Pokemon TCG market news.\n\n" +
         "Return ONLY a JSON array of 6-8 items (no markdown, just raw JSON).\n" +
         "Each item: { \"text\": \"...\" }\n\n" +
         "RULES:\n" +
