@@ -2177,21 +2177,6 @@ async function fetchCardPrice(card) {
       if (!results.length && card.set && card.set !== searchSetName) results = await safeSearch(card.name + " " + card.set);
       // Strategy 5: name only — ONLY when no set specified (prevents wrong-set cross-matches)
       if (!results.length && !card.set) results = await safeSearch(card.name);
-      // Strategy 6: /cardlookup — direct PokeData API, bypasses stale Render search index.
-      // Catches any card the Render proxy doesn't have (MEP starters, new sets, etc.)
-      if (!results.length && card.set) {
-        try {
-          var luResp = await fetch(
-            PD_PROXY + "/cardlookup?set_name=" + encodeURIComponent(searchSetName || card.set) +
-            "&name=" + encodeURIComponent(card.name) +
-            (card.num ? "&num=" + encodeURIComponent(card.num) : "")
-          );
-          if (luResp.ok) {
-            var luData = await luResp.json();
-            if (Array.isArray(luData) && luData.length) results = luData;
-          }
-        } catch(e) { console.warn("[PCT] cardlookup error:", e.message); }
-      }
     }
     // If ALL searches errored (proxy asleep), bail without caching
     if (searchError && !results.length) {
@@ -2199,9 +2184,28 @@ async function fetchCardPrice(card) {
       return { pdId: null, value: null, proxyError: true };
     }
     var match = findBestMatch(results, card);
+    // Strategy 6: /cardlookup — direct PokeData API, bypasses stale Render search index.
+    // Runs AFTER findBestMatch fails — the Render search may return results from OTHER sets,
+    // but if none match the right set/num, we go direct to PokeData.
+    if (!match && card.set) {
+      try {
+        var luResp = await fetch(
+          PD_PROXY + "/cardlookup?set_name=" + encodeURIComponent(searchSetName || card.set) +
+          "&name=" + encodeURIComponent(card.name) +
+          (card.num ? "&num=" + encodeURIComponent(card.num) : "")
+        );
+        if (luResp.ok) {
+          var luData = await luResp.json();
+          if (Array.isArray(luData) && luData.length) {
+            match = findBestMatch(luData, card);
+            if (!match) match = luData[0]; // exact match guaranteed by worker filter
+          }
+        }
+      } catch(e) { console.warn("[PCT] cardlookup error:", e.message); }
+    }
     if (!match) {
       console.warn("[PCT] No match for:", card.name, card.set, card.num);
-      // Don't cache NOMATCH for newer sets — they may get cards added any time
+      // Don't cache NOMATCH for newer sets — cards get added over time
       var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp)$/i.test((card.set||"").trim());
       if (results.length > 0 && !skipNomatch) {
         try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
