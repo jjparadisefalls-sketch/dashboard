@@ -1933,6 +1933,10 @@ function normalizeSet(s) {
     [/journey\s*together/i,                   "jtg"],
     [/phantasmal\s*flames/i,                  "pfl"],
     [/mega\s*evolution\s*promos?/i,           "mep"],
+    [/me:\s*mega\s*evolution\s*promos?/i,     "mep"],
+    [/mep\s*black\s*star\s*promos?/i,         "mep"],
+    [/ascended\s*heroes/i,                    "asc"],
+    [/mega\s*evolution[\s\-—]+ascended\s*heroes/i, "asc"],
     [/miscellaneous\s*promos?/i,              "mis"],
     // Newer sets
     [/prismatic\s*evolutions?/i,              "pre"],
@@ -1997,6 +2001,10 @@ function normalizeSet(s) {
     "ssp": "ssp",             // Surging Sparks (pass-through)
     "dri": "dri",             // Destined Rivals (pass-through)
     "hif": "hif",             // Hidden Fates (pass-through)
+    "asc": "asc",             // Ascended Heroes (pass-through)
+    "mep": "mep",             // Mega Evolution Promos (pass-through)
+    "pfl": "pfl",             // Phantasmal Flames (pass-through)
+    "jtg": "jtg",             // Journey Together (pass-through)
     "sm-p promos": "smp",     // SM Black Star Promos
     "sm-p": "smp",
     "swsh promos": "swshp",
