@@ -1966,14 +1966,14 @@ function normalizeSet(s) {
     "pre": "pre",             // Prismatic Evolutions (pass-through)
     "ssp": "ssp",             // Surging Sparks (pass-through)
     "dri": "dri",             // Destined Rivals (pass-through)
-    "hif": "hif",             // Hidden Fates (pass-through)
-    "asc": "asc",             // Ascended Heroes (pass-through)
-    "mep": "mep",             // Mega Evolution Promos (pass-through)
-    "meg": "meg",             // Mega Evolution main set (pass-through)
-    "me":  "mep",             // TCGPlayer sometimes uses "me" for MEP promos
-    "pfl": "pfl",             // Phantasmal Flames (pass-through)
-    "jtg": "jtg",             // Journey Together (pass-through)
-    "sm-p promos": "smp",     // SM Black Star Promos
+    "hif": "hif",
+    "asc": "asc",
+    "mep": "mep",
+    "meg": "meg",
+    "me":  "mep",
+    "pfl": "pfl",
+    "jtg": "jtg",
+    "sm-p promos": "smp",
     "sm-p": "smp",
     "swsh promos": "swshp",
     "swsh promo": "swshp",
@@ -2038,13 +2038,13 @@ function findBestMatch(results, card) {
     // Strip suffix variants: "Blastoise ex" matches "Blastoise", "Chansey" matches "Chansey Reverse Holo"
     var strip = function(s) { return norm(s).replace(/\s+(ex|vstar|vmax|gx|v|reverse holo|holo|stamped)\s*$/i, "").trim(); };
     if (strip(rn) === strip(name) || strip(rn) === name || rn === strip(name)) return true;
-    // Trainer-character suffix: PokeData appends trainer names to some ASC/new-set cards
+    // Trainer-character suffix: PokeData appends trainer names in newer sets
     // e.g. "Boss's Orders Corbeau" must match user's "Boss's Orders"
     var normName = norm(name);
     var normRn = norm(rn);
     if (normRn.startsWith(normName + " ")) {
       var suffix = normRn.slice(normName.length + 1).trim();
-      if (suffix && !/\s/.test(suffix)) return true; // single-word trainer name suffix
+      if (suffix && !/\s/.test(suffix)) return true;
     }
     // Apostrophe normalization: "Team Rocket's Crobat" matches "Team Rockets Crobat"
     var deapos = function(s) { return s.replace(/[''\u2019]/g, "").replace(/\s+/g, " ").trim(); };
@@ -2072,7 +2072,7 @@ function findBestMatch(results, card) {
     // Numeric-only comparison (handles leading zeros: "011" == "11")
     var ni = parseInt(num, 10), rni = parseInt(rn, 10);
     if (!isNaN(ni) && !isNaN(rni) && ni === rni) return true;
-    // Alpha-prefix promo numbers: "swsh134" matches "134", "sm210" matches "210", "MEP012" matches "12"
+    // Alpha-prefix promo numbers: "swsh134" matches "134", "sm210" matches "210"
     // Strip known prefixes and compare the numeric part
     var stripPrefix = function(s) { return s.replace(/^(mepen|mep|gg|sv|swsh|smp|sm|xy|bw|dp|ex|pop|asc|dri|jtg|pfl|pre|ssp)/, ""); };
     var numStripped = stripPrefix(num);
@@ -2112,10 +2112,9 @@ async function fetchCardPrice(card) {
   // Detect Pokemon Center stamp from notes field
   var isPCStamp = /pokemon\s*center|pc\s*stamp/i.test(card.notes || "");
 
-  // Include stamp, grader, and grade in cache key so graded/raw versions never share a cached ID or NOMATCH
+  // Include stamp in cache key so stamped and unstamped cards never share a cached ID
   var graderKey = (card.grader && card.grader.toUpperCase() !== "RAW" && card.grade)
-    ? (card.grader || "").toLowerCase().trim() + String(card.grade).replace(".", "")
-    : "raw";
+    ? (card.grader || "").toLowerCase().trim() + String(card.grade).replace(".", "") : "raw";
   var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, isPCStamp ? "pc" : "", graderKey].join("|");
 
   // Search cache — but validate the cached ID still matches this card's number
@@ -2145,9 +2144,7 @@ async function fetchCardPrice(card) {
       if (stamped.length) results = stamped;
       console.log("[PCT] PC stamp search for", card.name, "→", results.length, "results", stamped.length ? "(stamped found)" : "(no stamped variant)");
     } else {
-      // Translate short set codes to full PokeData set names for search queries.
-      // CRITICAL: searching "Bulbasaur MEP" returns nothing; "Bulbasaur Mega Evolution Promos" finds the card.
-      // Same applies to ASC, PRE, JTG, and every other short code.
+      // Translate short set codes to full PokeData set names for the Render search proxy.
       var SET_NAME_MAP = {
         "mep": "Mega Evolution Promos", "meg": "Mega Evolution",
         "asc": "Ascended Heroes",       "pre": "Prismatic Evolutions",
@@ -2168,34 +2165,45 @@ async function fetchCardPrice(card) {
       var setKey = (card.set || "").toLowerCase().trim();
       var searchSetName = SET_NAME_MAP[setKey] || card.set || "";
 
-      // Strategy 1: name + full set name + number (most precise for known short-code sets)
+      // Strategy 1: name + full set name + number
       if (card.num && searchSetName && searchSetName !== card.set) {
         results = await safeSearch(card.name + " " + searchSetName + " " + card.num);
       }
       // Strategy 2: name + number
       if (!results.length && card.num) results = await safeSearch(card.name + " " + card.num);
-      // Strategy 3: name + full set name only
+      // Strategy 3: name + full set name
       if (!results.length && searchSetName) results = await safeSearch(card.name + " " + searchSetName);
-      // Strategy 4: name + raw set field (fallback for unmapped sets)
+      // Strategy 4: name + raw set (for unmapped sets)
       if (!results.length && card.set && card.set !== searchSetName) results = await safeSearch(card.name + " " + card.set);
-      // Strategy 5: name only
-      if (!results.length) results = await safeSearch(card.name);
-      // Strategy 6: alpha-prefix num (SWSH134, SM210) — strip and retry
-      if (!results.length && card.num && /^[a-z]/i.test(card.num)) {
-        var numStripped = card.num.replace(/^[a-z]+/i, "");
-        if (numStripped) results = await safeSearch(card.name + " " + numStripped);
+      // Strategy 5: name only — ONLY when no set specified (prevents wrong-set cross-matches)
+      if (!results.length && !card.set) results = await safeSearch(card.name);
+      // Strategy 6: /cardlookup — direct PokeData API, bypasses stale Render search index.
+      // Catches any card the Render proxy doesn't have (MEP starters, new sets, etc.)
+      if (!results.length && card.set) {
+        try {
+          var luResp = await fetch(
+            PD_PROXY + "/cardlookup?set_name=" + encodeURIComponent(searchSetName || card.set) +
+            "&name=" + encodeURIComponent(card.name) +
+            (card.num ? "&num=" + encodeURIComponent(card.num) : "")
+          );
+          if (luResp.ok) {
+            var luData = await luResp.json();
+            if (Array.isArray(luData) && luData.length) results = luData;
+          }
+        } catch(e) { console.warn("[PCT] cardlookup error:", e.message); }
       }
     }
-    // If ALL searches errored (proxy asleep), bail without caching — will retry next refresh
+    // If ALL searches errored (proxy asleep), bail without caching
     if (searchError && !results.length) {
-      console.warn("[PCT] All searches failed (proxy unavailable) for:", card.name, card.set, card.num);
+      console.warn("[PCT] Proxy unavailable for:", card.name, card.set, card.num);
       return { pdId: null, value: null, proxyError: true };
     }
     var match = findBestMatch(results, card);
     if (!match) {
-      console.warn("[PCT] No match for:", card.name, card.set, card.num, isPCStamp ? "(PC stamp)" : "");
-      // Only cache NOMATCH when proxy was alive and truly returned no match
-      if (results.length > 0) {
+      console.warn("[PCT] No match for:", card.name, card.set, card.num);
+      // Don't cache NOMATCH for newer sets — they may get cards added any time
+      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp)$/i.test((card.set||"").trim());
+      if (results.length > 0 && !skipNomatch) {
         try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
       }
       return { pdId: null, value: null };
@@ -2904,31 +2912,25 @@ function InventoryTab(_ref21) {
           onClick:function(){
             var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
             var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
-            var noId     = allCards.filter(function(x){return !x.pokedataId;});
-            // Clear fetch cache for all unpriced cards with a pdId
             missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
-            // Clear search cache for all cards without a pdId (no match found previously)
             var buildKey = function(x) {
-              var rn = (x.num||"").toLowerCase().trim();
-              var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
-              var isPCStamp = /pokemon\s*center|pc\s*stamp/i.test(x.notes || "");
-              var gk = (x.grader && x.grader.toUpperCase() !== "RAW" && x.grade)
-                ? (x.grader||"").toLowerCase().trim() + String(x.grade).replace(".", "")
-                : "raw";
-              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,isPCStamp?"pc":"",gk].join("|");
+              var rn=(x.num||"").toLowerCase().trim();
+              var nn=(!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn))?String(parseInt(rn,10)):rn;
+              var isPCS=/pokemon\s*center|pc\s*stamp/i.test(x.notes||"");
+              var gk=(x.grader&&x.grader.toUpperCase()!=="RAW"&&x.grade)
+                ?(x.grader||"").toLowerCase().trim()+String(x.grade).replace(".",""):"raw";
+              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,isPCS?"pc":"",gk].join("|");
             };
-            // Clear ALL unpriced cards — catches NOMATCH entries blocking new/MEP/ASC cards
             allCards.filter(function(x){return !x.value;}).forEach(function(x){
-              var k = buildKey(x);
+              var k=buildKey(x);
               localStorage.removeItem(SEARCH_PFX+k);
               localStorage.removeItem(SEARCH_PFX+k+":name");
             });
-            // Also clear pokedataId on unpriced cards so they re-search from scratch
             setInv((inv||[]).map(function(x){
-              if (x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
+              if(x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
               return x;
             }));
-            alert("Cache cleared for "+allCards.filter(function(x){return !x.value;}).length+" unpriced cards. Hit Refresh All Prices to re-fetch.");
+            alert("Cache cleared for "+allCards.filter(function(x){return !x.value;}).length+" unpriced cards. Hit Refresh All Prices.");
           }
         }, "🔧 Fix Missing"),
 
