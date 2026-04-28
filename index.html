@@ -1935,6 +1935,9 @@ function normalizeSet(s) {
     [/mega\s*evolution\s*promos?/i,           "mep"],
     [/me:\s*mega\s*evolution\s*promos?/i,     "mep"],
     [/mep\s*black\s*star\s*promos?/i,         "mep"],
+    [/mega\s*promos?$/i,                      "mep"],
+    [/^mega\s*evolution$/i,                   "meg"],
+    [/me01|mega\s*brave|mega\s*symphonia/i,   "meg"],
     [/ascended\s*heroes/i,                    "asc"],
     [/mega\s*evolution[\s\-—]+ascended\s*heroes/i, "asc"],
     [/miscellaneous\s*promos?/i,              "mis"],
@@ -2003,6 +2006,8 @@ function normalizeSet(s) {
     "hif": "hif",             // Hidden Fates (pass-through)
     "asc": "asc",             // Ascended Heroes (pass-through)
     "mep": "mep",             // Mega Evolution Promos (pass-through)
+    "meg": "meg",             // Mega Evolution main set (pass-through)
+    "me":  "mep",             // PokeData/TCGPlayer sometimes uses "me" for MEP promos
     "pfl": "pfl",             // Phantasmal Flames (pass-through)
     "jtg": "jtg",             // Journey Together (pass-through)
     "sm-p promos": "smp",     // SM Black Star Promos
@@ -2039,7 +2044,7 @@ function setsMatch(r, setInput) {
   // to avoid "dri" matching "adriana" or "pre" matching "premiere"
   var isShortCode = norm.length <= 5 && !/\s/.test(norm);
   if (isShortCode) {
-    return sc === norm || scNorm === norm || sn === norm;
+    return sc === norm || scNorm === norm || sn === norm || snNorm === norm;
   }
 
   // Longer names: substring matching is safe
@@ -2070,6 +2075,17 @@ function findBestMatch(results, card) {
     // Strip suffix variants: "Blastoise ex" matches "Blastoise", "Chansey" matches "Chansey Reverse Holo"
     var strip = function(s) { return norm(s).replace(/\s+(ex|vstar|vmax|gx|v|reverse holo|holo|stamped)\s*$/i, "").trim(); };
     if (strip(rn) === strip(name) || strip(rn) === name || rn === strip(name)) return true;
+    // Trainer-character suffix: PokeData appends trainer names to some cards in newer sets
+    // e.g. "Boss's Orders Corbeau" matches user's "Boss's Orders"
+    // e.g. "Boss's Orders Geeta" matches user's "Boss's Orders"
+    // Rule: if user name is a prefix of the PokeData name, and the suffix is a single word (trainer name), accept it
+    var normName = norm(name);
+    var normRn = norm(rn);
+    if (normRn.startsWith(normName + " ")) {
+      var suffix = normRn.slice(normName.length + 1).trim();
+      // Accept if suffix is a single word (trainer name) with no spaces — not a full different card
+      if (suffix && !/\s/.test(suffix)) return true;
+    }
     // Apostrophe normalization: "Team Rocket's Crobat" matches "Team Rockets Crobat"
     var deapos = function(s) { return s.replace(/[''\u2019]/g, "").replace(/\s+/g, " ").trim(); };
     if (deapos(rn) === deapos(name)) return true;
