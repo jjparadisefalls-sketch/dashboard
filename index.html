@@ -2096,9 +2096,9 @@ function findBestMatch(results, card) {
     // Numeric-only comparison (handles leading zeros: "011" == "11")
     var ni = parseInt(num, 10), rni = parseInt(rn, 10);
     if (!isNaN(ni) && !isNaN(rni) && ni === rni) return true;
-    // Alpha-prefix promo numbers: "swsh134" matches "134", "sm210" matches "210"
+    // Alpha-prefix promo numbers: "swsh134" matches "134", "sm210" matches "210", "MEP012" matches "12"
     // Strip known prefixes and compare the numeric part
-    var stripPrefix = function(s) { return s.replace(/^(gg|sv|swsh|smp|sm|xy|bw|dp|ex|pop)/, ""); };
+    var stripPrefix = function(s) { return s.replace(/^(mepen|mep|gg|sv|swsh|smp|sm|xy|bw|dp|ex|pop|asc|dri|jtg|pfl|pre|ssp)/, ""); };
     var numStripped = stripPrefix(num);
     var rnStripped  = stripPrefix(rn);
     if (numStripped && rnStripped && numStripped === rnStripped) return true;
@@ -2178,10 +2178,15 @@ async function fetchCardPrice(card) {
       if (!results.length && card.set && card.num) results = await safeSearch(card.name + " " + card.set + " " + card.num);
       // Strategy 4: name only
       if (!results.length) results = await safeSearch(card.name);
-      // Strategy 5: alpha-prefix num (SWSH134, SM210, GG10) — strip prefix and retry
+      // Strategy 5: alpha-prefix num (SWSH134, SM210, GG10, MEP012) — strip prefix and retry
       if (!results.length && card.num && /^[a-z]/i.test(card.num)) {
         var numStripped = card.num.replace(/^[a-z]+/i, "");
         if (numStripped) results = await safeSearch(card.name + " " + numStripped);
+      }
+      // Strategy 6: for MEP promo cards, search with full set name as fallback
+      if (!results.length && card.set && /^mep$/i.test((card.set||"").trim())) {
+        results = await safeSearch(card.name + " Mega Evolution Promos");
+        if (!results.length) results = await safeSearch(card.name + " Mega Evolution");
       }
     }
     // If ALL searches errored (proxy asleep), bail without caching — will retry next refresh
