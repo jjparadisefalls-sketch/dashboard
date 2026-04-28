@@ -1544,14 +1544,47 @@ function PokeNews() {
     var creatorIdx = 0;
 
     function fetchTranscript(creator) {
-      return fetch("https://poke-transcript.jjparadisefalls.workers.dev?t=" + Date.now(), {
+      return fetch("https://poke-transcript.jjparadisefalls.workers.dev", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
-        body: JSON.stringify({ creator: creator.name, handle: creator.handle })
-      }).then(function(r) { return r.json(); }).catch(function() { return {}; });
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache, no-store" },
+        body: JSON.stringify({ creator: creator.name, handle: creator.handle, _t: Date.now() })
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        // Normalize worker response — worker may return transcript directly
+        return {
+          creator: creator.name,
+          videoId: data.videoId || null,
+          videoTitle: data.videoTitle || data.title || "",
+          videoDate: data.videoDate || data.date || "",
+          transcript: data.transcript || data.text || "",
+          hasTranscript: !!(data.transcript || data.text) && (data.transcript || data.text || "").length > 100
+        };
+      }).catch(function() { return { creator: creator.name, videoId: null, videoTitle: "", videoDate: "", transcript: "", hasTranscript: false }; });
     }
 
     function analyzeWithClaude(creatorData) {
+      if (!creatorData.videoId && !creatorData.videoTitle) {
+        // Worker returned nothing useful — use web search only
+        var prompt = "You are a Pokemon TCG market advisor. Search the web RIGHT NOW for the most recent YouTube video or content from " + creatorData.creator + " about Pokemon TCG investing, posted in the last 7 days.\n\n" +
+          "Find their most convicted trade recommendation.\n\n" +
+          "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
+          "If nothing found in last 7 days, return: { \"text\": \"\" }\n" +
+          "No markdown, no extra text, just the JSON object.";
+        return fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: 300,
+            tools: [{ type: "web_search_20250305", name: "web_search" }],
+            messages: [{ role: "user", content: prompt }]
+          })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("").trim();
+          raw = raw.replace(/```json|```/g, "").trim();
+          try { return JSON.parse(raw).text || ""; } catch(e) { return ""; }
+        }).catch(function() { return ""; });
+      }
+
       var prompt;
       if (creatorData.hasTranscript && creatorData.transcript) {
         prompt = "You are a Pokemon TCG market advisor. Analyze this transcript from " + creatorData.creator + ".\n\n" +
@@ -1561,9 +1594,10 @@ function PokeNews() {
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "No markdown, no extra text, just the JSON object.";
       } else {
-        prompt = "You are a Pokemon TCG market advisor. Search the web for the most recent content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
-          (creatorData.videoTitle ? "Their latest video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n\n" : "") +
-          "Find their most convicted trade recommendation from this video or recent content.\n\n" +
+        // Have video metadata but no transcript — search web for this specific video's content
+        prompt = "You are a Pokemon TCG market advisor. Search the web for the most recent video or content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
+          (creatorData.videoTitle ? "Their latest known video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + "). Search for this specific video's content, descriptions, or community discussion.\n\n" : "") +
+          "Find their most convicted trade recommendation from their LATEST content (within the last 14 days if possible).\n\n" +
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "If nothing found, return: { \"text\": \"\" }\n" +
           "No markdown, no extra text, just the JSON object.";
@@ -2094,8 +2128,11 @@ async function fetchCardPrice(card) {
   // Detect Pokemon Center stamp from notes field
   var isPCStamp = /pokemon\s*center|pc\s*stamp/i.test(card.notes || "");
 
-  // Include stamp in cache key so stamped and unstamped cards never share a cached ID
-  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, isPCStamp ? "pc" : ""].join("|");
+  // Include stamp, grader, and grade in cache key so graded/raw versions never share a cached ID or NOMATCH
+  var graderKey = (card.grader && card.grader.toUpperCase() !== "RAW" && card.grade)
+    ? (card.grader || "").toLowerCase().trim() + String(card.grade).replace(".", "")
+    : "raw";
+  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, isPCStamp ? "pc" : "", graderKey].join("|");
 
   // Search cache — but validate the cached ID still matches this card's number
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
@@ -2860,19 +2897,28 @@ function InventoryTab(_ref21) {
             var noId     = allCards.filter(function(x){return !x.pokedataId;});
             // Clear fetch cache for all unpriced cards with a pdId
             missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
-            // Clear search cache for all cards without a pdId (no match found previously)
+            // Clear search cache for all unpriced cards using grader-aware keys
             var buildKey = function(x) {
               var rn = (x.num||"").toLowerCase().trim();
               var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
-              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn].join("|");
+              var isPCStamp = /pokemon\s*center|pc\s*stamp/i.test(x.notes || "");
+              var graderKey = (x.grader && x.grader.toUpperCase() !== "RAW" && x.grade)
+                ? (x.grader||"").toLowerCase().trim() + String(x.grade).replace(".", "")
+                : "raw";
+              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,isPCStamp?"pc":"",graderKey].join("|");
             };
-            noId.forEach(function(x){ localStorage.removeItem(SEARCH_PFX+buildKey(x)); });
-            // Also clear pokedataId on unpriced cards so they re-search from scratch
+            // Clear for ALL unpriced cards — catches NOMATCH entries that block new cards from re-searching
+            allCards.filter(function(x){return !x.value;}).forEach(function(x){
+              var k = buildKey(x);
+              localStorage.removeItem(SEARCH_PFX+k);
+              localStorage.removeItem(SEARCH_PFX+k+":name");
+            });
+            // Also clear pokedataId on ALL unpriced cards so they re-search from scratch
             setInv((inv||[]).map(function(x){
               if (x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
               return x;
             }));
-            alert("Cache cleared for "+missing.length+" unpriced + "+noId.length+" unmatched. Hit Refresh All Prices to re-fetch.");
+            alert("Cache cleared for "+allCards.filter(function(x){return !x.value;}).length+" unpriced cards (including any newly added). Hit Refresh All Prices to re-fetch.");
           }
         }, "🔧 Fix Missing"),
 
