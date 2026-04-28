@@ -1544,47 +1544,14 @@ function PokeNews() {
     var creatorIdx = 0;
 
     function fetchTranscript(creator) {
-      return fetch("https://poke-transcript.jjparadisefalls.workers.dev", {
+      return fetch("https://poke-transcript.jjparadisefalls.workers.dev?t=" + Date.now(), {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache, no-store" },
-        body: JSON.stringify({ creator: creator.name, handle: creator.handle, _t: Date.now() })
-      }).then(function(r) { return r.json(); }).then(function(data) {
-        // Normalize worker response — worker may return transcript directly
-        return {
-          creator: creator.name,
-          videoId: data.videoId || null,
-          videoTitle: data.videoTitle || data.title || "",
-          videoDate: data.videoDate || data.date || "",
-          transcript: data.transcript || data.text || "",
-          hasTranscript: !!(data.transcript || data.text) && (data.transcript || data.text || "").length > 100
-        };
-      }).catch(function() { return { creator: creator.name, videoId: null, videoTitle: "", videoDate: "", transcript: "", hasTranscript: false }; });
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
+        body: JSON.stringify({ creator: creator.name, handle: creator.handle })
+      }).then(function(r) { return r.json(); }).catch(function() { return {}; });
     }
 
     function analyzeWithClaude(creatorData) {
-      if (!creatorData.videoId && !creatorData.videoTitle) {
-        // Worker returned nothing useful — use web search only
-        var prompt = "You are a Pokemon TCG market advisor. Search the web RIGHT NOW for the most recent YouTube video or content from " + creatorData.creator + " about Pokemon TCG investing, posted in the last 7 days.\n\n" +
-          "Find their most convicted trade recommendation.\n\n" +
-          "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
-          "If nothing found in last 7 days, return: { \"text\": \"\" }\n" +
-          "No markdown, no extra text, just the JSON object.";
-        return fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-6",
-            max_tokens: 300,
-            tools: [{ type: "web_search_20250305", name: "web_search" }],
-            messages: [{ role: "user", content: prompt }]
-          })
-        }).then(function(r) { return r.json(); }).then(function(data) {
-          var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("").trim();
-          raw = raw.replace(/```json|```/g, "").trim();
-          try { return JSON.parse(raw).text || ""; } catch(e) { return ""; }
-        }).catch(function() { return ""; });
-      }
-
       var prompt;
       if (creatorData.hasTranscript && creatorData.transcript) {
         prompt = "You are a Pokemon TCG market advisor. Analyze this transcript from " + creatorData.creator + ".\n\n" +
@@ -1594,10 +1561,9 @@ function PokeNews() {
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "No markdown, no extra text, just the JSON object.";
       } else {
-        // Have video metadata but no transcript — search web for this specific video's content
-        prompt = "You are a Pokemon TCG market advisor. Search the web for the most recent video or content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
-          (creatorData.videoTitle ? "Their latest known video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + "). Search for this specific video's content, descriptions, or community discussion.\n\n" : "") +
-          "Find their most convicted trade recommendation from their LATEST content (within the last 14 days if possible).\n\n" +
+        prompt = "You are a Pokemon TCG market advisor. Search the web for the most recent content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
+          (creatorData.videoTitle ? "Their latest video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n\n" : "") +
+          "Find their most convicted trade recommendation from this video or recent content.\n\n" +
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "If nothing found, return: { \"text\": \"\" }\n" +
           "No markdown, no extra text, just the JSON object.";
@@ -1934,12 +1900,9 @@ function normalizeSet(s) {
     [/phantasmal\s*flames/i,                  "pfl"],
     [/mega\s*evolution\s*promos?/i,           "mep"],
     [/me:\s*mega\s*evolution\s*promos?/i,     "mep"],
-    [/mep\s*black\s*star\s*promos?/i,         "mep"],
     [/mega\s*promos?$/i,                      "mep"],
     [/^mega\s*evolution$/i,                   "meg"],
-    [/me01|mega\s*brave|mega\s*symphonia/i,   "meg"],
     [/ascended\s*heroes/i,                    "asc"],
-    [/mega\s*evolution[\s\-—]+ascended\s*heroes/i, "asc"],
     [/miscellaneous\s*promos?/i,              "mis"],
     // Newer sets
     [/prismatic\s*evolutions?/i,              "pre"],
@@ -2007,7 +1970,7 @@ function normalizeSet(s) {
     "asc": "asc",             // Ascended Heroes (pass-through)
     "mep": "mep",             // Mega Evolution Promos (pass-through)
     "meg": "meg",             // Mega Evolution main set (pass-through)
-    "me":  "mep",             // PokeData/TCGPlayer sometimes uses "me" for MEP promos
+    "me":  "mep",             // TCGPlayer sometimes uses "me" for MEP promos
     "pfl": "pfl",             // Phantasmal Flames (pass-through)
     "jtg": "jtg",             // Journey Together (pass-through)
     "sm-p promos": "smp",     // SM Black Star Promos
@@ -2075,16 +2038,13 @@ function findBestMatch(results, card) {
     // Strip suffix variants: "Blastoise ex" matches "Blastoise", "Chansey" matches "Chansey Reverse Holo"
     var strip = function(s) { return norm(s).replace(/\s+(ex|vstar|vmax|gx|v|reverse holo|holo|stamped)\s*$/i, "").trim(); };
     if (strip(rn) === strip(name) || strip(rn) === name || rn === strip(name)) return true;
-    // Trainer-character suffix: PokeData appends trainer names to some cards in newer sets
-    // e.g. "Boss's Orders Corbeau" matches user's "Boss's Orders"
-    // e.g. "Boss's Orders Geeta" matches user's "Boss's Orders"
-    // Rule: if user name is a prefix of the PokeData name, and the suffix is a single word (trainer name), accept it
+    // Trainer-character suffix: PokeData appends trainer names to some ASC/new-set cards
+    // e.g. "Boss's Orders Corbeau" must match user's "Boss's Orders"
     var normName = norm(name);
     var normRn = norm(rn);
     if (normRn.startsWith(normName + " ")) {
       var suffix = normRn.slice(normName.length + 1).trim();
-      // Accept if suffix is a single word (trainer name) with no spaces — not a full different card
-      if (suffix && !/\s/.test(suffix)) return true;
+      if (suffix && !/\s/.test(suffix)) return true; // single-word trainer name suffix
     }
     // Apostrophe normalization: "Team Rocket's Crobat" matches "Team Rockets Crobat"
     var deapos = function(s) { return s.replace(/[''\u2019]/g, "").replace(/\s+/g, " ").trim(); };
@@ -2186,7 +2146,8 @@ async function fetchCardPrice(card) {
       console.log("[PCT] PC stamp search for", card.name, "→", results.length, "results", stamped.length ? "(stamped found)" : "(no stamped variant)");
     } else {
       // Translate short set codes to full PokeData set names for search queries.
-      // Critical: searching "Bulbasaur MEP" returns nothing; "Bulbasaur Mega Evolution Promos" works.
+      // CRITICAL: searching "Bulbasaur MEP" returns nothing; "Bulbasaur Mega Evolution Promos" finds the card.
+      // Same applies to ASC, PRE, JTG, and every other short code.
       var SET_NAME_MAP = {
         "mep": "Mega Evolution Promos", "meg": "Mega Evolution",
         "asc": "Ascended Heroes",       "pre": "Prismatic Evolutions",
@@ -2202,7 +2163,7 @@ async function fetchCardPrice(card) {
         "brs": "Brilliant Stars",       "asr": "Astral Radiance",
         "hif": "Hidden Fates",          "shf": "Shining Fates",
         "lor": "Lost Origin",           "pal": "Paldea Evolved",
-        "svp": "Scarlet & Violet Promos"
+        "svp": "Scarlet & Violet Promos", "pgo": "Pokemon GO"
       };
       var setKey = (card.set || "").toLowerCase().trim();
       var searchSetName = SET_NAME_MAP[setKey] || card.set || "";
@@ -2215,7 +2176,7 @@ async function fetchCardPrice(card) {
       if (!results.length && card.num) results = await safeSearch(card.name + " " + card.num);
       // Strategy 3: name + full set name only
       if (!results.length && searchSetName) results = await safeSearch(card.name + " " + searchSetName);
-      // Strategy 4: name + raw set field (for sets not in map, or as fallback)
+      // Strategy 4: name + raw set field (fallback for unmapped sets)
       if (!results.length && card.set && card.set !== searchSetName) results = await safeSearch(card.name + " " + card.set);
       // Strategy 5: name only
       if (!results.length) results = await safeSearch(card.name);
@@ -2946,28 +2907,28 @@ function InventoryTab(_ref21) {
             var noId     = allCards.filter(function(x){return !x.pokedataId;});
             // Clear fetch cache for all unpriced cards with a pdId
             missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
-            // Clear search cache for all unpriced cards using grader-aware keys
+            // Clear search cache for all cards without a pdId (no match found previously)
             var buildKey = function(x) {
               var rn = (x.num||"").toLowerCase().trim();
               var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
               var isPCStamp = /pokemon\s*center|pc\s*stamp/i.test(x.notes || "");
-              var graderKey = (x.grader && x.grader.toUpperCase() !== "RAW" && x.grade)
+              var gk = (x.grader && x.grader.toUpperCase() !== "RAW" && x.grade)
                 ? (x.grader||"").toLowerCase().trim() + String(x.grade).replace(".", "")
                 : "raw";
-              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,isPCStamp?"pc":"",graderKey].join("|");
+              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,isPCStamp?"pc":"",gk].join("|");
             };
-            // Clear for ALL unpriced cards — catches NOMATCH entries that block new cards from re-searching
+            // Clear ALL unpriced cards — catches NOMATCH entries blocking new/MEP/ASC cards
             allCards.filter(function(x){return !x.value;}).forEach(function(x){
               var k = buildKey(x);
               localStorage.removeItem(SEARCH_PFX+k);
               localStorage.removeItem(SEARCH_PFX+k+":name");
             });
-            // Also clear pokedataId on ALL unpriced cards so they re-search from scratch
+            // Also clear pokedataId on unpriced cards so they re-search from scratch
             setInv((inv||[]).map(function(x){
               if (x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
               return x;
             }));
-            alert("Cache cleared for "+allCards.filter(function(x){return !x.value;}).length+" unpriced cards (including any newly added). Hit Refresh All Prices to re-fetch.");
+            alert("Cache cleared for "+allCards.filter(function(x){return !x.value;}).length+" unpriced cards. Hit Refresh All Prices to re-fetch.");
           }
         }, "🔧 Fix Missing"),
 
