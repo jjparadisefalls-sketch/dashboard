@@ -1899,10 +1899,6 @@ function normalizeSet(s) {
     [/journey\s*together/i,                   "jtg"],
     [/phantasmal\s*flames/i,                  "pfl"],
     [/mega\s*evolution\s*promos?/i,           "mep"],
-    [/me:\s*mega\s*evolution\s*promos?/i,     "mep"],
-    [/mega\s*promos?$/i,                      "mep"],
-    [/^mega\s*evolution$/i,                   "meg"],
-    [/ascended\s*heroes/i,                    "asc"],
     [/miscellaneous\s*promos?/i,              "mis"],
     // Newer sets
     [/prismatic\s*evolutions?/i,              "pre"],
@@ -1966,14 +1962,8 @@ function normalizeSet(s) {
     "pre": "pre",             // Prismatic Evolutions (pass-through)
     "ssp": "ssp",             // Surging Sparks (pass-through)
     "dri": "dri",             // Destined Rivals (pass-through)
-    "hif": "hif",
-    "asc": "asc",
-    "mep": "mep",
-    "meg": "meg",
-    "me":  "mep",
-    "pfl": "pfl",
-    "jtg": "jtg",
-    "sm-p promos": "smp",
+    "hif": "hif",             // Hidden Fates (pass-through)
+    "sm-p promos": "smp",     // SM Black Star Promos
     "sm-p": "smp",
     "swsh promos": "swshp",
     "swsh promo": "swshp",
@@ -2007,7 +1997,7 @@ function setsMatch(r, setInput) {
   // to avoid "dri" matching "adriana" or "pre" matching "premiere"
   var isShortCode = norm.length <= 5 && !/\s/.test(norm);
   if (isShortCode) {
-    return sc === norm || scNorm === norm || sn === norm || snNorm === norm;
+    return sc === norm || scNorm === norm || sn === norm;
   }
 
   // Longer names: substring matching is safe
@@ -2038,14 +2028,6 @@ function findBestMatch(results, card) {
     // Strip suffix variants: "Blastoise ex" matches "Blastoise", "Chansey" matches "Chansey Reverse Holo"
     var strip = function(s) { return norm(s).replace(/\s+(ex|vstar|vmax|gx|v|reverse holo|holo|stamped)\s*$/i, "").trim(); };
     if (strip(rn) === strip(name) || strip(rn) === name || rn === strip(name)) return true;
-    // Trainer-character suffix: PokeData appends trainer names in newer sets
-    // e.g. "Boss's Orders Corbeau" must match user's "Boss's Orders"
-    var normName = norm(name);
-    var normRn = norm(rn);
-    if (normRn.startsWith(normName + " ")) {
-      var suffix = normRn.slice(normName.length + 1).trim();
-      if (suffix && !/\s/.test(suffix)) return true;
-    }
     // Apostrophe normalization: "Team Rocket's Crobat" matches "Team Rockets Crobat"
     var deapos = function(s) { return s.replace(/[''\u2019]/g, "").replace(/\s+/g, " ").trim(); };
     if (deapos(rn) === deapos(name)) return true;
@@ -2074,7 +2056,7 @@ function findBestMatch(results, card) {
     if (!isNaN(ni) && !isNaN(rni) && ni === rni) return true;
     // Alpha-prefix promo numbers: "swsh134" matches "134", "sm210" matches "210"
     // Strip known prefixes and compare the numeric part
-    var stripPrefix = function(s) { return s.replace(/^(mepen|mep|gg|sv|swsh|smp|sm|xy|bw|dp|ex|pop|asc|dri|jtg|pfl|pre|ssp)/, ""); };
+    var stripPrefix = function(s) { return s.replace(/^(gg|sv|swsh|smp|sm|xy|bw|dp|ex|pop)/, ""); };
     var numStripped = stripPrefix(num);
     var rnStripped  = stripPrefix(rn);
     if (numStripped && rnStripped && numStripped === rnStripped) return true;
@@ -2113,9 +2095,7 @@ async function fetchCardPrice(card) {
   var isPCStamp = /pokemon\s*center|pc\s*stamp/i.test(card.notes || "");
 
   // Include stamp in cache key so stamped and unstamped cards never share a cached ID
-  var graderKey = (card.grader && card.grader.toUpperCase() !== "RAW" && card.grade)
-    ? (card.grader || "").toLowerCase().trim() + String(card.grade).replace(".", "") : "raw";
-  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, isPCStamp ? "pc" : "", graderKey].join("|");
+  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, isPCStamp ? "pc" : ""].join("|");
 
   // Search cache — but validate the cached ID still matches this card's number
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
@@ -2144,70 +2124,31 @@ async function fetchCardPrice(card) {
       if (stamped.length) results = stamped;
       console.log("[PCT] PC stamp search for", card.name, "→", results.length, "results", stamped.length ? "(stamped found)" : "(no stamped variant)");
     } else {
-      // Translate short set codes to full PokeData set names for the Render search proxy.
-      var SET_NAME_MAP = {
-        "mep": "Mega Evolution Promos", "meg": "Mega Evolution",
-        "asc": "Ascended Heroes",       "pre": "Prismatic Evolutions",
-        "jtg": "Journey Together",      "dri": "Destined Rivals",
-        "pfl": "Phantasmal Flames",     "ssp": "Surging Sparks",
-        "sfa": "Shrouded Fable",        "scr": "Stellar Crown",
-        "twm": "Twilight Masquerade",   "tef": "Temporal Forces",
-        "par": "Paradox Rift",          "paf": "Paldean Fates",
-        "obf": "Obsidian Flames",       "mew": "Pokemon 151",
-        "crz": "Crown Zenith",          "sit": "Silver Tempest",
-        "fst": "Fusion Strike",         "evs": "Evolving Skies",
-        "cre": "Chilling Reign",        "bst": "Battle Styles",
-        "brs": "Brilliant Stars",       "asr": "Astral Radiance",
-        "hif": "Hidden Fates",          "shf": "Shining Fates",
-        "lor": "Lost Origin",           "pal": "Paldea Evolved",
-        "svp": "Scarlet & Violet Promos", "pgo": "Pokemon GO"
-      };
-      var setKey = (card.set || "").toLowerCase().trim();
-      var searchSetName = SET_NAME_MAP[setKey] || card.set || "";
-
-      // Strategy 1: name + full set name + number
-      if (card.num && searchSetName && searchSetName !== card.set) {
-        results = await safeSearch(card.name + " " + searchSetName + " " + card.num);
+      // Standard search strategies
+      // Strategy 1: name + number (most precise)
+      if (card.num) results = await safeSearch(card.name + " " + card.num);
+      // Strategy 2: name + set name
+      if (!results.length && card.set) results = await safeSearch(card.name + " " + card.set);
+      // Strategy 3: name + set + number combined
+      if (!results.length && card.set && card.num) results = await safeSearch(card.name + " " + card.set + " " + card.num);
+      // Strategy 4: name only
+      if (!results.length) results = await safeSearch(card.name);
+      // Strategy 5: alpha-prefix num (SWSH134, SM210, GG10) — strip prefix and retry
+      if (!results.length && card.num && /^[a-z]/i.test(card.num)) {
+        var numStripped = card.num.replace(/^[a-z]+/i, "");
+        if (numStripped) results = await safeSearch(card.name + " " + numStripped);
       }
-      // Strategy 2: name + number
-      if (!results.length && card.num) results = await safeSearch(card.name + " " + card.num);
-      // Strategy 3: name + full set name
-      if (!results.length && searchSetName) results = await safeSearch(card.name + " " + searchSetName);
-      // Strategy 4: name + raw set (for unmapped sets)
-      if (!results.length && card.set && card.set !== searchSetName) results = await safeSearch(card.name + " " + card.set);
-      // Strategy 5: name only — ONLY when no set specified (prevents wrong-set cross-matches)
-      if (!results.length && !card.set) results = await safeSearch(card.name);
     }
-    // If ALL searches errored (proxy asleep), bail without caching
+    // If ALL searches errored (proxy asleep), bail without caching — will retry next refresh
     if (searchError && !results.length) {
-      console.warn("[PCT] Proxy unavailable for:", card.name, card.set, card.num);
+      console.warn("[PCT] All searches failed (proxy unavailable) for:", card.name, card.set, card.num);
       return { pdId: null, value: null, proxyError: true };
     }
     var match = findBestMatch(results, card);
-    // Strategy 6: /cardlookup — direct PokeData API, bypasses stale Render search index.
-    // Runs AFTER findBestMatch fails — the Render search may return results from OTHER sets,
-    // but if none match the right set/num, we go direct to PokeData.
-    if (!match && card.set) {
-      try {
-        var luResp = await fetch(
-          PD_PROXY + "/cardlookup?set_name=" + encodeURIComponent(searchSetName || card.set) +
-          "&name=" + encodeURIComponent(card.name) +
-          (card.num ? "&num=" + encodeURIComponent(card.num) : "")
-        );
-        if (luResp.ok) {
-          var luData = await luResp.json();
-          if (Array.isArray(luData) && luData.length) {
-            match = findBestMatch(luData, card);
-            if (!match) match = luData[0]; // exact match guaranteed by worker filter
-          }
-        }
-      } catch(e) { console.warn("[PCT] cardlookup error:", e.message); }
-    }
     if (!match) {
-      console.warn("[PCT] No match for:", card.name, card.set, card.num);
-      // Don't cache NOMATCH for newer sets — cards get added over time
-      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp)$/i.test((card.set||"").trim());
-      if (results.length > 0 && !skipNomatch) {
+      console.warn("[PCT] No match for:", card.name, card.set, card.num, isPCStamp ? "(PC stamp)" : "");
+      // Only cache NOMATCH when proxy was alive and truly returned no match
+      if (results.length > 0) {
         try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
       }
       return { pdId: null, value: null };
@@ -2853,8 +2794,8 @@ function InventoryTab(_ref21) {
 
   var filtered = (inv||[]).filter(function(i){return i.sport===activeSport;});
   var singles  = filtered.filter(function(i){return !i.sealed;});
-  var totalPaid  = singles.reduce(function(s,i){return s+(i.paid||0);},0);
-  var totalValue = singles.reduce(function(s,i){return s+(i.value||0);},0);
+  var totalPaid  = singles.reduce(function(s,i){return s+(i.paid||0)*(i.qty||1);},0);
+  var totalValue = singles.reduce(function(s,i){return s+(i.value||0)*(i.qty||1);},0);
   var totalProfit = totalValue-totalPaid;
 
   if (!invReady) return React.createElement("div", { style:{padding:20,color:"var(--muted)",fontSize:12} }, "Loading…");
@@ -2916,25 +2857,22 @@ function InventoryTab(_ref21) {
           onClick:function(){
             var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
             var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
+            var noId     = allCards.filter(function(x){return !x.pokedataId;});
+            // Clear fetch cache for all unpriced cards with a pdId
             missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
+            // Clear search cache for all cards without a pdId (no match found previously)
             var buildKey = function(x) {
-              var rn=(x.num||"").toLowerCase().trim();
-              var nn=(!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn))?String(parseInt(rn,10)):rn;
-              var isPCS=/pokemon\s*center|pc\s*stamp/i.test(x.notes||"");
-              var gk=(x.grader&&x.grader.toUpperCase()!=="RAW"&&x.grade)
-                ?(x.grader||"").toLowerCase().trim()+String(x.grade).replace(".",""):"raw";
-              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,isPCS?"pc":"",gk].join("|");
+              var rn = (x.num||"").toLowerCase().trim();
+              var nn = (!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn)) ? String(parseInt(rn,10)) : rn;
+              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn].join("|");
             };
-            allCards.filter(function(x){return !x.value;}).forEach(function(x){
-              var k=buildKey(x);
-              localStorage.removeItem(SEARCH_PFX+k);
-              localStorage.removeItem(SEARCH_PFX+k+":name");
-            });
+            noId.forEach(function(x){ localStorage.removeItem(SEARCH_PFX+buildKey(x)); });
+            // Also clear pokedataId on unpriced cards so they re-search from scratch
             setInv((inv||[]).map(function(x){
-              if(x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
+              if (x.sport===activeSport&&!x.sealed&&!x.value) return Object.assign({},x,{pokedataId:null});
               return x;
             }));
-            alert("Cache cleared for "+allCards.filter(function(x){return !x.value;}).length+" unpriced cards. Hit Refresh All Prices.");
+            alert("Cache cleared for "+missing.length+" unpriced + "+noId.length+" unmatched. Hit Refresh All Prices to re-fetch.");
           }
         }, "🔧 Fix Missing"),
 
