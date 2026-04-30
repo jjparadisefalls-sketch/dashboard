@@ -1544,11 +1544,22 @@ function PokeNews() {
     var creatorIdx = 0;
 
     function fetchTranscript(creator) {
-      return fetch("https://poke-transcript.jjparadisefalls.workers.dev?t=" + Date.now(), {
+      return fetch("https://poke-transcript.jjparadisefalls.workers.dev", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
-        body: JSON.stringify({ creator: creator.name, handle: creator.handle })
-      }).then(function(r) { return r.json(); }).catch(function() { return {}; });
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache, no-store" },
+        body: JSON.stringify({ creator: creator.name, handle: creator.handle, _t: Date.now() })
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        return {
+          creator: creator.name,
+          videoId: data.videoId || null,
+          videoTitle: data.videoTitle || data.title || "",
+          videoDate: data.videoDate || data.date || "",
+          transcript: data.transcript || data.text || "",
+          hasTranscript: !!(data.transcript || data.text) && (data.transcript || data.text || "").length > 100
+        };
+      }).catch(function() {
+        return { creator: creator.name, videoId: null, videoTitle: "", videoDate: "", transcript: "", hasTranscript: false };
+      });
     }
 
     function analyzeWithClaude(creatorData) {
@@ -1561,9 +1572,14 @@ function PokeNews() {
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "No markdown, no extra text, just the JSON object.";
       } else {
-        prompt = "You are a Pokemon TCG market advisor. Search the web for the most recent content from " + creatorData.creator + " about Pokemon TCG investing.\n\n" +
-          (creatorData.videoTitle ? "Their latest video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n\n" : "") +
-          "Find their most convicted trade recommendation from this video or recent content.\n\n" +
+        // Use video metadata the worker returned — description + recent video list
+        var context = "";
+        if (creatorData.videoTitle) context += "Latest video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n";
+        if (creatorData.videoDescription) context += "Description: " + creatorData.videoDescription + "\n";
+        if (creatorData.recentVideos) context += "Recent videos: " + creatorData.recentVideos + "\n";
+        prompt = "You are a Pokemon TCG market advisor. Based on the following information about " + creatorData.creator + "'s latest content, identify their most convicted trade recommendation.\n\n" +
+          context + "\n" +
+          "Also search the web for any additional details about this video or their recent picks.\n\n" +
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "If nothing found, return: { \"text\": \"\" }\n" +
           "No markdown, no extra text, just the JSON object.";
@@ -1571,32 +1587,43 @@ function PokeNews() {
 
       var body = {
         model: "claude-sonnet-4-6",
-        max_tokens: 300,
+        max_tokens: 400,
         messages: [{ role: "user", content: prompt }]
       };
       if (!creatorData.hasTranscript) {
         body.tools = [{ type: "web_search_20250305", name: "web_search" }];
       }
 
-      return fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("").trim();
-        raw = raw.replace(/```json|```/g, "").trim();
-        try {
-          var parsed = JSON.parse(raw);
-          return parsed.text || "";
-        } catch(e) {
-          var m = raw.match(/\{[^}]+\}/);
-          if (m) { try { return JSON.parse(m[0]).text || ""; } catch(e2) {} }
-          return "";
-        }
-      })
-      .catch(function() { return ""; });
+      function doFetch(retries) {
+        return fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        })
+        .then(function(r) {
+          // Retry on rate limit with backoff
+          if (r.status === 429 && retries > 0) {
+            return new Promise(function(res) { setTimeout(res, 8000); }).then(function() { return doFetch(retries - 1); });
+          }
+          return r.json();
+        })
+        .then(function(data) {
+          if (data.type === "error") return "";
+          var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("").trim();
+          raw = raw.replace(/```json|```/g, "").trim();
+          try {
+            var parsed = JSON.parse(raw);
+            return parsed.text || "";
+          } catch(e) {
+            var m = raw.match(/\{[^}]+\}/);
+            if (m) { try { return JSON.parse(m[0]).text || ""; } catch(e2) {} }
+            return "";
+          }
+        })
+        .catch(function() { return ""; });
+      }
+
+      return doFetch(3);
     }
 
     function processNextCreator() {
@@ -1613,9 +1640,10 @@ function PokeNews() {
         if (line && line.length > 10) {
           allResults.push({ id: Date.now() + Math.random(), text: line, seen: false, ts: ts });
         }
-        processNextCreator();
+        // Wait 3s between creators to avoid hitting rate limits
+        setTimeout(processNextCreator, 3000);
       }).catch(function() {
-        processNextCreator();
+        setTimeout(processNextCreator, 3000);
       });
     }
 
@@ -2226,7 +2254,6 @@ function fmtMove(cur, old, mode) {
 var STATUSES = [
   { id: "pc",      label: "PC",       color: "#60a5fa" },
   { id: "forsale", label: "For Sale",  color: "#34d399" },
-  { id: "martin",  label: "Martin",   color: "#f59e0b" },
   { id: "sold",    label: "Sold",      color: "#f87171" },
 ];
 var SEALED_TYPES = ["Booster Pack","Booster Bundle","Elite Trainer Box","Booster Box","Collection Box","Tin","Blister","Other"];
@@ -2236,7 +2263,6 @@ function normalizeStatus(s) {
   var v = s.toLowerCase().trim().replace(/\s+/g, "");
   if (v === "forsale" || v === "for sale") return "forsale";
   if (v === "sold") return "sold";
-  if (v === "martin") return "martin";
   return "pc";
 }
 
