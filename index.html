@@ -2226,6 +2226,7 @@ function fmtMove(cur, old, mode) {
 var STATUSES = [
   { id: "pc",      label: "PC",       color: "#60a5fa" },
   { id: "forsale", label: "For Sale",  color: "#34d399" },
+  { id: "martin",  label: "Martin",   color: "#f59e0b" },
   { id: "sold",    label: "Sold",      color: "#f87171" },
 ];
 var SEALED_TYPES = ["Booster Pack","Booster Bundle","Elite Trainer Box","Booster Box","Collection Box","Tin","Blister","Other"];
@@ -2235,6 +2236,7 @@ function normalizeStatus(s) {
   var v = s.toLowerCase().trim().replace(/\s+/g, "");
   if (v === "forsale" || v === "for sale") return "forsale";
   if (v === "sold") return "sold";
+  if (v === "martin") return "martin";
   return "pc";
 }
 
