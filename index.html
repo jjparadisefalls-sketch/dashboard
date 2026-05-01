@@ -1554,11 +1554,13 @@ function PokeNews() {
           videoId: data.videoId || null,
           videoTitle: data.videoTitle || data.title || "",
           videoDate: data.videoDate || data.date || "",
+          videoDescription: data.videoDescription || "",
+          recentVideos: data.recentVideos || "",
           transcript: data.transcript || data.text || "",
           hasTranscript: !!(data.transcript || data.text) && (data.transcript || data.text || "").length > 100
         };
       }).catch(function() {
-        return { creator: creator.name, videoId: null, videoTitle: "", videoDate: "", transcript: "", hasTranscript: false };
+        return { creator: creator.name, videoId: null, videoTitle: "", videoDate: "", videoDescription: "", recentVideos: "", transcript: "", hasTranscript: false };
       });
     }
 
@@ -1567,19 +1569,17 @@ function PokeNews() {
       if (creatorData.hasTranscript && creatorData.transcript) {
         prompt = "You are a Pokemon TCG market advisor. Analyze this transcript from " + creatorData.creator + ".\n\n" +
           "Video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n\n" +
-          "TRANSCRIPT:\n" + creatorData.transcript + "\n\n" +
+          "TRANSCRIPT:\n" + creatorData.transcript.slice(0, 3000) + "\n\n" +
           "Find the single MOST CONVICTED trade recommendation — the card or product they expressed the highest confidence in.\n\n" +
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "No markdown, no extra text, just the JSON object.";
       } else {
-        // Use video metadata the worker returned — description + recent video list
         var context = "";
         if (creatorData.videoTitle) context += "Latest video: \"" + creatorData.videoTitle + "\" (" + creatorData.videoDate + ")\n";
         if (creatorData.videoDescription) context += "Description: " + creatorData.videoDescription + "\n";
         if (creatorData.recentVideos) context += "Recent videos: " + creatorData.recentVideos + "\n";
-        prompt = "You are a Pokemon TCG market advisor. Based on the following information about " + creatorData.creator + "'s latest content, identify their most convicted trade recommendation.\n\n" +
-          context + "\n" +
-          "Also search the web for any additional details about this video or their recent picks.\n\n" +
+        prompt = "You are a Pokemon TCG market advisor. Based on the following recent content from " + creatorData.creator + ", identify their most convicted trade recommendation.\n\n" +
+          context + "\nAlso search the web for more details on this video.\n\n" +
           "Return ONLY a JSON object: { \"text\": \"📺 [" + creatorData.creator + "] Card Name — BUY/HOLD/SELL — Reason with price (via: video title, date)\" }\n" +
           "If nothing found, return: { \"text\": \"\" }\n" +
           "No markdown, no extra text, just the JSON object.";
@@ -1594,35 +1594,28 @@ function PokeNews() {
         body.tools = [{ type: "web_search_20250305", name: "web_search" }];
       }
 
-      function doFetch(retries) {
+      function doFetch(retriesLeft) {
         return fetch("https://poke-proxy.jjparadisefalls.workers.dev", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body)
-        })
-        .then(function(r) {
-          // Retry on rate limit with backoff
-          if (r.status === 429 && retries > 0) {
-            return new Promise(function(res) { setTimeout(res, 8000); }).then(function() { return doFetch(retries - 1); });
+        }).then(function(r) {
+          if (r.status === 429 && retriesLeft > 0) {
+            return new Promise(function(res) { setTimeout(res, 10000); }).then(function() { return doFetch(retriesLeft - 1); });
           }
           return r.json();
-        })
-        .then(function(data) {
-          if (data.type === "error") return "";
+        }).then(function(data) {
+          if (!data || data.type === "error") return "";
           var raw = (data.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("").trim();
           raw = raw.replace(/```json|```/g, "").trim();
-          try {
-            var parsed = JSON.parse(raw);
-            return parsed.text || "";
-          } catch(e) {
+          try { return JSON.parse(raw).text || ""; }
+          catch(e) {
             var m = raw.match(/\{[^}]+\}/);
             if (m) { try { return JSON.parse(m[0]).text || ""; } catch(e2) {} }
             return "";
           }
-        })
-        .catch(function() { return ""; });
+        }).catch(function() { return ""; });
       }
-
       return doFetch(3);
     }
 
@@ -1640,10 +1633,9 @@ function PokeNews() {
         if (line && line.length > 10) {
           allResults.push({ id: Date.now() + Math.random(), text: line, seen: false, ts: ts });
         }
-        // Wait 3s between creators to avoid hitting rate limits
-        setTimeout(processNextCreator, 3000);
+        setTimeout(processNextCreator, 15000);
       }).catch(function() {
-        setTimeout(processNextCreator, 3000);
+        setTimeout(processNextCreator, 15000);
       });
     }
 
@@ -4791,364 +4783,7 @@ document.addEventListener("DOMContentLoaded", function() { ReactDOM.createRoot(d
 
 
 
-<script>
-(function() {
-  var STORE_KEY   = 'cc:pokenews';
-  var MAX_ITEMS   = 100;
-  var news        = [];
-  var BATCH_SIZE  = 1;
-  var CREATORS    = [
-    { name: 'PikaPikaPapa',          handle: 'PikaPikaPapa' },
-    { name: 'Jordan Collects',       handle: 'JordanCollects' },
-    { name: 'Phillips Collectibles', handle: 'PhillipsCollectibles' },
-    { name: "Sam's Shiny Stocks",    handle: 'SamsShinyStocks' },
-    { name: 'Twice Baked Jake',      handle: 'TwiceBakedJake' },
-    { name: 'VegasCardDex',          handle: 'VegasCardDex' }
-  ];
 
-  function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(news)); } catch(e){}
-  }
-
-  function load() {
-    try { var raw = localStorage.getItem(STORE_KEY); if(raw) news = JSON.parse(raw); } catch(e){}
-  }
-
-  function render() {
-    var list    = document.getElementById('pokenews-list');
-    var empty   = document.getElementById('pokenews-empty');
-    var counter = document.getElementById('pokenews-counter');
-    if (!list) return;
-    list.innerHTML = '';
-    if (counter) counter.textContent = getTierLabel(news.length);
-    if (empty) empty.style.display = news.length ? 'none' : 'block';
-    news.forEach(function(item) {
-      var row = document.createElement('div');
-      row.className = 'pokenews-row' + (item.seen ? ' seen' : '');
-
-      var box = document.createElement('div');
-      box.className = 'pokenews-seen-box' + (item.seen ? ' checked' : '');
-      box.innerHTML = item.seen
-        ? '<svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2.5" stroke="currentColor" stroke-width="2" fill="none"/></svg>'
-        : '';
-      box.onclick = function() { item.seen = !item.seen; save(); render(); };
-
-      var txt = document.createElement('div');
-      txt.className = 'pokenews-text';
-      txt.textContent = item.text;
-
-      var del = document.createElement('button');
-      del.className = 'pokenews-del';
-      del.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
-      del.onclick = function() { news = news.filter(function(n){ return n !== item; }); save(); render(); };
-
-      row.appendChild(box);
-      row.appendChild(txt);
-      row.appendChild(del);
-      list.appendChild(row);
-    });
-  }
-
-  function getTierLabel(count) {
-    if (!count) return '';
-    return count + ' item' + (count !== 1 ? 's' : '');
-  }
-
-  function addItem(text) {
-    if (!text) return;
-    news.unshift({ id: Date.now(), text: text, seen: false });
-    if (news.length > MAX_ITEMS) news = news.slice(0, MAX_ITEMS);
-    save();
-    render();
-  }
-
-  // ── Run Morning Market ──────────────────────────────────────────────────────
-  function runMorningMarket() {
-    var btn      = document.getElementById('pokenews-run-btn');
-    var statusEl = document.getElementById('pokenews-status');
-    if (btn && btn.disabled) return;
-
-    // Wipe existing news so today's run starts clean
-    news = [];
-    save();
-    render();
-
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Running…'; }
-    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Starting morning market research…'; }
-
-    var creatorResults = [];  // 📺 creator picks — added FIRST
-    var marketResults  = [];  // 🌐 web market news — added SECOND
-    var allResults     = [];  // merged final list
-
-    // ── PHASE 1: Creator picks (batched 3 at a time) ────────────────────────
-    var batches = [];
-    for (var i = 0; i < CREATORS.length; i += BATCH_SIZE) {
-      batches.push(CREATORS.slice(i, i + BATCH_SIZE));
-    }
-
-    // ── Fetch transcript for a single creator via browser (session cookies) ──
-    function fetchCreatorTranscript(creator) {
-      return fetch('https://poke-transcript.jjparadisefalls.workers.dev', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creator: creator.name, handle: creator.handle })
-      })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        if (!data.videoId) return { creator: creator.name, error: 'no video found' };
-        // Now fetch caption URL directly from YouTube in the browser (uses session cookies)
-        return fetch('https://www.youtube.com/watch?v=' + data.videoId, {
-          credentials: 'include',
-          headers: { 'Accept-Language': 'en-US,en;q=0.9' }
-        })
-        .then(function(r){ return r.text(); })
-        .then(function(html){
-          // Extract captionTracks baseUrl
-          var m = html.match(/"captionTracks":\[\{"baseUrl":"([^"]+)"/);
-          if (!m) return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false };
-          var captionUrl = m[1]
-            .replace(/\\u0026/g, '&')
-            .replace(/\\u003d/g, '=')
-            .replace(/\\u003c/g, '<')
-            .replace(/\\/g, '');
-          return fetch(captionUrl + '&fmt=json3', { credentials: 'include' })
-            .then(function(r){ return r.json(); })
-            .then(function(capData){
-              var transcript = (capData.events || [])
-                .filter(function(e){ return e.segs; })
-                .map(function(e){ return e.segs.map(function(s){ return s.utf8 || ''; }).join(''); })
-                .join(' ')
-                .replace(/\s+/g, ' ')
-                .trim()
-                .slice(0, 10000);
-              return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: transcript, hasTranscript: transcript.length > 100 };
-            })
-            .catch(function(){ return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false }; });
-        })
-        .catch(function(){ return { creator: creator.name, videoId: data.videoId, videoTitle: data.videoTitle, videoDate: data.videoDate, transcript: '', hasTranscript: false }; });
-      })
-      .catch(function(e){ return { creator: creator.name, error: e.message }; });
-    }
-
-    // ── Analyze a single creator with Claude ────────────────────────────────
-    function analyzeCreator(creatorData) {
-      var prompt;
-      if (creatorData.hasTranscript) {
-        prompt =
-          'You are a Pokémon TCG market advisor. Analyze this YouTube video transcript from ' + creatorData.creator + '.\n\n' +
-          'Video: "' + creatorData.videoTitle + '" (' + creatorData.videoDate + ')\n\n' +
-          'TRANSCRIPT:\n' + creatorData.transcript + '\n\n' +
-          'Find the single MOST CONVICTED trade recommendation in this transcript — the card or product the creator expressed the highest confidence in buying, holding, or selling.\n\n' +
-          'Format EXACTLY as one line:\n' +
-          '📺 ' + creatorData.creator + ' — [Card or Product Name] — [BUY|HOLD|SELL] — [Reason from transcript] (via: "' + creatorData.videoTitle + '", ' + creatorData.videoDate + ')\n\n' +
-          'Rules:\n' +
-          '- One line only. Most convicted pick only.\n' +
-          '- Must include specific card/product name.\n' +
-          '- Reason must come directly from the transcript.\n' +
-          '- Return ONLY the formatted line, no preamble.';
-      } else {
-        prompt =
-          'You are a Pokémon TCG market advisor. Search the web for the most recent content from ' + creatorData.creator + ' about Pokémon TCG investing.\n\n' +
-          'Their latest YouTube video is: "' + (creatorData.videoTitle || 'unknown') + '" (' + (creatorData.videoDate || 'recent') + ')\n\n' +
-          'Search for any written coverage, community posts, or descriptions of this video to find their top pick.\n\n' +
-          'Format EXACTLY as one line:\n' +
-          '📺 ' + creatorData.creator + ' — [Card or Product Name] — [BUY|HOLD|SELL] — [Reason] (via: "' + (creatorData.videoTitle || 'recent video') + '", ' + (creatorData.videoDate || 'recent') + ')\n\n' +
-          'Rules:\n' +
-          '- One line only. Most convicted pick only.\n' +
-          '- Must include specific card/product name, not vague references.\n' +
-          '- Skip if no reliable info found — do not fabricate.\n' +
-          '- Return ONLY the formatted line, no preamble.';
-      }
-
-      var body = {
-        model: 'claude-sonnet-4-6',
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }]
-      };
-      if (!creatorData.hasTranscript) {
-        body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
-      }
-
-      return fetch('https://poke-proxy.jjparadisefalls.workers.dev', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        var text = (data.content || [])
-          .filter(function(b){ return b.type === 'text'; })
-          .map(function(b){ return b.text || ''; })
-          .join('\n').trim();
-        return text;
-      })
-      .catch(function(){ return ''; });
-    }
-
-    function processBatch(idx) {
-      if (idx >= batches.length) {
-        runMarketNews();
-        return;
-      }
-      var batch    = batches[idx];
-      var batchNum = idx + 1;
-      var total    = batches.length;
-      var names    = batch.map(function(c){ return c.name; }).join(', ');
-      if (statusEl) statusEl.textContent = '📺 Fetching transcripts for batch ' + batchNum + '/' + total + ': ' + names + '…';
-
-      // Step 1: fetch transcripts for all creators in this batch in parallel
-      Promise.all(batch.map(function(c){ return fetchCreatorTranscript(c); }))
-      .then(function(transcriptResults){
-        if (statusEl) statusEl.textContent = '🤖 Analyzing batch ' + batchNum + '/' + total + ' with Claude…';
-        // Step 2: analyze each one sequentially to avoid rate limits
-        var results = [];
-        function analyzeNext(i) {
-          if (i >= transcriptResults.length) {
-            results.forEach(function(line){ if(line && line.indexOf('📺') !== -1) creatorResults.push(line); });
-            processBatch(idx + 1);
-            return;
-          }
-          var cd = transcriptResults[i];
-          if (cd.error) { analyzeNext(i+1); return; }
-          console.log(cd.creator + ' transcript:', cd.hasTranscript ? cd.transcript.slice(0,100) : 'NONE (using web search)');
-          analyzeCreator(cd).then(function(line){
-            results.push(line);
-            analyzeNext(i+1);
-          });
-        }
-        analyzeNext(0);
-      })
-      .catch(function(err){
-        console.error('Batch ' + batchNum + ' error:', err);
-        processBatch(idx + 1);
-      });
-    }
-
-    // ── PHASE 2: Web market news with price tiers ───────────────────────────
-    function runMarketNews() {
-      if (statusEl) statusEl.textContent = '🌐 Searching web for market news…';
-
-      var prompt =
-        'You are a Pokémon TCG market advisor for a professional trading card business dealing in singles, graded slabs, and sealed product.\n\n' +
-        'Search the web RIGHT NOW for the latest Pokémon TCG market news, price movements, investment opportunities, and notable items.\n\n' +
-        'Return between 3 and 10 items total, with these MINIMUMS by price tier:\n' +
-        '- At least 1 item: product valued OVER $1,000\n' +
-        '- At least 1 item: product valued $500–$999.99\n' +
-        '- At least 2 items: product valued $100–$499.99\n' +
-        '- At least 3 items: product valued $10–$99.99\n\n' +
-        'Topics to cover: hot cards, cards to invest in now, beautiful/desirable cards, undervalued cards, sealed product news, set releases, market trends, grading news, tournament impact on prices.\n\n' +
-        'Format EXACTLY — one line per item:\n' +
-        '[TIER_ICON] [Card or Product Name] — [Current Price or Range] — [BUY|HOLD|SELL|WATCH] — [Insight]\n\n' +
-        'Use these tier icons based on price:\n' +
-        '🌐💎 for $1,000+\n' +
-        '🌐🔥 for $500–$999.99\n' +
-        '🌐⭐ for $100–$499.99\n' +
-        '🌐💡 for $10–$99.99\n\n' +
-        'Rules:\n' +
-        '- Specific card/product names only. No vague references.\n' +
-        '- Include current price or price range in each line.\n' +
-        '- Only include items with actionable intelligence.\n' +
-        '- Do NOT include bullet points or numbering before the icon.\n' +
-        '- Return ONLY the formatted lines, no preamble or commentary.';
-
-      fetch('https://poke-proxy.jjparadisefalls.workers.dev', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1200,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: [{ role: 'user', content: prompt }]
-        })
-      })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        console.log('Market news response:', JSON.stringify(data).slice(0, 300));
-        var text = (data.content || [])
-          .filter(function(b){ return b.type === 'text'; })
-          .map(function(b){ return b.text || ''; })
-          .join('\n').trim();
-        if (text) {
-          text.split('\n')
-            .map(function(l){ return l.trim(); })
-            .filter(function(l){ return l.length > 20 && l.indexOf('🌐') !== -1; })
-            .forEach(function(line){ marketResults.push(line); });
-        }
-        finalize();
-      })
-      .catch(function(err){
-        console.error('Market news error:', err);
-        if (statusEl) statusEl.textContent = '⚠️ Error fetching market news. Finalizing…';
-        finalize();
-      });
-    }
-
-    // ── PHASE 3: Finalize — creators first, then market news ────────────────
-    function finalize() {
-      // Merge: creator picks first, market news second
-      allResults = creatorResults.concat(marketResults);
-
-      // Load into news panel
-      allResults.forEach(function(line){ addItem(line); });
-
-      // Download JSON snapshot
-      try {
-        var payload = { generated: new Date().toISOString(), items: news };
-        var blob    = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        var url     = URL.createObjectURL(blob);
-        var a       = document.createElement('a');
-        a.href = url; a.download = 'morning_market_results.json';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
-      } catch(e){}
-
-      // ✅ Wipe working arrays so tomorrow's run starts completely clean
-      allResults     = [];
-      creatorResults = [];
-      marketResults  = [];
-
-      var btn      = document.getElementById('pokenews-run-btn');
-      var statusEl = document.getElementById('pokenews-status');
-      if (btn) { btn.disabled = false; btn.textContent = '▶ Run Morning Market'; }
-      if (statusEl) {
-        statusEl.textContent = '✅ Done — ' + news.length + ' insights loaded. JSON saved to Downloads.';
-        setTimeout(function(){ statusEl.style.display = 'none'; }, 8000);
-      }
-    }
-
-    // Kick off Phase 1
-    processBatch(0);
-  }
-
-  // ?? Init ????????????????????????????????????????????????????????????????
-  function init() {
-    load();
-    render();
-
-    // Wire up manual add
-    var input = document.getElementById('pokenews-input');
-    var addBtn = document.getElementById('pokenews-add-btn');
-    if (input) {
-      input.addEventListener('keydown', function(e){ if(e.key==='Enter'){ addItem(input.value.trim()); input.value=''; } });
-    }
-    if (addBtn) {
-      addBtn.addEventListener('click', function(){ if(input){ addItem(input.value.trim()); input.value=''; } });
-    }
-
-    // Wire up Run Morning Market button
-    var runBtn = document.getElementById('pokenews-run-btn');
-    if (runBtn) {
-      runBtn.addEventListener('click', runMorningMarket);
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
-</script>
 </body></html>
 
 
