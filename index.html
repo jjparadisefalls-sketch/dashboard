@@ -2868,8 +2868,8 @@ function InventoryTab(_ref21) {
       var cn=cols[0], sn=cols[1], num=cols[2], grader=cols[3], grade=cols[4], paid=cols[5], qty=cols[6], notes=cols[7], status=cols[8], sourceCol=cols[9];
       if (!cn) continue;
       var count = parseInt(qty)||1;
-      // Build stamp-aware cache key — must match fetchCardPrice exactly
-      // so stamped and non-stamped versions of the same card never share a cached ID
+      // Cache lookup on import — try stamp-aware key first, fall back to base key
+      // This ensures stamped cards find their stamped cache entry, not the base card entry
       var notesForKey = (notes||"").toLowerCase();
       var stampTypeForKey = /pokemon\s*center|pc\s*stamp/.test(notesForKey) ? "pc"
                           : /pokeball|poke\s*ball/.test(notesForKey) ? "pokeball"
@@ -2878,10 +2878,21 @@ function InventoryTab(_ref21) {
       var normNumForKey = (!isNaN(parseInt(rawNumForKey,10)) && !/[a-z]/i.test(rawNumForKey)) ? String(parseInt(rawNumForKey,10)) : rawNumForKey;
       var graderForKey = (grader && grader.toUpperCase() !== "RAW" && grade)
         ? (grader||"").toLowerCase().trim() + String(grade).replace(".","") : "raw";
-      var cacheKey = [(cn||"").toLowerCase().trim(),(sn||"").toLowerCase().trim(),normNumForKey,stampTypeForKey,graderForKey].join("|");
-      var cachedPdId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
-      // Only reuse cached ID if it's not a NOMATCH sentinel
-      if (cachedPdId === "NOMATCH") cachedPdId = null;
+      // Full stamp-aware key (5-part) — matches fetchCardPrice exactly
+      var stampCacheKey = [(cn||"").toLowerCase().trim(),(sn||"").toLowerCase().trim(),normNumForKey,stampTypeForKey,graderForKey].join("|");
+      // Legacy 3-part key — for backwards compat with existing cached entries
+      var baseCacheKey = [(cn||"").toLowerCase().trim(),(sn||"").toLowerCase().trim(),(num||"").toLowerCase().trim()].join("|");
+      // For stamped cards: prefer stamp-aware key; for base cards: use legacy key
+      var cachedPdId = null;
+      if (stampTypeForKey) {
+        // Stamped card — look up stamp-specific cache first, don't fall back to base
+        var sid = localStorage.getItem(SEARCH_PFX + stampCacheKey);
+        if (sid && sid !== "NOMATCH") cachedPdId = sid;
+      } else {
+        // Base card — use legacy key for backwards compat
+        var bid = localStorage.getItem(SEARCH_PFX + baseCacheKey) || localStorage.getItem(SEARCH_PFX + stampCacheKey);
+        if (bid && bid !== "NOMATCH") cachedPdId = bid;
+      }
       var cachedValue = null;
       if (cachedPdId) {
         var h = getHistory(cachedPdId, grader, grade);
@@ -3047,55 +3058,43 @@ function InventoryTab(_ref21) {
           }
         }, "🔧 Fix Missing"),
 
-        // Reset Stamp Cache — clears cached IDs for ALL stamped cards so they re-lookup with correct stamp variant
+        // Reset Stamp Cache — only resets Pokeball/Masterball cards (not PC stamp which works fine)
         React.createElement("button", {
           style:{background:"rgba(167,139,250,0.15)",border:"1px solid rgba(167,139,250,0.3)",borderRadius:7,padding:"7px 14px",color:"#a78bfa",fontSize:12,fontWeight:600,cursor:"pointer"},
           onClick:function(){
-            var buildKey = function(x) {
-              var rn=(x.num||"").toLowerCase().trim();
-              var nn=(!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn))?String(parseInt(rn,10)):rn;
-              var notesL=(x.notes||"").toLowerCase();
-              var stampType=/pokemon\s*center|pc\s*stamp/.test(notesL)?"pc"
-                          :/\bpokeball\b|\bpoke\s*ball\b/.test(notesL)?"pokeball"
-                          :/\bmasterball\b|\bmaster\s*ball\b/.test(notesL)?"masterball":"";
-              var gk=(x.grader&&x.grader.toUpperCase()!=="RAW"&&x.grade)
-                ?(x.grader||"").toLowerCase().trim()+String(x.grade).replace(".",""):"raw";
-              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,stampType,gk].join("|");
-            };
             var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
             var stampCards = allCards.filter(function(x){
               var n=(x.notes||"").toLowerCase();
-              return /pokemon\s*center|pc\s*stamp|\bpokeball\b|\bpoke\s*ball\b|\bmasterball\b|\bmaster\s*ball\b/.test(n);
+              return /pokeball|masterball/.test(n);
             });
+            var cleared = 0;
             stampCards.forEach(function(x){
-              // Clear the OLD cache key (without stamp type) — catches pre-existing wrong cached IDs
-              var rnOld=(x.num||"").toLowerCase().trim();
-              var nnOld=(!isNaN(parseInt(rnOld,10))&&!/[a-z]/i.test(rnOld))?String(parseInt(rnOld,10)):rnOld;
+              var rn=(x.num||"").toLowerCase().trim();
+              var nn=(!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn))?String(parseInt(rn,10)):rn;
+              var notesL=(x.notes||"").toLowerCase();
+              var stampType=notesL.includes("masterball")?"masterball":"pokeball";
               var gk=(x.grader&&x.grader.toUpperCase()!=="RAW"&&x.grade)
                 ?(x.grader||"").toLowerCase().trim()+String(x.grade).replace(".",""):"raw";
-              var oldKey=[(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nnOld,"",gk].join("|");
-              var oldKeyPc=[(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nnOld,"pc",gk].join("|");
-              localStorage.removeItem(SEARCH_PFX+oldKey);
-              localStorage.removeItem(SEARCH_PFX+oldKey+":name");
-              localStorage.removeItem(SEARCH_PFX+oldKeyPc);
-              localStorage.removeItem(SEARCH_PFX+oldKeyPc+":name");
-              // Also clear the new correct key so it re-fetches fresh
-              var newKey=buildKey(x);
+              var nameL=(x.name||"").toLowerCase().trim();
+              var setL=(x.set||"").toLowerCase().trim();
+              var oldKey3=[nameL,setL,(x.num||"").toLowerCase().trim()].join("|");
+              localStorage.removeItem(SEARCH_PFX+oldKey3);
+              localStorage.removeItem(SEARCH_PFX+oldKey3+":name");
+              var newKey=[nameL,setL,nn,stampType,gk].join("|");
               localStorage.removeItem(SEARCH_PFX+newKey);
               localStorage.removeItem(SEARCH_PFX+newKey+":name");
-              // Clear price cache too
               if(x.pokedataId) localStorage.removeItem(FETCH_PFX+x.pokedataId);
+              cleared++;
             });
-            // Reset pokedataId and value on all stamp cards so they show as unpriced
             setInv((inv||[]).map(function(x){
               var n=(x.notes||"").toLowerCase();
-              var isStamp=/pokemon\s*center|pc\s*stamp|\bpokeball\b|\bpoke\s*ball\b|\bmasterball\b|\bmaster\s*ball\b/.test(n);
-              if(isStamp&&x.sport===activeSport&&!x.sealed) return Object.assign({},x,{pokedataId:null,value:null});
+              if(/pokeball|masterball/.test(n)&&x.sport===activeSport&&!x.sealed)
+                return Object.assign({},x,{pokedataId:null,value:null});
               return x;
             }));
-            alert("✅ Stamp cache reset for "+stampCards.length+" cards (Pokemon Center, Pokeball, Masterball).\nNow hit Refresh All Prices to fetch correct stamped variant prices.");
+            alert("Reset "+cleared+" Pokeball/Masterball cards. Hit Refresh All Prices.");
           }
-        }, "🔮 Reset Stamp Cache"),
+        }, "🔮 Reset Pokeball/Masterball Cache"),
 
         // Backfill history
         React.createElement("button", {
