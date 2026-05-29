@@ -2868,8 +2868,20 @@ function InventoryTab(_ref21) {
       var cn=cols[0], sn=cols[1], num=cols[2], grader=cols[3], grade=cols[4], paid=cols[5], qty=cols[6], notes=cols[7], status=cols[8], sourceCol=cols[9];
       if (!cn) continue;
       var count = parseInt(qty)||1;
-      var cacheKey = [(cn||"").toLowerCase().trim(),(sn||"").toLowerCase().trim(),(num||"").toLowerCase().trim()].join("|");
+      // Build stamp-aware cache key — must match fetchCardPrice exactly
+      // so stamped and non-stamped versions of the same card never share a cached ID
+      var notesForKey = (notes||"").toLowerCase();
+      var stampTypeForKey = /pokemon\s*center|pc\s*stamp/.test(notesForKey) ? "pc"
+                          : /pokeball|poke\s*ball/.test(notesForKey) ? "pokeball"
+                          : /masterball|master\s*ball/.test(notesForKey) ? "masterball" : "";
+      var rawNumForKey = (num||"").toLowerCase().trim();
+      var normNumForKey = (!isNaN(parseInt(rawNumForKey,10)) && !/[a-z]/i.test(rawNumForKey)) ? String(parseInt(rawNumForKey,10)) : rawNumForKey;
+      var graderForKey = (grader && grader.toUpperCase() !== "RAW" && grade)
+        ? (grader||"").toLowerCase().trim() + String(grade).replace(".","") : "raw";
+      var cacheKey = [(cn||"").toLowerCase().trim(),(sn||"").toLowerCase().trim(),normNumForKey,stampTypeForKey,graderForKey].join("|");
       var cachedPdId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
+      // Only reuse cached ID if it's not a NOMATCH sentinel
+      if (cachedPdId === "NOMATCH") cachedPdId = null;
       var cachedValue = null;
       if (cachedPdId) {
         var h = getHistory(cachedPdId, grader, grade);
@@ -3003,21 +3015,25 @@ function InventoryTab(_ref21) {
         }, refreshingAll ? ("⏳ "+refreshProgress+"…") : "🔄 Refresh All Prices"),
 
 
+        // Shared cache key builder — must match fetchCardPrice exactly
         // Fix missing
         React.createElement("button", {
           style:{background:"rgba(251,191,36,0.15)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:7,padding:"7px 14px",color:"#fbbf24",fontSize:12,fontWeight:600,cursor:"pointer"},
           onClick:function(){
-            var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
-            var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
-            missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
             var buildKey = function(x) {
               var rn=(x.num||"").toLowerCase().trim();
               var nn=(!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn))?String(parseInt(rn,10)):rn;
-              var isPCS=/pokemon\s*center|pc\s*stamp/i.test(x.notes||"");
+              var notesL=(x.notes||"").toLowerCase();
+              var stampType=/pokemon\s*center|pc\s*stamp/.test(notesL)?"pc"
+                          :/\bpokeball\b|\bpoke\s*ball\b/.test(notesL)?"pokeball"
+                          :/\bmasterball\b|\bmaster\s*ball\b/.test(notesL)?"masterball":"";
               var gk=(x.grader&&x.grader.toUpperCase()!=="RAW"&&x.grade)
                 ?(x.grader||"").toLowerCase().trim()+String(x.grade).replace(".",""):"raw";
-              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,isPCS?"pc":"",gk].join("|");
+              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,stampType,gk].join("|");
             };
+            var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
+            var missing  = allCards.filter(function(x){return !x.value&&x.pokedataId;});
+            missing.forEach(function(x){ localStorage.removeItem(FETCH_PFX+x.pokedataId); });
             allCards.filter(function(x){return !x.value;}).forEach(function(x){
               var k=buildKey(x);
               localStorage.removeItem(SEARCH_PFX+k);
@@ -3030,6 +3046,56 @@ function InventoryTab(_ref21) {
             alert("Cache cleared for "+allCards.filter(function(x){return !x.value;}).length+" unpriced cards. Hit Refresh All Prices.");
           }
         }, "🔧 Fix Missing"),
+
+        // Reset Stamp Cache — clears cached IDs for ALL stamped cards so they re-lookup with correct stamp variant
+        React.createElement("button", {
+          style:{background:"rgba(167,139,250,0.15)",border:"1px solid rgba(167,139,250,0.3)",borderRadius:7,padding:"7px 14px",color:"#a78bfa",fontSize:12,fontWeight:600,cursor:"pointer"},
+          onClick:function(){
+            var buildKey = function(x) {
+              var rn=(x.num||"").toLowerCase().trim();
+              var nn=(!isNaN(parseInt(rn,10))&&!/[a-z]/i.test(rn))?String(parseInt(rn,10)):rn;
+              var notesL=(x.notes||"").toLowerCase();
+              var stampType=/pokemon\s*center|pc\s*stamp/.test(notesL)?"pc"
+                          :/\bpokeball\b|\bpoke\s*ball\b/.test(notesL)?"pokeball"
+                          :/\bmasterball\b|\bmaster\s*ball\b/.test(notesL)?"masterball":"";
+              var gk=(x.grader&&x.grader.toUpperCase()!=="RAW"&&x.grade)
+                ?(x.grader||"").toLowerCase().trim()+String(x.grade).replace(".",""):"raw";
+              return [(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nn,stampType,gk].join("|");
+            };
+            var allCards = (inv||[]).filter(function(x){return x.sport===activeSport&&!x.sealed;});
+            var stampCards = allCards.filter(function(x){
+              var n=(x.notes||"").toLowerCase();
+              return /pokemon\s*center|pc\s*stamp|\bpokeball\b|\bpoke\s*ball\b|\bmasterball\b|\bmaster\s*ball\b/.test(n);
+            });
+            stampCards.forEach(function(x){
+              // Clear the OLD cache key (without stamp type) — catches pre-existing wrong cached IDs
+              var rnOld=(x.num||"").toLowerCase().trim();
+              var nnOld=(!isNaN(parseInt(rnOld,10))&&!/[a-z]/i.test(rnOld))?String(parseInt(rnOld,10)):rnOld;
+              var gk=(x.grader&&x.grader.toUpperCase()!=="RAW"&&x.grade)
+                ?(x.grader||"").toLowerCase().trim()+String(x.grade).replace(".",""):"raw";
+              var oldKey=[(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nnOld,"",gk].join("|");
+              var oldKeyPc=[(x.name||"").toLowerCase().trim(),(x.set||"").toLowerCase().trim(),nnOld,"pc",gk].join("|");
+              localStorage.removeItem(SEARCH_PFX+oldKey);
+              localStorage.removeItem(SEARCH_PFX+oldKey+":name");
+              localStorage.removeItem(SEARCH_PFX+oldKeyPc);
+              localStorage.removeItem(SEARCH_PFX+oldKeyPc+":name");
+              // Also clear the new correct key so it re-fetches fresh
+              var newKey=buildKey(x);
+              localStorage.removeItem(SEARCH_PFX+newKey);
+              localStorage.removeItem(SEARCH_PFX+newKey+":name");
+              // Clear price cache too
+              if(x.pokedataId) localStorage.removeItem(FETCH_PFX+x.pokedataId);
+            });
+            // Reset pokedataId and value on all stamp cards so they show as unpriced
+            setInv((inv||[]).map(function(x){
+              var n=(x.notes||"").toLowerCase();
+              var isStamp=/pokemon\s*center|pc\s*stamp|\bpokeball\b|\bpoke\s*ball\b|\bmasterball\b|\bmaster\s*ball\b/.test(n);
+              if(isStamp&&x.sport===activeSport&&!x.sealed) return Object.assign({},x,{pokedataId:null,value:null});
+              return x;
+            }));
+            alert("✅ Stamp cache reset for "+stampCards.length+" cards (Pokemon Center, Pokeball, Masterball).\nNow hit Refresh All Prices to fetch correct stamped variant prices.");
+          }
+        }, "🔮 Reset Stamp Cache"),
 
         // Backfill history
         React.createElement("button", {
