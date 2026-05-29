@@ -2150,27 +2150,44 @@ async function fetchCardPrice(card) {
       catch(e) { searchError = true; console.warn("[PCT] Proxy error:", e.message); return []; }
     };
     if (isAnyStamp) {
-      // Search for the correct stamped variant based on stamp type
-      var stampQuery = isPCStamp ? "Pokemon Center" : isPokeballStamp ? "Pokeball stamp" : "Masterball stamp";
-      if (card.num) results = await safeSearch(card.name + " " + card.num + " " + stampQuery);
-      if (!results.length) results = await safeSearch(card.name + " " + stampQuery);
-      // Also try without number if needed
-      if (!results.length && card.num) results = await safeSearch(card.name + " " + stampQuery);
+      // PokeData uses bracket notation: "Magneton [Pokemon Center]", "Budew [Masterball]", "Flutter Mane [Pokeball]"
+      // stampLabel must match exactly so we pull the RIGHT stamped variant price
+      var stampLabel = isPCStamp ? "Pokemon Center" : isPokeballStamp ? "Pokeball" : "Masterball";
+      var stampBracket = "[" + stampLabel + "]";
+      // Strategy 1: name + bracket label (closest to PokeData format)
+      results = await safeSearch(card.name + " " + stampBracket);
+      // Strategy 2: name + label without brackets
+      if (!results.length) results = await safeSearch(card.name + " " + stampLabel);
+      // Strategy 3: add number
+      if (!results.length && card.num) results = await safeSearch(card.name + " " + card.num + " " + stampLabel);
+      // Filter to ONLY the correct stamp type — never mix Pokemon Center / Pokeball / Masterball
       var stamped = results.filter(function(r) {
         var rn = (r.name || "").toLowerCase();
-        return /pokemon\s*center|pokeball\s*stamp|masterball\s*stamp/i.test(rn);
+        var lbl = stampLabel.toLowerCase();
+        // Must contain the specific stamp label — reject other stamp types
+        return rn.includes(lbl) && !( 
+          (lbl === "pokeball"     && rn.includes("masterball")) ||
+          (lbl === "masterball"   && rn.includes("pokeball") && !rn.includes("masterball")) ||
+          (lbl === "pokemon center" && (rn.includes("pokeball") || rn.includes("masterball")))
+        );
       });
       if (stamped.length) results = stamped;
       console.log("[PCT] PC stamp search for", card.name, "->", results.length, "results", stamped.length ? "(stamped found)" : "(no stamped variant)");
-      // For stamped cards, relax number matching — match by name only if number doesn't match
-      // because PokeData sometimes uses different numbering for stamp variants
+      // For stamped cards: only relax number matching (NOT stamp type)
+      // If findBestMatch fails due to number mismatch, find correct stamp type by name only
       if (results.length && !findBestMatch(results, card)) {
-        var nameOnly = results.find(function(r) {
+        var cardNameLower = (card.name || "").toLowerCase().trim();
+        var lbl2 = stampLabel.toLowerCase();
+        // Only match within the correct stamp type — never cross stamp types
+        var nameOnly = (stamped.length ? stamped : results).find(function(r) {
           var rn = (r.name || "").toLowerCase();
-          var cn = (card.name || "").toLowerCase();
-          return rn.includes(cn) || cn.includes(rn.split(" ")[0]);
+          // Must contain the stamp label AND the card name
+          return rn.includes(lbl2) && (rn.includes(cardNameLower) || cardNameLower.split(" ").slice(0,2).every(function(w){ return w.length > 2 && rn.includes(w); }));
         });
-        if (nameOnly) results = [nameOnly];
+        if (nameOnly) {
+          console.log("[PCT] Stamp name-only match (" + stampLabel + "):", nameOnly.name, nameOnly.id);
+          results = [nameOnly];
+        }
       }
     } else {
       var SET_NAME_MAP = {
@@ -2186,7 +2203,9 @@ async function fetchCardPrice(card) {
         "fst": "Fusion Strike",         "evs": "Evolving Skies",
         "cre": "Chilling Reign",        "bst": "Battle Styles",
         "brs": "Brilliant Stars",       "asr": "Astral Radiance",
-        "hif": "Hidden Fates",          "shf": "Shining Fates",        "crg": "Crimson Invasion",
+        "hif": "Hidden Fates",          "shf": "Shining Fates",        "crg": "Chaos Rising",
+        "viv": "Vivid Voltage",         "bst": "Battle Styles",
+        "cri": "Chaos Rising",
         "lor": "Lost Origin",           "pal": "Paldea Evolved",
         "svp": "Scarlet & Violet Promos", "pgo": "Pokemon GO"
       };
@@ -2221,7 +2240,7 @@ async function fetchCardPrice(card) {
     }
     if (!match) {
       console.warn("[PCT] No match for:", card.name, card.set, card.num);
-      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp|crg|shf|hif)$/i.test((card.set||"").trim());
+      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp|crg|cri|shf|hif|viv|bst|svp|smp|sm)$/i.test((card.set||"").trim());
       if (results.length > 0 && !skipNomatch) {
         try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
       }
