@@ -2046,7 +2046,7 @@ function findBestMatch(results, card) {
     };
     if (deex(rn) === norm(name) || norm(rn) === deex(name)) return true;
     // Strip suffix variants: "Blastoise ex" matches "Blastoise", "Chansey" matches "Chansey Reverse Holo"
-    var strip = function(s) { return norm(s).replace(/\s+(ex|vstar|vmax|gx|v|reverse holo|holo|stamped)\s*$/i, "").trim(); };
+    var strip = function(s) { return norm(s).replace(/\s+(ex|vstar|vmax|gx|v|reverse holo|holo|stamped|alternate full art|amazing rare|full art|alt full art)\s*$/i, "").trim(); };
     if (strip(rn) === strip(name) || strip(rn) === name || rn === strip(name)) return true;
     // Trainer-character suffix: PokeData appends trainer names in newer sets
     // e.g. "Boss's Orders Corbeau" must match user's "Boss's Orders"
@@ -2058,6 +2058,9 @@ function findBestMatch(results, card) {
     }
     // Apostrophe normalization: "Team Rocket's Crobat" matches "Team Rockets Crobat"
     var deapos = function(s) { return s.replace(/[''\u2019]/g, "").replace(/\s+/g, " ").trim(); };
+    // Also normalize possessives: "Roxies" matches "Roxie's"
+    var deapos2 = function(s) { return deapos(s).toLowerCase(); };
+    if (deapos2(rn) === deapos2(name)) return true;
     if (deapos(rn) === deapos(name)) return true;
     // Punctuation normalization: "Moltres, Zapdos & Articuno" matches "Moltres Zapdos & Articuno"
     var depunct = function(s) { return s.replace(/[,.:;]/g, " ").replace(/\s+/g, " ").trim(); };
@@ -2150,44 +2153,70 @@ async function fetchCardPrice(card) {
       catch(e) { searchError = true; console.warn("[PCT] Proxy error:", e.message); return []; }
     };
     if (isAnyStamp) {
-      // PokeData uses bracket notation: "Magneton [Pokemon Center]", "Budew [Masterball]", "Flutter Mane [Pokeball]"
-      // stampLabel must match exactly so we pull the RIGHT stamped variant price
+      // PokeData names stamped variants as: "Magneton Pokemon Center 159", "Budew [Masterball]", etc.
+      // We bypass findBestMatch entirely for stamps and use a dedicated stamp matcher
       var stampLabel = isPCStamp ? "Pokemon Center" : isPokeballStamp ? "Pokeball" : "Masterball";
-      var stampBracket = "[" + stampLabel + "]";
-      // Strategy 1: name + bracket label (closest to PokeData format)
-      results = await safeSearch(card.name + " " + stampBracket);
-      // Strategy 2: name + label without brackets
-      if (!results.length) results = await safeSearch(card.name + " " + stampLabel);
-      // Strategy 3: add number
+      var stampLabelLow = stampLabel.toLowerCase();
+      var cardNameLow = (card.name || "").toLowerCase().trim();
+
+      // Search strategies — cast a wide net then filter strictly by stamp type
+      results = await safeSearch(card.name + " " + stampLabel);
       if (!results.length && card.num) results = await safeSearch(card.name + " " + card.num + " " + stampLabel);
-      // Filter to ONLY the correct stamp type — never mix Pokemon Center / Pokeball / Masterball
-      var stamped = results.filter(function(r) {
-        var rn = (r.name || "").toLowerCase();
-        var lbl = stampLabel.toLowerCase();
-        // Must contain the specific stamp label — reject other stamp types
-        return rn.includes(lbl) && !( 
-          (lbl === "pokeball"     && rn.includes("masterball")) ||
-          (lbl === "masterball"   && rn.includes("pokeball") && !rn.includes("masterball")) ||
-          (lbl === "pokemon center" && (rn.includes("pokeball") || rn.includes("masterball")))
-        );
-      });
-      if (stamped.length) results = stamped;
-      console.log("[PCT] PC stamp search for", card.name, "->", results.length, "results", stamped.length ? "(stamped found)" : "(no stamped variant)");
-      // For stamped cards: only relax number matching (NOT stamp type)
-      // If findBestMatch fails due to number mismatch, find correct stamp type by name only
-      if (results.length && !findBestMatch(results, card)) {
-        var cardNameLower = (card.name || "").toLowerCase().trim();
-        var lbl2 = stampLabel.toLowerCase();
-        // Only match within the correct stamp type — never cross stamp types
-        var nameOnly = (stamped.length ? stamped : results).find(function(r) {
+      if (!results.length) results = await safeSearch(card.name + " [" + stampLabel + "]");
+      if (!results.length && card.set) results = await safeSearch(card.name + " " + stampLabel + " " + card.set);
+
+      console.log("[PCT] Stamp search (" + stampLabel + ") for", card.name, "->", results.length, "raw results");
+
+      // --- Dedicated stamp matcher (replaces findBestMatch for stamped cards) ---
+      // Strict rule: result must contain the correct stamp label AND the card name
+      // Never match Pokeball when looking for Masterball, or Pokemon Center, etc.
+      var findStampMatch = function(pool) {
+        // Filter to correct stamp type only
+        var typed = pool.filter(function(r) {
           var rn = (r.name || "").toLowerCase();
-          // Must contain the stamp label AND the card name
-          return rn.includes(lbl2) && (rn.includes(cardNameLower) || cardNameLower.split(" ").slice(0,2).every(function(w){ return w.length > 2 && rn.includes(w); }));
+          if (!rn.includes(stampLabelLow)) return false;
+          // Reject wrong stamp types explicitly
+          if (stampLabelLow === "pokeball"      && rn.includes("masterball")) return false;
+          if (stampLabelLow === "masterball"    && !rn.includes("masterball")) return false;
+          if (stampLabelLow === "pokemon center" && (rn.includes("pokeball") || rn.includes("masterball"))) return false;
+          return true;
         });
-        if (nameOnly) {
-          console.log("[PCT] Stamp name-only match (" + stampLabel + "):", nameOnly.name, nameOnly.id);
-          results = [nameOnly];
-        }
+        if (!typed.length) return null;
+
+        // 1. Best: name + number both match
+        var best = typed.find(function(r) {
+          var rn = (r.name || "").toLowerCase();
+          var rnum = (r.num || "").toString();
+          var cardnum = (card.num || "").toString();
+          var nameOk = rn.includes(cardNameLow) || cardNameLow.split(" ").every(function(w){ return !w || rn.includes(w.toLowerCase()); });
+          var numOk = !card.num || rnum === cardnum || parseInt(rnum) === parseInt(cardnum);
+          return nameOk && numOk;
+        });
+        if (best) return best;
+
+        // 2. Fallback: name match only (number may differ in PokeData for stamp variants)
+        return typed.find(function(r) {
+          var rn = (r.name || "").toLowerCase();
+          return rn.includes(cardNameLow) ||
+            cardNameLow.split(" ").filter(function(w){ return w.length > 2; }).every(function(w){ return rn.includes(w); });
+        }) || null;
+      };
+
+      var stampMatch = findStampMatch(results.filter(function(r){ return r.language === "ENGLISH"; }))
+                    || findStampMatch(results);
+
+      if (stampMatch) {
+        console.log("[PCT] Stamp match (" + stampLabel + "):", stampMatch.name, stampMatch.id);
+        pdId = String(stampMatch.id);
+        try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
+        try { localStorage.setItem(SEARCH_PFX + cacheKey + ":name", [stampMatch.name, stampMatch.set_name||"", stampMatch.num||""].filter(Boolean).join(" · ")); } catch(e) {}
+        var pdStamp = await pdPricing(pdId);
+        var valStamp = extractPrice(pdStamp && pdStamp.pricing, card.grader, card.grade);
+        if (valStamp) saveSnap(pdId, valStamp, card.grader, card.grade);
+        return { pdId: pdId, value: valStamp };
+      } else {
+        console.warn("[PCT] No stamp match (" + stampLabel + ") for:", card.name, card.num);
+        return { pdId: null, value: null };
       }
     } else {
       var SET_NAME_MAP = {
@@ -2218,6 +2247,9 @@ async function fetchCardPrice(card) {
       if (!results.length && searchSetName) results = await safeSearch(card.name + " " + searchSetName);
       if (!results.length && card.set && card.set !== searchSetName) results = await safeSearch(card.name + " " + card.set);
       if (!results.length && !card.set) results = await safeSearch(card.name);
+      // For "Amazing Rare" cards, PokeData includes rarity in the name
+      if (!results.length) results = await safeSearch(card.name + " Amazing Rare" + (card.num ? " " + card.num : ""));
+      if (!results.length) results = await safeSearch(card.name + " Alternate Full Art" + (card.num ? " " + card.num : ""));
     }
     if (searchError && !results.length) {
       console.warn("[PCT] Proxy unavailable for:", card.name, card.set, card.num);
