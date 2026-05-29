@@ -2120,12 +2120,18 @@ async function fetchCardPrice(card) {
   var normNum = (!isNaN(parseInt(rawNum, 10)) && !/[a-z]/i.test(rawNum)) ? String(parseInt(rawNum, 10)) : rawNum;
 
   // Detect Pokemon Center stamp from notes field
-  var isPCStamp = /pokemon\s*center|pc\s*stamp/i.test(card.notes || "");
+  // Detect stamp type from notes field — "Pokemon Center", "Pokeball", or "Masterball"
+  var notesLower = (card.notes || "").toLowerCase();
+  var isPCStamp         = /pokemon\s*center|pc\s*stamp/.test(notesLower);
+  var isPokeballStamp   = /\bpokeball\b|\bpoke\s*ball\b/.test(notesLower);
+  var isMasterballStamp = /\bmasterball\b|\bmaster\s*ball\b/.test(notesLower);
+  var isAnyStamp = isPCStamp || isPokeballStamp || isMasterballStamp;
+  var stampType = isPCStamp ? "pc" : isPokeballStamp ? "pokeball" : isMasterballStamp ? "masterball" : "";
 
   // Include stamp in cache key so stamped and unstamped cards never share a cached ID
   var graderKey = (card.grader && card.grader.toUpperCase() !== "RAW" && card.grade)
     ? (card.grader || "").toLowerCase().trim() + String(card.grade).replace(".", "") : "raw";
-  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, isPCStamp ? "pc" : "", graderKey].join("|");
+  var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, stampType, graderKey].join("|");
 
   // Search cache — but validate the cached ID still matches this card's number
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
@@ -2143,16 +2149,29 @@ async function fetchCardPrice(card) {
       try { var r = await pdSearch(q); return Array.isArray(r) ? r : []; }
       catch(e) { searchError = true; console.warn("[PCT] Proxy error:", e.message); return []; }
     };
-    if (isPCStamp) {
-      // For PC stamped cards: always search with "Pokemon Center" appended
-      // Strategy 1: name + number + Pokemon Center (most precise)
-      if (card.num) results = await safeSearch(card.name + " " + card.num + " Pokemon Center");
-      // Strategy 2: name + Pokemon Center
-      if (!results.length) results = await safeSearch(card.name + " Pokemon Center");
-      // Filter results to stamped variants only — prefer name containing "pokemon center"
-      var stamped = results.filter(function(r) { return /pokemon\s*center/i.test(r.name || ""); });
+    if (isAnyStamp) {
+      // Search for the correct stamped variant based on stamp type
+      var stampQuery = isPCStamp ? "Pokemon Center" : isPokeballStamp ? "Pokeball stamp" : "Masterball stamp";
+      if (card.num) results = await safeSearch(card.name + " " + card.num + " " + stampQuery);
+      if (!results.length) results = await safeSearch(card.name + " " + stampQuery);
+      // Also try without number if needed
+      if (!results.length && card.num) results = await safeSearch(card.name + " " + stampQuery);
+      var stamped = results.filter(function(r) {
+        var rn = (r.name || "").toLowerCase();
+        return /pokemon\s*center|pokeball\s*stamp|masterball\s*stamp/i.test(rn);
+      });
       if (stamped.length) results = stamped;
-      console.log("[PCT] PC stamp search for", card.name, "→", results.length, "results", stamped.length ? "(stamped found)" : "(no stamped variant)");
+      console.log("[PCT] PC stamp search for", card.name, "->", results.length, "results", stamped.length ? "(stamped found)" : "(no stamped variant)");
+      // For stamped cards, relax number matching — match by name only if number doesn't match
+      // because PokeData sometimes uses different numbering for stamp variants
+      if (results.length && !findBestMatch(results, card)) {
+        var nameOnly = results.find(function(r) {
+          var rn = (r.name || "").toLowerCase();
+          var cn = (card.name || "").toLowerCase();
+          return rn.includes(cn) || cn.includes(rn.split(" ")[0]);
+        });
+        if (nameOnly) results = [nameOnly];
+      }
     } else {
       var SET_NAME_MAP = {
         "mep": "Mega Evolution Promos", "meg": "Mega Evolution",
@@ -2167,7 +2186,7 @@ async function fetchCardPrice(card) {
         "fst": "Fusion Strike",         "evs": "Evolving Skies",
         "cre": "Chilling Reign",        "bst": "Battle Styles",
         "brs": "Brilliant Stars",       "asr": "Astral Radiance",
-        "hif": "Hidden Fates",          "shf": "Shining Fates",
+        "hif": "Hidden Fates",          "shf": "Shining Fates",        "crg": "Crimson Invasion",
         "lor": "Lost Origin",           "pal": "Paldea Evolved",
         "svp": "Scarlet & Violet Promos", "pgo": "Pokemon GO"
       };
@@ -2202,7 +2221,7 @@ async function fetchCardPrice(card) {
     }
     if (!match) {
       console.warn("[PCT] No match for:", card.name, card.set, card.num);
-      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp)$/i.test((card.set||"").trim());
+      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp|crg|shf|hif)$/i.test((card.set||"").trim());
       if (results.length > 0 && !skipNomatch) {
         try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
       }
