@@ -294,6 +294,15 @@ function getInventory() {
   try { return JSON.parse(localStorage.getItem('cc:inventory') || '[]'); }
   catch(e) { return []; }
 }
+// Returns only cards eligible for sale matching — excludes personal collection
+function getSaleableInventory() {
+  return getInventory().filter(function(c) {
+    // Exclude PC cards regardless of source tag
+    var status = (c.status || 'pc').toLowerCase();
+    var source = (c.source || '').toLowerCase();
+    return status !== 'pc' && source !== 'pc';
+  });
+}
 function getSoldHistory() {
   try { return JSON.parse(localStorage.getItem('cc:sold') || '[]'); }
   catch(e) { return []; }
@@ -515,7 +524,7 @@ function matchToInventory(saleTitle, inventory) {
 
 // ── Main Scan ──────────────────────────────────────────────────────────────
 function runScan(orders) {
-  const inventory = getInventory();
+  const inventory = getSaleableInventory();  // excludes PC cards
   const pokemon = inventory.filter(c => c.sport === 'pokemon' && !c.sealed);
 
   setProgress(10, `Matching ${orders.length} sales against ${pokemon.length} inventory cards…`);
@@ -578,9 +587,9 @@ function renderTable() {
 
   const html = `<div class="table-wrap"><table>
     <thead><tr>
-      <th style="width:30%">eBay Title</th>
+      <th style="width:28%">eBay Title</th>
       <th>Sold</th><th>Net</th><th>Date</th>
-      <th>Inventory Match</th><th>Paid</th><th>P&L</th>
+      <th>Inventory Match</th><th>Source</th><th>Paid</th><th>P&L</th>
       <th>Status</th><th>Actions</th>
     </tr></thead>
     <tbody>${rows.map(r => {
@@ -638,12 +647,22 @@ function renderTable() {
           <button class="action-btn ${confirmed?'confirm':''}" onclick="toggleConfirm('${r.recNum}',this)">${confirmed?'✓ Confirmed':'Confirm'}</button>`;
       }
 
+      // Source badge
+      let sourceCell = `<span style="color:var(--muted);font-size:10px">—</span>`;
+      if (r.match) {
+        const isMartin = r.match.source === 'martin';
+        sourceCell = isMartin
+          ? `<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);white-space:nowrap;">🤝 Martin</span>`
+          : `<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25);white-space:nowrap;">🏪 Store</span>`;
+      }
+
       return `<tr class="${rc}" data-recnum="${r.recNum}">
         <td class="cell-title"><div class="title-text">${te}</div><div class="title-meta">${gradeTag}<span class="date-tag">${dateDisp}</span></div></td>
         <td class="cell-money">$${r.soldFor.toFixed(2)}</td>
         <td class="cell-money money-pos">$${r.net.toFixed(2)}</td>
         <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dateDisp}</td>
         <td class="match-cell">${matchCell}</td>
+        <td>${sourceCell}</td>
         <td>${paidDisp}</td>
         <td class="cell-money pnl-cell ${pnl != null ? (pnl>=0?'money-pos':'money-neg') : 'money-na'}">${pnl != null ? (pnl>=0?'+':'')+'$'+Math.abs(pnl).toFixed(2) : '—'}</td>
         <td>${badges[r.status] || ''}</td>
@@ -743,7 +762,7 @@ function debounceInvSearch() {
 function doInvSearch() {
   const q = document.getElementById('matchSearchInput').value.trim().toLowerCase();
   if (!q || q.length < 2) return;
-  const inventory = getInventory().filter(c => c.sport === 'pokemon' && !c.sealed);
+  const inventory = getSaleableInventory().filter(c => c.sport === 'pokemon' && !c.sealed);
   const results = inventory.filter(c => {
     const name = (c.name || '').toLowerCase();
     const set  = (c.set  || '').toLowerCase();
@@ -761,9 +780,13 @@ function doInvSearch() {
   document.getElementById('matchResults').innerHTML = results.map((c,i) => {
     const gradeStr = c.grader && c.grader !== 'raw' ? ` · ${c.grader} ${c.grade}` : '';
     const paidStr = c.paid ? `$${parseFloat(c.paid).toFixed(2)}` : '—';
+    const isMartin = (c.source === 'martin');
+    const srcTag = isMartin
+      ? `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);margin-left:4px;">🤝 Martin</span>`
+      : `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25);margin-left:4px;">🏪 Store</span>`;
     return `<div class="modal-row" onclick="applyMatch(${i})" data-idx="${i}">
       <div style="flex:1">
-        <div class="mr-name">${c.name}${gradeStr}</div>
+        <div class="mr-name">${c.name}${gradeStr}${srcTag}</div>
         <div class="mr-set">${c.set||''} ${c.num ? '#'+c.num : ''}</div>
       </div>
       <span class="mr-paid">${paidStr}</span>
@@ -834,6 +857,7 @@ function commitSales() {
       paid, pnl,
       saleDate: row.dateStr,
       recordedAt: now,
+      source: row.match ? (row.match.source || 'for_sale') : 'for_sale',  // ← carry source through
       noInventoryMatch: !row.match, // flag for reference
     });
 
@@ -844,6 +868,8 @@ function commitSales() {
         if ((c.num    || '') !== (row.match.num    || '')) return true;
         if ((c.grader || '') !== (row.match.grader || '')) return true;
         if ((c.grade  || '') !== (row.match.grade  || '')) return true;
+        // Match source too — don't accidentally remove a store card when selling a Martin card
+        if ((c.source || 'for_sale') !== (row.match.source || 'for_sale')) return true;
         return false;
       });
     }
