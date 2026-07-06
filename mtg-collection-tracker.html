@@ -477,7 +477,6 @@ Consider,mkm,3,,,0.25"></textarea>
       </div>
     </div>
   </div>
-</div>
 
 <div id="tab-decks" class="tab-panel" style="display:none;">
   <div class="panel" style="max-width:640px;">
@@ -529,6 +528,8 @@ Consider,mkm,3,,,0.25"></textarea>
     </div>
   </div>
 
+  <div id="sealedSearchResults" style="margin-top:20px;"></div>
+
   <div class="panel" id="sealedAddPanel" style="max-width:640px;margin-top:20px;">
     <h2>Add to Inventory</h2>
     <label for="sealedAddName">Product name</label>
@@ -550,8 +551,6 @@ Consider,mkm,3,,,0.25"></textarea>
       Looks up the closest matching sealed product via TCG API and adds it straight into your tracked inventory with the quantity and price paid you enter here. If a product with the same name and set is already tracked, this updates its quantity and price paid instead of duplicating it. To browse several matches before picking one, use the search box above and click "Track" on the one you want instead.
     </div>
   </div>
-
-  <div id="sealedSearchResults" style="margin-top:20px;"></div>
 
   <div class="panel" id="sealedWatchlistPanel" style="margin-top:20px;">
     <div class="toolbar">
@@ -582,6 +581,7 @@ Consider,mkm,3,,,0.25"></textarea>
       </table>
     </div>
   </div>
+</div>
 </div>
 
 <script>
@@ -1860,14 +1860,32 @@ $('sealedAddBtn').addEventListener('click', async () => {
   $('sealedAddMsg').textContent = 'Looking up "' + name + '"…';
   $('sealedAddMsg').className = 'form-msg';
   try{
-    const query = setName ? (name + ' ' + setName) : name;
+    // Query on whichever term is more likely to match reliably — a bare set
+    // name (e.g. "Bloomburrow") tends to match far better than a combined
+    // string, since real product names are usually "<Set> <Product Type>"
+    // (e.g. "Bloomburrow Collector Booster Display") rather than the reverse.
+    const query = setName || name;
     const sealedOnly = await searchSealedProducts(apiKey, query);
     if(!sealedOnly.length){
-      $('sealedAddMsg').textContent = 'No sealed product matched that name — try the search box below for more options, or adjust the wording.';
+      $('sealedAddMsg').textContent = 'No sealed products found for "' + query + '" at all — try the search box below, or double-check the game slug (see footnote).';
       $('sealedAddMsg').className = 'form-msg error';
       return;
     }
-    const match = sealedOnly[0];
+    // Pick whichever result's name best overlaps with the product name typed,
+    // rather than just taking the first result from a broad set-name search.
+    const nameWords = name.toLowerCase().split(/\s+/).filter(Boolean);
+    const scored = sealedOnly.map(item => {
+      const itemName = (item.name || '').toLowerCase();
+      const score = nameWords.reduce((s, w) => s + (itemName.includes(w) ? 1 : 0), 0);
+      return { item, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    if(scored[0].score === 0){
+      $('sealedAddMsg').textContent = 'Found sealed products for "' + query + '," but none matched "' + name + '" closely enough — try the search box below to browse them and click "Track" on the right one.';
+      $('sealedAddMsg').className = 'form-msg error';
+      return;
+    }
+    const match = scored[0].item;
     const info = priceFromSearchItem(match);
     const existingIdx = sealedWatchlist.findIndex(w => String(w.id) === String(match.id));
     if(existingIdx >= 0){
