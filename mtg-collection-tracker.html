@@ -480,114 +480,114 @@ Consider,mkm,3,,,0.25"></textarea>
 </div>
 
 <div id="tab-decks" class="tab-panel" style="display:none;">
-  <div class="panel" style="max-width:720px;">
-    <h2>Recent Tournament Results</h2>
-    <label for="topdeckApiKey">TopDeck.gg API key</label>
-    <input type="text" id="topdeckApiKey" placeholder="paste your free API key" autocomplete="off">
+  <div class="layout">
+    <div class="panel">
+      <h2>Recent Tournament Results</h2>
+      <label for="topdeckApiKey">TopDeck.gg API key</label>
+      <input type="text" id="topdeckApiKey" placeholder="paste your free API key" autocomplete="off">
 
-    <div class="row2" style="margin-top:14px;">
-      <div>
-        <label for="deckFormat">Format</label>
-        <select id="deckFormat">
-          <option value="Standard">Standard</option>
-          <option value="Pioneer">Pioneer</option>
-          <option value="Modern">Modern</option>
-          <option value="Legacy">Legacy</option>
-          <option value="Vintage">Vintage</option>
-          <option value="Pauper">Pauper</option>
-          <option value="EDH">Commander (EDH)</option>
-          <option value="cEDH">cEDH</option>
-        </select>
-      </div>
-      <div>
-        <label for="deckLastDays">Last N days</label>
-        <input type="number" id="deckLastDays" min="1" value="14">
+      <label for="deckFormat">Format</label>
+      <select id="deckFormat">
+        <option value="Standard">Standard</option>
+        <option value="Pioneer">Pioneer</option>
+        <option value="Modern">Modern</option>
+        <option value="Legacy">Legacy</option>
+        <option value="Vintage">Vintage</option>
+        <option value="Pauper">Pauper</option>
+        <option value="EDH">Commander (EDH)</option>
+        <option value="Pauper EDH">Pauper EDH</option>
+        <option value="Duel Commander">Duel Commander</option>
+        <option value="Oathbreaker">Oathbreaker</option>
+      </select>
+
+      <label for="deckLastDays">Last N days</label>
+      <input type="number" id="deckLastDays" min="1" value="14">
+
+      <button class="btn-primary" id="deckLoadBtn">Load recent results</button>
+      <div class="form-msg" id="deckMsg"></div>
+
+      <div class="footnote">
+        This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage and sent only to TopDeck.gg, never anywhere else. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
       </div>
     </div>
 
-    <button class="btn-primary" id="deckLoadBtn">Load recent results</button>
-    <div class="form-msg" id="deckMsg"></div>
-
-    <div class="footnote">
-      This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage and sent only to TopDeck.gg, never anywhere else. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
-    </div>
+    <div id="deckResults"></div>
   </div>
-
-  <div id="deckResults" style="margin-top:24px;"></div>
 </div>
 
 <div id="tab-sealed" class="tab-panel" style="display:none;">
-  <div class="panel" style="max-width:720px;">
-    <h2>Track Booster Boxes &amp; Packs</h2>
-    <label for="tcgApiKey">TCG API key</label>
-    <input type="text" id="tcgApiKey" placeholder="paste your free API key" autocomplete="off">
+  <div class="layout">
+    <div>
+      <div class="panel">
+        <h2>Track Booster Boxes &amp; Packs</h2>
+        <label for="tcgApiKey">TCG API key</label>
+        <input type="text" id="tcgApiKey" placeholder="paste your free API key" autocomplete="off">
 
-    <label for="sealedSearchInput">Search by set name</label>
-    <input type="text" id="sealedSearchInput" placeholder="e.g. Foundations, Bloomburrow, Duskmourn">
-    <button class="btn-primary" id="sealedSearchBtn">Search sealed products</button>
-    <div class="form-msg" id="sealedSearchMsg"></div>
+        <label for="sealedSearchInput">Search by set name</label>
+        <input type="text" id="sealedSearchInput" placeholder="e.g. Foundations, Bloomburrow, Duskmourn">
+        <button class="btn-primary" id="sealedSearchBtn">Search sealed products</button>
+        <div class="form-msg" id="sealedSearchMsg"></div>
 
-    <div class="footnote">
-      This tab uses <b>TCG API (tcgapi.dev)</b>, a third-party service built after TCGPlayer closed public API access to new developers — it covers Magic sealed product pricing (booster boxes, packs, bundles) alongside singles. Get a free key at <a href="https://tcgapi.dev/signup" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">tcgapi.dev/signup</a> (no card required, 100 requests/day free). It's saved only in this browser and sent only to TCG API. This is a newer, unofficial service, not TCGPlayer or Wizards themselves — if a search looks off, let us know what came back and the field mapping can be adjusted.
-    </div>
-  </div>
+        <div class="footnote">
+          This tab uses <b>TCG API (tcgapi.dev)</b>, a third-party service built after TCGPlayer closed public API access to new developers — it covers Magic sealed product pricing (booster boxes, packs, bundles) alongside singles. Get a free key at <a href="https://tcgapi.dev/signup" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">tcgapi.dev/signup</a> (no card required, 100 requests/day free). It's saved only in this browser and sent only to TCG API. This is a newer, unofficial service, not TCGPlayer or Wizards themselves. One thing not fully confirmed: searches assume Magic's game slug is <code>magic</code> — if searches keep coming up empty, open <a href="https://api.tcgapi.dev/v1/games" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">api.tcgapi.dev/v1/games</a> directly in your browser (no key needed) and check the exact slug listed for Magic: The Gathering, then let us know if it's different.
+        </div>
+      </div>
 
-  <div class="panel" id="sealedAddPanel" style="max-width:720px;margin-top:20px;">
-    <h2>Add to Inventory</h2>
-    <label for="sealedAddName">Product name</label>
-    <input type="text" id="sealedAddName" placeholder="e.g. Foundations Booster Box">
+      <div class="panel" id="sealedAddPanel" style="margin-top:20px;">
+        <h2>Add to Inventory</h2>
+        <label for="sealedAddName">Product name</label>
+        <input type="text" id="sealedAddName" placeholder="e.g. Foundations Booster Box">
 
-    <label for="sealedAddSet">Set (optional, helps narrow the match)</label>
-    <input type="text" id="sealedAddSet" placeholder="e.g. Foundations">
+        <label for="sealedAddSet">Set (optional, helps narrow the match)</label>
+        <input type="text" id="sealedAddSet" placeholder="e.g. Foundations">
 
-    <div class="row2">
-      <div>
         <label for="sealedAddQty">Quantity</label>
         <input type="number" id="sealedAddQty" min="1" value="1">
-      </div>
-      <div>
+
         <label for="sealedAddPaid">Price paid per unit (optional)</label>
         <input type="number" id="sealedAddPaid" min="0" step="0.01" placeholder="e.g. 95.00">
+
+        <button class="btn-primary" id="sealedAddBtn">Add to inventory</button>
+        <div class="form-msg" id="sealedAddMsg"></div>
+
+        <div class="footnote">
+          Looks up the closest matching sealed product via TCG API and adds it straight into your tracked inventory with the quantity and price paid you enter here. If a product with the same name and set is already tracked, this updates its quantity and price paid instead of duplicating it. To browse several matches before picking one, use the search box above and click "Track" on the one you want instead.
+        </div>
       </div>
     </div>
 
-    <button class="btn-primary" id="sealedAddBtn">Add to inventory</button>
-    <div class="form-msg" id="sealedAddMsg"></div>
+    <div>
+      <div id="sealedSearchResults"></div>
 
-    <div class="footnote">
-      Looks up the closest matching sealed product via TCG API and adds it straight into your tracked inventory below with the quantity and price paid you enter here. If a product with the same name and set is already tracked, this updates its quantity and price paid instead of duplicating it. To browse several matches before picking one, use the search box above and click "Track" on the one you want instead.
-    </div>
-  </div>
-
-  <div id="sealedSearchResults" style="margin-top:20px;"></div>
-
-  <div class="panel" id="sealedWatchlistPanel" style="max-width:960px;margin-top:24px;">
-    <div class="toolbar">
-      <h2 style="margin:0;border:none;padding:0;">Tracked Sealed Products</h2>
-      <div class="toolbar-right">
-        <button id="sealedRefreshBtn">Refresh prices</button>
+      <div class="panel" id="sealedWatchlistPanel">
+        <div class="toolbar">
+          <h2 style="margin:0;border:none;padding:0;">Tracked Sealed Products</h2>
+          <div class="toolbar-right">
+            <button id="sealedRefreshBtn">Refresh prices</button>
+          </div>
+        </div>
+        <div class="form-msg" id="sealedWatchlistMsg"></div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th class="num">Qty</th>
+                <th class="num">Paid</th>
+                <th class="num">Price</th>
+                <th class="num">24h</th>
+                <th class="num">7d</th>
+                <th class="num">30d</th>
+                <th class="num">Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="sealedWatchlistBody">
+              <tr class="loading-row"><td colspan="9">Use "Add to Inventory" above, or search and click "Track," to add products here.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
-    <div class="form-msg" id="sealedWatchlistMsg"></div>
-    <div style="overflow-x:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th class="num">Qty</th>
-            <th class="num">Paid</th>
-            <th class="num">Price</th>
-            <th class="num">24h</th>
-            <th class="num">7d</th>
-            <th class="num">30d</th>
-            <th class="num">Total</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="sealedWatchlistBody">
-          <tr class="loading-row"><td colspan="9">Use "Add to Inventory" above, or search and click "Track," to add products here.</td></tr>
-        </tbody>
-      </table>
     </div>
   </div>
 </div>
@@ -1616,7 +1616,7 @@ $('deckLoadBtn').addEventListener('click', async () => {
     renderTournaments(tournaments);
     $('deckMsg').textContent = 'Loaded ' + tournaments.length + ' tournament(s).';
   }catch(e){
-    $('deckMsg').textContent = e.message || 'Something went wrong loading tournaments.';
+    $('deckMsg').textContent = friendlyFetchError(e, 'TopDeck.gg');
     $('deckMsg').className = 'form-msg error';
   }finally{
     $('deckLoadBtn').disabled = false;
@@ -1644,42 +1644,55 @@ async function saveSealedWatchlist(){
   await storageSet(SEALED_WATCHLIST_KEY, JSON.stringify(sealedWatchlist));
 }
 
+function friendlyFetchError(e, serviceName){
+  if(e instanceof TypeError){
+    return 'Network error contacting ' + serviceName + ' — this usually means their API blocked the cross-origin browser request (CORS), not a problem with your key. Open DevTools (F12) → Console/Network tab, retry, and check for a CORS error — if so, let us know and this needs a small proxy fix.';
+  }
+  return e.message || ('Something went wrong contacting ' + serviceName + '.');
+}
+
 async function tcgApiGet(path, apiKey){
   const res = await fetch('https://api.tcgapi.dev' + path, {
     headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }
   });
   if(!res.ok){
     let msg = 'TCG API request failed (status ' + res.status + ').';
-    try{ const body = await res.json(); if(body && (body.error || body.message)) msg = body.error || body.message; }catch(e){}
+    try{
+      const body = await res.json();
+      if(body && body.error){ msg = typeof body.error === 'string' ? body.error : (body.error.message || msg); }
+    }catch(e){}
     throw new Error(msg);
   }
   return res.json();
 }
 
-// The exact response shape is documented inconsistently across TCG API's own
-// pages, so this unwraps defensively rather than assuming one fixed format.
-function unwrapList(body){
-  if(Array.isArray(body)) return body;
-  if(Array.isArray(body.data)) return body.data;
-  if(Array.isArray(body.results)) return body.results;
-  if(Array.isArray(body.cards)) return body.cards;
-  return [];
-}
-function unwrapItem(body){
-  if(body && body.data && !Array.isArray(body.data)) return body.data;
-  return body;
+function numOrNull(v){
+  return (v === null || v === undefined || isNaN(v)) ? null : Number(v);
 }
 
-function extractPriceInfo(item){
-  const prices = item.prices || {};
-  const key = ['Sealed','Normal','Holofoil'].find(k => prices[k]) || Object.keys(prices)[0];
-  const p = key ? prices[key] : item; // fall back to flat fields like item.price directly
-  const num = (v) => (v === null || v === undefined || isNaN(v)) ? null : Number(v);
+// Search results (GET /v1/search) return flat fields directly on each item.
+function priceFromSearchItem(item){
+  return { market: numOrNull(item.market_price), low: numOrNull(item.low_price) };
+}
+
+// GET /v1/cards/:id/prices returns an array of per-printing price objects
+// (or a single object if the product only has one printing type). This is
+// where price_change_24h / 7d / 30d actually live, per TCG API's docs.
+function unwrapPricesList(body){
+  const d = body.data;
+  if(Array.isArray(d)) return d;
+  if(d) return [d];
+  return [];
+}
+function extractChangeInfo(body){
+  const list = unwrapPricesList(body);
+  const entry = list.find(p => p.printing === 'Normal') || list[0];
+  if(!entry) return { market: null, change24h: null, change7d: null, change30d: null };
   return {
-    market: num(p && (p.market_price ?? p.price)) ?? num(item.price),
-    change24h: num(p && p.change_24h),
-    change7d: num(p && p.change_7d),
-    change30d: num(p && p.change_30d)
+    market: numOrNull(entry.market_price),
+    change24h: numOrNull(entry.price_change_24h),
+    change7d: numOrNull(entry.price_change_7d),
+    change30d: numOrNull(entry.price_change_30d)
   };
 }
 
@@ -1688,6 +1701,15 @@ function pctFromChange(market, change){
   const past = market - change;
   if(past <= 0) return null;
   return (change / past) * 100;
+}
+
+async function searchSealedProducts(apiKey, query){
+  const url = '/v1/search?q=' + encodeURIComponent(query) + '&game=magic&type=' + encodeURIComponent('Sealed Products') + '&per_page=50';
+  const body = await tcgApiGet(url, apiKey);
+  const all = Array.isArray(body.data) ? body.data : [];
+  // The type=Sealed Products filter should already narrow this server-side;
+  // this is just a light safety net in case the filter is ignored.
+  return all.filter(item => (item.product_type || '').toLowerCase() === 'sealed products' || SEALED_KEYWORDS.test(item.name || ''));
 }
 
 $('sealedSearchBtn').addEventListener('click', async () => {
@@ -1701,19 +1723,14 @@ $('sealedSearchBtn').addEventListener('click', async () => {
   $('sealedSearchMsg').textContent = 'Searching…';
   $('sealedSearchMsg').className = 'form-msg';
   try{
-    const body = await tcgApiGet('/v1/games/magic/search?q=' + encodeURIComponent(query) + '&per_page=50', apiKey);
-    const all = unwrapList(body);
-    const sealedOnly = all.filter(item => {
-      const printing = (item.printing || item.product_type || '').toString();
-      return printing.toLowerCase() === 'sealed' || SEALED_KEYWORDS.test(item.name || '');
-    });
+    const sealedOnly = await searchSealedProducts(apiKey, query);
     lastSealedSearchResults = sealedOnly;
     renderSealedSearchResults(sealedOnly);
     $('sealedSearchMsg').textContent = sealedOnly.length
       ? 'Found ' + sealedOnly.length + ' sealed product(s).'
-      : 'No sealed products matched that search — try just the set name on its own.';
+      : 'No sealed products matched that search — try just the set name on its own, or double-check the game slug (see footnote below).';
   }catch(e){
-    $('sealedSearchMsg').textContent = e.message || 'Something went wrong searching.';
+    $('sealedSearchMsg').textContent = friendlyFetchError(e, 'TCG API');
     $('sealedSearchMsg').className = 'form-msg error';
   }finally{
     $('sealedSearchBtn').disabled = false;
@@ -1726,12 +1743,12 @@ function renderSealedSearchResults(items){
   container.innerHTML = '<div class="panel"><div style="overflow-x:auto;"><table>' +
     '<thead><tr><th>Product</th><th>Set</th><th class="num">Price</th><th></th></tr></thead>' +
     '<tbody>' + items.map((item, idx) => {
-      const info = extractPriceInfo(item);
+      const info = priceFromSearchItem(item);
       const alreadyTracked = sealedWatchlist.some(w => String(w.id) === String(item.id));
       return `
         <tr>
           <td>${item.name || 'Unknown product'}</td>
-          <td class="card-set">${item.set || ''}</td>
+          <td class="card-set">${item.set_name || ''}</td>
           <td class="num mono">${fmtMoney(info.market)}</td>
           <td class="num"><button class="sealed-track-btn" data-idx="${idx}" ${alreadyTracked ? 'disabled' : ''}>${alreadyTracked ? 'Tracked' : 'Track'}</button></td>
         </tr>`;
@@ -1741,17 +1758,17 @@ function renderSealedSearchResults(items){
   container.querySelectorAll('.sealed-track-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const item = lastSealedSearchResults[Number(btn.dataset.idx)];
-      const info = extractPriceInfo(item);
+      const info = priceFromSearchItem(item);
       sealedWatchlist.push({
         id: item.id,
         name: item.name || 'Unknown product',
-        set: item.set || '',
+        set: item.set_name || '',
         qty: 1,
         pricePaid: null,
         market: info.market,
-        change24h: info.change24h,
-        change7d: info.change7d,
-        change30d: info.change30d,
+        change24h: null,
+        change7d: null,
+        change30d: null,
         lastUpdated: new Date().toISOString()
       });
       await saveSealedWatchlist();
@@ -1842,39 +1859,31 @@ $('sealedAddBtn').addEventListener('click', async () => {
   $('sealedAddMsg').className = 'form-msg';
   try{
     const query = setName ? (name + ' ' + setName) : name;
-    const body = await tcgApiGet('/v1/games/magic/search?q=' + encodeURIComponent(query) + '&per_page=50', apiKey);
-    const all = unwrapList(body);
-    const sealedOnly = all.filter(item => {
-      const printing = (item.printing || item.product_type || '').toString();
-      return printing.toLowerCase() === 'sealed' || SEALED_KEYWORDS.test(item.name || '');
-    });
+    const sealedOnly = await searchSealedProducts(apiKey, query);
     if(!sealedOnly.length){
       $('sealedAddMsg').textContent = 'No sealed product matched that name — try the search box below for more options, or adjust the wording.';
       $('sealedAddMsg').className = 'form-msg error';
       return;
     }
     const match = sealedOnly[0];
-    const info = extractPriceInfo(match);
+    const info = priceFromSearchItem(match);
     const existingIdx = sealedWatchlist.findIndex(w => String(w.id) === String(match.id));
     if(existingIdx >= 0){
       sealedWatchlist[existingIdx].qty = qty;
       sealedWatchlist[existingIdx].pricePaid = pricePaid;
       sealedWatchlist[existingIdx].market = info.market;
-      sealedWatchlist[existingIdx].change24h = info.change24h;
-      sealedWatchlist[existingIdx].change7d = info.change7d;
-      sealedWatchlist[existingIdx].change30d = info.change30d;
       sealedWatchlist[existingIdx].lastUpdated = new Date().toISOString();
     } else {
       sealedWatchlist.push({
         id: match.id,
         name: match.name || name,
-        set: match.set || setName,
+        set: match.set_name || setName,
         qty: qty,
         pricePaid: pricePaid,
         market: info.market,
-        change24h: info.change24h,
-        change7d: info.change7d,
-        change30d: info.change30d,
+        change24h: null,
+        change7d: null,
+        change30d: null,
         lastUpdated: new Date().toISOString()
       });
     }
@@ -1886,13 +1895,12 @@ $('sealedAddBtn').addEventListener('click', async () => {
     $('sealedAddQty').value = 1;
     $('sealedAddPaid').value = '';
   }catch(e){
-    $('sealedAddMsg').textContent = e.message || 'Something went wrong looking that up.';
+    $('sealedAddMsg').textContent = friendlyFetchError(e, 'TCG API');
     $('sealedAddMsg').className = 'form-msg error';
   }finally{
     $('sealedAddBtn').disabled = false;
   }
 });
-
 
 $('sealedRefreshBtn').addEventListener('click', async () => {
   const apiKey = $('tcgApiKey').value.trim();
@@ -1902,9 +1910,8 @@ $('sealedRefreshBtn').addEventListener('click', async () => {
   $('sealedWatchlistMsg').className = 'form-msg';
   for(const w of sealedWatchlist){
     try{
-      const body = await tcgApiGet('/v1/cards/' + encodeURIComponent(w.id), apiKey);
-      const item = unwrapItem(body);
-      const info = extractPriceInfo(item);
+      const body = await tcgApiGet('/v1/cards/' + encodeURIComponent(w.id) + '/prices', apiKey);
+      const info = extractChangeInfo(body);
       w.market = info.market;
       w.change24h = info.change24h;
       w.change7d = info.change7d;
