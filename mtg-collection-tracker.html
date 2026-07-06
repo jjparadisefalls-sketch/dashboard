@@ -480,114 +480,106 @@ Consider,mkm,3,,,0.25"></textarea>
 </div>
 
 <div id="tab-decks" class="tab-panel" style="display:none;">
-  <div class="layout">
-    <div class="panel">
-      <h2>Recent Tournament Results</h2>
-      <label for="topdeckApiKey">TopDeck.gg API key</label>
-      <input type="text" id="topdeckApiKey" placeholder="paste your free API key" autocomplete="off">
+  <div class="panel" style="max-width:640px;">
+    <h2>Recent Tournament Results</h2>
+    <label for="topdeckApiKey">TopDeck.gg API key</label>
+    <input type="text" id="topdeckApiKey" placeholder="paste your free API key" autocomplete="off">
 
-      <label for="deckFormat">Format</label>
-      <select id="deckFormat">
-        <option value="Standard">Standard</option>
-        <option value="Pioneer">Pioneer</option>
-        <option value="Modern">Modern</option>
-        <option value="Legacy">Legacy</option>
-        <option value="Vintage">Vintage</option>
-        <option value="Pauper">Pauper</option>
-        <option value="EDH">Commander (EDH)</option>
-        <option value="Pauper EDH">Pauper EDH</option>
-        <option value="Duel Commander">Duel Commander</option>
-        <option value="Oathbreaker">Oathbreaker</option>
-      </select>
+    <label for="deckFormat">Format</label>
+    <select id="deckFormat">
+      <option value="Standard">Standard</option>
+      <option value="Pioneer">Pioneer</option>
+      <option value="Modern">Modern</option>
+      <option value="Legacy">Legacy</option>
+      <option value="Vintage">Vintage</option>
+      <option value="Pauper">Pauper</option>
+      <option value="EDH">Commander (EDH)</option>
+      <option value="Pauper EDH">Pauper EDH</option>
+      <option value="Duel Commander">Duel Commander</option>
+      <option value="Oathbreaker">Oathbreaker</option>
+    </select>
 
-      <label for="deckLastDays">Last N days</label>
-      <input type="number" id="deckLastDays" min="1" value="14">
+    <label for="deckLastDays">Last N days</label>
+    <input type="number" id="deckLastDays" min="1" value="14">
 
-      <button class="btn-primary" id="deckLoadBtn">Load recent results</button>
-      <div class="form-msg" id="deckMsg"></div>
+    <button class="btn-primary" id="deckLoadBtn">Load recent results</button>
+    <div class="form-msg" id="deckMsg"></div>
 
-      <div class="footnote">
-        This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage and sent only to TopDeck.gg, never anywhere else. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
-      </div>
+    <div class="footnote">
+      This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API, routed through <b>corsproxy.io</b> since TopDeck.gg doesn't allow direct browser requests — so your API key does pass through that relay, not just TopDeck.gg. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
     </div>
-
-    <div id="deckResults"></div>
   </div>
+
+  <div id="deckResults" style="margin-top:20px;"></div>
 </div>
 
 <div id="tab-sealed" class="tab-panel" style="display:none;">
-  <div class="layout">
-    <div>
-      <div class="panel">
-        <h2>Track Booster Boxes &amp; Packs</h2>
-        <label for="tcgApiKey">TCG API key</label>
-        <input type="text" id="tcgApiKey" placeholder="paste your free API key" autocomplete="off">
+  <div class="panel" style="max-width:640px;">
+    <h2>Track Booster Boxes &amp; Packs</h2>
+    <label for="tcgApiKey">TCG API key</label>
+    <input type="text" id="tcgApiKey" placeholder="paste your free API key" autocomplete="off">
 
-        <label for="sealedSearchInput">Search by set name</label>
-        <input type="text" id="sealedSearchInput" placeholder="e.g. Foundations, Bloomburrow, Duskmourn">
-        <button class="btn-primary" id="sealedSearchBtn">Search sealed products</button>
-        <div class="form-msg" id="sealedSearchMsg"></div>
+    <label for="sealedSearchInput">Search by set name</label>
+    <input type="text" id="sealedSearchInput" placeholder="e.g. Foundations, Bloomburrow, Duskmourn">
+    <button class="btn-primary" id="sealedSearchBtn">Search sealed products</button>
+    <div class="form-msg" id="sealedSearchMsg"></div>
 
-        <div class="footnote">
-          This tab uses <b>TCG API (tcgapi.dev)</b>, a third-party service built after TCGPlayer closed public API access to new developers — it covers Magic sealed product pricing (booster boxes, packs, bundles) alongside singles. Get a free key at <a href="https://tcgapi.dev/signup" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">tcgapi.dev/signup</a> (no card required, 100 requests/day free). It's saved only in this browser and sent only to TCG API. This is a newer, unofficial service, not TCGPlayer or Wizards themselves. One thing not fully confirmed: searches assume Magic's game slug is <code>magic</code> — if searches keep coming up empty, open <a href="https://api.tcgapi.dev/v1/games" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">api.tcgapi.dev/v1/games</a> directly in your browser (no key needed) and check the exact slug listed for Magic: The Gathering, then let us know if it's different.
-        </div>
-      </div>
+    <div class="footnote">
+      This tab uses <b>TCG API (tcgapi.dev)</b>, a third-party service built after TCGPlayer closed public API access to new developers, routed through <b>corsproxy.io</b> since TCG API doesn't allow direct browser requests either — so your API key passes through that relay too, not just TCG API. Get a free key at <a href="https://tcgapi.dev/signup" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">tcgapi.dev/signup</a> (no card required, 100 requests/day free). It's saved only in this browser's local storage. This is a newer, unofficial service, not TCGPlayer or Wizards themselves. One thing not fully confirmed: searches assume Magic's game slug is <code>magic</code> — if searches keep coming up empty, open <a href="https://api.tcgapi.dev/v1/games" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">api.tcgapi.dev/v1/games</a> directly in your browser (no key needed) and check the exact slug listed for Magic: The Gathering, then let us know if it's different.
+    </div>
+  </div>
 
-      <div class="panel" id="sealedAddPanel" style="margin-top:20px;">
-        <h2>Add to Inventory</h2>
-        <label for="sealedAddName">Product name</label>
-        <input type="text" id="sealedAddName" placeholder="e.g. Foundations Booster Box">
+  <div class="panel" id="sealedAddPanel" style="max-width:640px;margin-top:20px;">
+    <h2>Add to Inventory</h2>
+    <label for="sealedAddName">Product name</label>
+    <input type="text" id="sealedAddName" placeholder="e.g. Foundations Booster Box">
 
-        <label for="sealedAddSet">Set (optional, helps narrow the match)</label>
-        <input type="text" id="sealedAddSet" placeholder="e.g. Foundations">
+    <label for="sealedAddSet">Set (optional, helps narrow the match)</label>
+    <input type="text" id="sealedAddSet" placeholder="e.g. Foundations">
 
-        <label for="sealedAddQty">Quantity</label>
-        <input type="number" id="sealedAddQty" min="1" value="1">
+    <label for="sealedAddQty">Quantity</label>
+    <input type="number" id="sealedAddQty" min="1" value="1">
 
-        <label for="sealedAddPaid">Price paid per unit (optional)</label>
-        <input type="number" id="sealedAddPaid" min="0" step="0.01" placeholder="e.g. 95.00">
+    <label for="sealedAddPaid">Price paid per unit (optional)</label>
+    <input type="number" id="sealedAddPaid" min="0" step="0.01" placeholder="e.g. 95.00">
 
-        <button class="btn-primary" id="sealedAddBtn">Add to inventory</button>
-        <div class="form-msg" id="sealedAddMsg"></div>
+    <button class="btn-primary" id="sealedAddBtn">Add to inventory</button>
+    <div class="form-msg" id="sealedAddMsg"></div>
 
-        <div class="footnote">
-          Looks up the closest matching sealed product via TCG API and adds it straight into your tracked inventory with the quantity and price paid you enter here. If a product with the same name and set is already tracked, this updates its quantity and price paid instead of duplicating it. To browse several matches before picking one, use the search box above and click "Track" on the one you want instead.
-        </div>
+    <div class="footnote">
+      Looks up the closest matching sealed product via TCG API and adds it straight into your tracked inventory with the quantity and price paid you enter here. If a product with the same name and set is already tracked, this updates its quantity and price paid instead of duplicating it. To browse several matches before picking one, use the search box above and click "Track" on the one you want instead.
+    </div>
+  </div>
+
+  <div id="sealedSearchResults" style="margin-top:20px;"></div>
+
+  <div class="panel" id="sealedWatchlistPanel" style="margin-top:20px;">
+    <div class="toolbar">
+      <h2 style="margin:0;border:none;padding:0;">Tracked Sealed Products</h2>
+      <div class="toolbar-right">
+        <button id="sealedRefreshBtn">Refresh prices</button>
       </div>
     </div>
-
-    <div>
-      <div id="sealedSearchResults"></div>
-
-      <div class="panel" id="sealedWatchlistPanel">
-        <div class="toolbar">
-          <h2 style="margin:0;border:none;padding:0;">Tracked Sealed Products</h2>
-          <div class="toolbar-right">
-            <button id="sealedRefreshBtn">Refresh prices</button>
-          </div>
-        </div>
-        <div class="form-msg" id="sealedWatchlistMsg"></div>
-        <div style="overflow-x:auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th class="num">Qty</th>
-                <th class="num">Paid</th>
-                <th class="num">Price</th>
-                <th class="num">24h</th>
-                <th class="num">7d</th>
-                <th class="num">30d</th>
-                <th class="num">Total</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="sealedWatchlistBody">
-              <tr class="loading-row"><td colspan="9">Use "Add to Inventory" above, or search and click "Track," to add products here.</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div class="form-msg" id="sealedWatchlistMsg"></div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th class="num">Qty</th>
+            <th class="num">Paid</th>
+            <th class="num">Price</th>
+            <th class="num">24h</th>
+            <th class="num">7d</th>
+            <th class="num">30d</th>
+            <th class="num">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="sealedWatchlistBody">
+          <tr class="loading-row"><td colspan="9">Use "Add to Inventory" above, or search and click "Track," to add products here.</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -1455,8 +1447,18 @@ async function scryfallPost(url, body){
   });
 }
 
+// TopDeck.gg and TCG API don't support direct browser requests (confirmed via
+// console CORS errors), unlike Scryfall. corsproxy.io's free tier explicitly
+// allows github.io origins with no signup, and forwards custom headers and
+// POST bodies, so we route both APIs through it. This does mean each API key
+// passes through corsproxy.io's servers, not just the target API directly.
+const CORS_PROXY_PREFIX = 'https://corsproxy.io/?url=';
+function corsProxyFetch(url, options){
+  return fetch(CORS_PROXY_PREFIX + encodeURIComponent(url), options);
+}
+
 async function fetchRecentTournaments(apiKey, format, lastDays){
-  const res = await fetch('https://topdeck.gg/api/v2/tournaments', {
+  const res = await corsProxyFetch('https://topdeck.gg/api/v2/tournaments', {
     method: 'POST',
     headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1646,13 +1648,13 @@ async function saveSealedWatchlist(){
 
 function friendlyFetchError(e, serviceName){
   if(e instanceof TypeError){
-    return 'Network error contacting ' + serviceName + ' — this usually means their API blocked the cross-origin browser request (CORS), not a problem with your key. Open DevTools (F12) → Console/Network tab, retry, and check for a CORS error — if so, let us know and this needs a small proxy fix.';
+    return 'Network error reaching ' + serviceName + ' via corsproxy.io — this could be the proxy itself being down/rate-limited, or a browser extension (ad blocker, privacy tool) blocking corsproxy.io. Try again in a moment, or check DevTools (F12) → Console/Network tab for specifics.';
   }
   return e.message || ('Something went wrong contacting ' + serviceName + '.');
 }
 
 async function tcgApiGet(path, apiKey){
-  const res = await fetch('https://api.tcgapi.dev' + path, {
+  const res = await corsProxyFetch('https://api.tcgapi.dev' + path, {
     headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }
   });
   if(!res.ok){
