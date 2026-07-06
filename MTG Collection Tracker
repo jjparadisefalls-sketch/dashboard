@@ -1,0 +1,1923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Binder Ledger — Collection Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #14171a;
+    --panel: #1d2124;
+    --panel-2: #23282b;
+    --border: #2c3136;
+    --text: #e8e6e1;
+    --text-dim: #8b9198;
+    --gold: #c9a961;
+    --gold-dim: #8f7a4d;
+    --common: #9CA3AF;
+    --uncommon: #c7d0d9;
+    --rare: #d4af37;
+    --mythic: #ff6b35;
+    --danger: #d9534f;
+    --danger-dim: #6e3634;
+    --radius: 3px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 500px at 10% -10%, rgba(201,169,97,0.06), transparent),
+      var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:36px 24px 80px;}
+
+  header.top{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:1px solid var(--border);
+    padding-bottom:20px;margin-bottom:28px;
+    flex-wrap:wrap;gap:16px;
+  }
+  .brand-eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--gold-dim);margin:0 0 6px;
+  }
+  h1{
+    font-family:'Playfair Display', serif;
+    font-weight:700;font-size:32px;margin:0;
+    letter-spacing:.01em;
+  }
+  .totals{
+    display:flex;gap:28px;text-align:right;
+  }
+  .stat-label{
+    font-family:'IBM Plex Mono', monospace;font-size:10px;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px;
+  }
+  .stat-value{
+    font-family:'IBM Plex Mono', monospace;font-size:22px;font-weight:600;color:var(--gold);
+  }
+  .stat-value.small{color:var(--text);}
+
+  .layout{display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start;}
+  @media (max-width:820px){.layout{grid-template-columns:1fr;}}
+
+  .tabs{display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--border);}
+  .tab-btn{
+    background:none;border:1px solid transparent;border-bottom:none;
+    color:var(--text-dim);padding:10px 18px;border-radius:var(--radius) var(--radius) 0 0;
+    margin-bottom:-1px;font-family:'IBM Plex Mono', monospace;font-size:12px;
+    letter-spacing:.06em;text-transform:uppercase;
+  }
+  .tab-btn:hover{color:var(--text);border-color:transparent;}
+  .tab-btn.active{
+    color:var(--gold);background:var(--panel);
+    border-color:var(--border);border-bottom:1px solid var(--panel);
+  }
+  .trend-up{color:#9fd6a3;}
+  .trend-down{color:var(--danger);}
+  .trend-flat{color:var(--text-dim);}
+  h3.section-title{
+    font-family:'Playfair Display', serif;font-size:15px;font-weight:600;
+    margin:26px 0 12px;
+  }
+  .trend-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  @media (max-width:700px){.trend-grid{grid-template-columns:1fr;}}
+  .mini-card{display:flex;align-items:center;gap:8px;}
+  .mini-card img{width:26px;border-radius:2px;}
+  code{font-family:'IBM Plex Mono', monospace;background:var(--panel-2);padding:1px 5px;border-radius:2px;font-size:11.5px;}
+  textarea.bulk-textarea{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    padding:10px;border-radius:var(--radius);font-family:'IBM Plex Mono', monospace;font-size:12px;
+    resize:vertical;
+  }
+  textarea.bulk-textarea:focus{outline:none;border-color:var(--gold-dim);}
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:20px;
+  }
+  .panel h2{
+    font-family:'Playfair Display', serif;font-size:17px;font-weight:600;
+    margin:0 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border);
+  }
+  label{
+    display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--text-dim);margin:14px 0 6px;font-family:'IBM Plex Mono', monospace;
+  }
+  label:first-of-type{margin-top:0;}
+  input[type=text], input[type=number], select{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);
+    color:var(--text);padding:9px 10px;border-radius:var(--radius);
+    font-family:'IBM Plex Sans', sans-serif;font-size:14px;
+  }
+  input:focus, select:focus{outline:none;border-color:var(--gold-dim);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .check-row{display:flex;align-items:center;gap:8px;margin-top:14px;}
+  .check-row input{width:auto;}
+  .check-row label{margin:0;}
+
+  button{
+    font-family:'IBM Plex Mono', monospace;font-size:12px;letter-spacing:.06em;
+    text-transform:uppercase;cursor:pointer;border-radius:var(--radius);
+    border:1px solid var(--border);background:var(--panel-2);color:var(--text);
+    padding:10px 14px;transition:border-color .15s ease, color .15s ease;
+  }
+  button:hover{border-color:var(--gold-dim);color:var(--gold);}
+  button:disabled{opacity:.5;cursor:default;}
+  .btn-primary{
+    width:100%;margin-top:18px;background:var(--gold);color:#1a1408;border:1px solid var(--gold);
+    font-weight:600;
+  }
+  .btn-primary:hover{color:#1a1408;border-color:var(--gold);opacity:.9;}
+  .btn-danger:hover{border-color:var(--danger);color:var(--danger);}
+
+  .form-msg{font-size:12.5px;margin-top:10px;line-height:1.5;}
+  .form-msg.error{color:var(--danger);}
+  .form-msg.ok{color:#9fd6a3;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap;}
+  .toolbar input{max-width:260px;}
+  .toolbar-right{display:flex;gap:8px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  thead th{
+    text-align:left;font-family:'IBM Plex Mono', monospace;font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);
+    padding:0 10px 10px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;
+    white-space:nowrap;
+  }
+  thead th:hover{color:var(--gold);}
+  tbody tr{border-bottom:1px solid var(--border);}
+  tbody tr:hover{background:rgba(255,255,255,0.02);}
+  tbody td{padding:10px;vertical-align:middle;}
+  .card-cell{display:flex;align-items:center;gap:10px;}
+  .card-cell img{width:34px;height:auto;border-radius:2px;flex-shrink:0;}
+  .card-name{font-weight:500;}
+  .card-set{color:var(--text-dim);font-size:11.5px;font-family:'IBM Plex Mono', monospace;}
+  .rarity-bar{width:3px;height:34px;border-radius:2px;flex-shrink:0;}
+  .rarity-common{background:var(--common);}
+  .rarity-uncommon{background:var(--uncommon);}
+  .rarity-rare{background:var(--rare);}
+  .rarity-mythic{background:var(--mythic);}
+  .rarity-special, .rarity-bonus{background:#b48ce0;}
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  .num{text-align:right;}
+  .pill{
+    display:inline-block;padding:2px 7px;border-radius:20px;font-size:11px;
+    font-family:'IBM Plex Mono', monospace;border:1px solid var(--border);color:var(--text-dim);
+  }
+  .pop-hot{color:var(--gold);border-color:var(--gold-dim);}
+  .remove-btn{background:none;border:none;color:var(--text-dim);font-size:16px;padding:2px 6px;}
+  .remove-btn:hover{color:var(--danger);}
+  .empty-state{padding:50px 20px;text-align:center;color:var(--text-dim);}
+  .empty-state h3{font-family:'Playfair Display', serif;color:var(--text);font-size:19px;margin-bottom:8px;}
+  .loading-row td{padding:14px 10px;color:var(--text-dim);font-family:'IBM Plex Mono', monospace;font-size:12.5px;}
+  .footnote{margin-top:18px;font-size:11.5px;color:var(--text-dim);line-height:1.6;border-top:1px solid var(--border);padding-top:14px;}
+  .footnote b{color:var(--text);}
+  ::selection{background:var(--gold-dim);color:#fff;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="brand-eyebrow">Binder Ledger</p>
+      <h1>Collection Tracker</h1>
+    </div>
+    <div class="totals">
+      <div>
+        <div class="stat-label">Cards</div>
+        <div class="stat-value small" id="statCount">0</div>
+      </div>
+      <div>
+        <div class="stat-label">Market Value (USD)</div>
+        <div class="stat-value" id="statValue">$0.00</div>
+      </div>
+      <div>
+        <div class="stat-label">Gain/Loss (priced cards)</div>
+        <div class="stat-value small" id="statGain">—</div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="collection">Collection Tracker</button>
+    <button class="tab-btn" data-tab="popularity">Card Popularity</button>
+    <button class="tab-btn" data-tab="decks">Recent Deck Finishes</button>
+    <button class="tab-btn" data-tab="sealed">Sealed Products</button>
+  </nav>
+
+  <div id="tab-collection" class="tab-panel">
+  <div class="layout">
+    <div class="panel" id="addPanel">
+      <h2>Add to Collection</h2>
+      <label for="cardName">Card name</label>
+      <input type="text" id="cardName" list="nameOptions" placeholder="e.g. Lightning Bolt" autocomplete="off">
+      <datalist id="nameOptions"></datalist>
+
+      <label for="setCode">Set code (optional)</label>
+      <input type="text" id="setCode" placeholder="e.g. lea, m19">
+
+      <div class="row2">
+        <div>
+          <label for="qty">Quantity</label>
+          <input type="number" id="qty" min="1" value="1">
+        </div>
+        <div>
+          <label for="condition">Condition</label>
+          <select id="condition">
+            <option>Near Mint</option>
+            <option>Lightly Played</option>
+            <option>Moderately Played</option>
+            <option>Heavily Played</option>
+            <option>Damaged</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="treatment">Treatment / finish</label>
+      <select id="treatment">
+        <option value="normal">Normal</option>
+        <option value="foil">Foil</option>
+        <option value="etched">Foil-Etched</option>
+        <option value="showcase">Showcase</option>
+        <option value="borderless">Borderless / Extended Art</option>
+        <option value="prerelease">Prerelease Stamp</option>
+        <option value="planeswalkerstamp">Planeswalker Stamp</option>
+      </select>
+
+      <label for="pricePaid">Price paid per card (optional)</label>
+      <input type="number" id="pricePaid" min="0" step="0.01" placeholder="e.g. 4.50">
+
+      <button class="btn-primary" id="addBtn">Add card</button>
+      <div class="form-msg" id="formMsg"></div>
+
+      <div class="footnote">
+        <b>This needs to run as its own page, not inside Claude's preview pane</b> — the preview sandboxes network access to Anthropic's own API only, which is why card lookups fail there no matter what. Download this file and open it on its own (see chat for the easiest ways), and lookups will work normally. Once running standalone, your collection saves to this browser via local storage.<br><br>
+        Prices and card data come from <b>Scryfall's</b> free public API. Standard legality comes from the same source's per-card <b>legalities</b> field, which mirrors Wizards' official rotation and updates itself — no rotation list to maintain by hand. For showcase, borderless, prerelease, and planeswalker-stamp treatments, if that exact printing can't be found we fall back to the standard printing's data and let you know. Head to the <b>Card Popularity</b> tab for EDHREC rank and Standard metagame context.
+        <br><br>
+        <b>3d / 7d / 30d columns:</b> each card's price is recorded once per day (once this page has been opened that day — same "opportunistic daily snapshot" approach as the popularity leaderboards, since a static page can't run in the background). Those three columns compare today's price to the closest recorded day at or before 3, 7, and 30 days ago. A card needs to have been in your collection that long, with the page opened along the way, for a given column to show a number — otherwise it shows "—".
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="filterInput" placeholder="Filter by name…">
+        <div class="toolbar-right">
+          <button id="refreshBtn">Refresh prices</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th data-sort="name">Card</th>
+              <th data-sort="rarity">Rarity</th>
+              <th data-sort="legal">Standard</th>
+              <th data-sort="qty" class="num">Qty</th>
+              <th data-sort="paid" class="num">Paid</th>
+              <th data-sort="unit" class="num">Unit Price</th>
+              <th data-sort="gain" class="num">Gain/Loss</th>
+              <th data-sort="d3" class="num">3d</th>
+              <th data-sort="d7" class="num">7d</th>
+              <th data-sort="d30" class="num">30d</th>
+              <th data-sort="total" class="num">Line Total</th>
+              <th data-sort="pop" class="num">Popularity</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr class="loading-row"><td colspan="13">Loading your collection…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="emptyState" style="display:none;" class="empty-state">
+        <h3>Your binder is empty</h3>
+        <div>Add your first card on the left. Prices and popularity fill in automatically from Scryfall.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="bulkImportPanel" style="margin-top:24px;">
+    <h2>Bulk Import</h2>
+    <label for="bulkText">Paste CSV or a plain decklist</label>
+    <textarea id="bulkText" class="bulk-textarea" rows="8" placeholder="Sheoldred, the Apocalypse,,2,Near Mint,foil,32.00
+4 Lightning Bolt
+Consider,mkm,3,,,0.25"></textarea>
+
+    <div class="row2" style="margin-top:12px;align-items:end;">
+      <div>
+        <label for="bulkFile">…or upload a file</label>
+        <input type="file" id="bulkFile" accept=".csv,.txt">
+      </div>
+      <div>
+        <button class="btn-primary" id="bulkImportBtn" style="margin-top:24px;">Import cards</button>
+      </div>
+    </div>
+
+    <div class="form-msg" id="bulkMsg"></div>
+    <div id="bulkResults" style="margin-top:12px;font-size:12.5px;line-height:1.7;"></div>
+
+    <div class="footnote">
+      One entry per line, either format, mixed freely:<br>
+      <b>CSV</b>: <code>Card Name,Set Code,Quantity,Condition,Treatment,Price Paid</code> — only the name is required; leave the rest blank for defaults (qty 1, Near Mint, Normal, no price paid). Treatment must be one of <code>normal</code>, <code>foil</code>, <code>etched</code>, <code>showcase</code>, <code>borderless</code>, <code>prerelease</code>, <code>planeswalkerstamp</code>. Price Paid is per card, not per line total.<br>
+      <b>Plain decklist line</b>: <code>4 Lightning Bolt</code> — just quantity and name, everything else defaults.<br>
+      Blank lines and lines starting with <code>#</code> are skipped, and a header row starting with "name" is detected and skipped automatically. Cards priced as Normal or Foil are looked up in one fast batch; Showcase, Borderless, Prerelease, Foil-Etched, and Planeswalker Stamp rows are looked up one at a time (same specific-print search used by the single Add form), so very large imports with lots of special treatments will take a bit longer. As always, this needs to be running as its own hosted page, not Claude's preview pane, for the lookups to work.
+    </div>
+  </div>
+  </div>
+
+  <div id="tab-popularity" class="tab-panel" style="display:none;">
+    <div class="panel" id="popPanel" style="max-width:640px;">
+      <h2>Look Up Card Popularity</h2>
+      <label for="popCardName">Card name</label>
+      <input type="text" id="popCardName" list="popNameOptions" placeholder="e.g. Lightning Bolt" autocomplete="off">
+      <datalist id="popNameOptions"></datalist>
+      <button class="btn-primary" id="popSearchBtn">Look up</button>
+      <div class="form-msg" id="popMsg"></div>
+
+      <div id="popResult" style="display:none;margin-top:22px;padding-top:20px;border-top:1px solid var(--border);">
+        <div class="card-cell" style="align-items:flex-start;gap:16px;">
+          <img id="popImg" src="" alt="" style="width:110px;border-radius:6px;">
+          <div>
+            <div class="card-name" style="font-family:'Playfair Display', serif;font-size:19px;" id="popName"></div>
+            <div class="card-set" id="popSetLine" style="margin:4px 0 10px;"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <span class="pill" id="popRarityPill"></span>
+              <span id="popLegalPill"></span>
+              <span class="pill" id="popRankPill"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footnote">
+        "Popularity" here is each card's <b>EDHREC rank</b> (lower = more played) — the best free, live-queryable proxy available. It reflects Commander deckbuilding popularity, not eBay sales volume or competitive Standard play rate, since neither eBay's sold-listing data nor Standard metagame share is available through any free public API right now.
+        <br><br>
+        For how a card is actually performing in <b>Standard</b> tournaments, check MTGGoldfish directly — they track real tournament results but don't publish an API, so this links out rather than guessing at their numbers:
+        <br><br>
+        <a href="https://www.mtggoldfish.com/metagame/standard" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">View the Standard metagame on MTGGoldfish ↗</a>
+      </div>
+    </div>
+
+    <div class="panel" id="popLeaderPanel" style="max-width:960px;margin-top:24px;">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0;border:none;padding:0;">Standard Popularity Leaderboard</h2>
+          <div class="card-set" id="popLeaderMeta" style="margin-top:6px;">Not loaded yet.</div>
+        </div>
+        <div class="toolbar-right">
+          <button id="popRefreshBtn">Refresh leaderboard</button>
+        </div>
+      </div>
+      <div class="form-msg" id="popLeaderMsg"></div>
+
+      <h3 class="section-title">Top 20 Most Popular (Standard-legal)</h3>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <th>Card</th>
+              <th class="num">EDHREC Rank</th>
+              <th class="num">Rank Δ</th>
+              <th class="num">Price</th>
+              <th class="num">Price Δ</th>
+            </tr>
+          </thead>
+          <tbody id="popTop20Body">
+            <tr class="loading-row"><td colspan="6">Click "Refresh leaderboard" to load current data.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="trend-grid">
+        <div>
+          <h3 class="section-title">Trending Up</h3>
+          <table>
+            <thead><tr><th>Card</th><th class="num">Price</th><th class="num">Δ</th></tr></thead>
+            <tbody id="popTrendUpBody"><tr class="loading-row"><td colspan="3">—</td></tr></tbody>
+          </table>
+        </div>
+        <div>
+          <h3 class="section-title">Trending Down</h3>
+          <table>
+            <thead><tr><th>Card</th><th class="num">Price</th><th class="num">Δ</th></tr></thead>
+            <tbody id="popTrendDownBody"><tr class="loading-row"><td colspan="3">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="footnote">
+        This leaderboard pulls the 40 Standard-legal cards with the best (lowest) EDHREC rank from Scryfall, live. <b>Price Δ is not a fixed daily change</b> — there's no free API for that — it compares against the last day this page recorded a snapshot, so it only means something once you have at least two recorded days. See "Auto-refresh" note below for how that happens.
+      </div>
+    </div>
+
+    <div class="panel" id="cmdrLeaderPanel" style="max-width:960px;margin-top:24px;">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0;border:none;padding:0;">Commander Popularity Leaderboard</h2>
+          <div class="card-set" id="cmdrLeaderMeta" style="margin-top:6px;">Not loaded yet.</div>
+        </div>
+        <div class="toolbar-right">
+          <button id="cmdrRefreshBtn">Refresh leaderboard</button>
+        </div>
+      </div>
+      <div class="form-msg" id="cmdrLeaderMsg"></div>
+
+      <h3 class="section-title">Top 20 Most Popular (Commander-legal)</h3>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <th>Card</th>
+              <th class="num">EDHREC Rank</th>
+              <th class="num">Rank Δ</th>
+              <th class="num">Price</th>
+              <th class="num">Price Δ</th>
+            </tr>
+          </thead>
+          <tbody id="cmdrTop20Body">
+            <tr class="loading-row"><td colspan="6">Click "Refresh leaderboard" to load current data.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="trend-grid">
+        <div>
+          <h3 class="section-title">Trending Up</h3>
+          <table>
+            <thead><tr><th>Card</th><th class="num">Price</th><th class="num">Δ</th></tr></thead>
+            <tbody id="cmdrTrendUpBody"><tr class="loading-row"><td colspan="3">—</td></tr></tbody>
+          </table>
+        </div>
+        <div>
+          <h3 class="section-title">Trending Down</h3>
+          <table>
+            <thead><tr><th>Card</th><th class="num">Price</th><th class="num">Δ</th></tr></thead>
+            <tbody id="cmdrTrendDownBody"><tr class="loading-row"><td colspan="3">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="footnote">
+        Same mechanics as the Standard leaderboard above, but pulling the 40 Commander-legal cards with the best EDHREC rank — this one's a more direct read, since EDHREC rank is a Commander metric natively rather than a proxy borrowed from another format.
+        <br><br>
+        <b>On the "refresh every day at 3am" idea:</b> this is a plain HTML file with no server, so it genuinely cannot run anything while the page/browser is closed — there's no such thing as a static webpage waking itself up at 3am. What it <i>does</i> do: each time this page loads, it checks whether today (using a 3am boundary, so "today" starts at 3am and runs until 3am the next day) already has a recorded snapshot; if not, it silently fetches one automatically, for both leaderboards. So in practice, if you keep a browser tab on this page (or just open it once each morning), it records one snapshot per day on its own, and keeps up to the last 30 recorded days in this browser's storage. If you want true background automation — running even with no tab open, e.g. via a scheduled job — that needs real server infrastructure (like a small scheduled script that writes to a shared file or database), which is a bigger build than a single HTML file; happy to help with that if it turns out to matter to you.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-decks" class="tab-panel" style="display:none;">
+  <div class="panel" style="max-width:720px;">
+    <h2>Recent Tournament Results</h2>
+    <label for="topdeckApiKey">TopDeck.gg API key</label>
+    <input type="text" id="topdeckApiKey" placeholder="paste your free API key" autocomplete="off">
+
+    <div class="row2" style="margin-top:14px;">
+      <div>
+        <label for="deckFormat">Format</label>
+        <select id="deckFormat">
+          <option value="Standard">Standard</option>
+          <option value="Pioneer">Pioneer</option>
+          <option value="Modern">Modern</option>
+          <option value="Legacy">Legacy</option>
+          <option value="Vintage">Vintage</option>
+          <option value="Pauper">Pauper</option>
+          <option value="EDH">Commander (EDH)</option>
+          <option value="cEDH">cEDH</option>
+        </select>
+      </div>
+      <div>
+        <label for="deckLastDays">Last N days</label>
+        <input type="number" id="deckLastDays" min="1" value="14">
+      </div>
+    </div>
+
+    <button class="btn-primary" id="deckLoadBtn">Load recent results</button>
+    <div class="form-msg" id="deckMsg"></div>
+
+    <div class="footnote">
+      This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage and sent only to TopDeck.gg, never anywhere else. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
+    </div>
+  </div>
+
+  <div id="deckResults" style="margin-top:24px;"></div>
+</div>
+
+<div id="tab-sealed" class="tab-panel" style="display:none;">
+  <div class="panel" style="max-width:720px;">
+    <h2>Track Booster Boxes &amp; Packs</h2>
+    <label for="tcgApiKey">TCG API key</label>
+    <input type="text" id="tcgApiKey" placeholder="paste your free API key" autocomplete="off">
+
+    <label for="sealedSearchInput">Search by set name</label>
+    <input type="text" id="sealedSearchInput" placeholder="e.g. Foundations, Bloomburrow, Duskmourn">
+    <button class="btn-primary" id="sealedSearchBtn">Search sealed products</button>
+    <div class="form-msg" id="sealedSearchMsg"></div>
+
+    <div class="footnote">
+      This tab uses <b>TCG API (tcgapi.dev)</b>, a third-party service built after TCGPlayer closed public API access to new developers — it covers Magic sealed product pricing (booster boxes, packs, bundles) alongside singles. Get a free key at <a href="https://tcgapi.dev/signup" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">tcgapi.dev/signup</a> (no card required, 100 requests/day free). It's saved only in this browser and sent only to TCG API. This is a newer, unofficial service, not TCGPlayer or Wizards themselves — if a search looks off, let us know what came back and the field mapping can be adjusted.
+    </div>
+  </div>
+
+  <div class="panel" id="sealedAddPanel" style="max-width:720px;margin-top:20px;">
+    <h2>Add to Inventory</h2>
+    <label for="sealedAddName">Product name</label>
+    <input type="text" id="sealedAddName" placeholder="e.g. Foundations Booster Box">
+
+    <label for="sealedAddSet">Set (optional, helps narrow the match)</label>
+    <input type="text" id="sealedAddSet" placeholder="e.g. Foundations">
+
+    <div class="row2">
+      <div>
+        <label for="sealedAddQty">Quantity</label>
+        <input type="number" id="sealedAddQty" min="1" value="1">
+      </div>
+      <div>
+        <label for="sealedAddPaid">Price paid per unit (optional)</label>
+        <input type="number" id="sealedAddPaid" min="0" step="0.01" placeholder="e.g. 95.00">
+      </div>
+    </div>
+
+    <button class="btn-primary" id="sealedAddBtn">Add to inventory</button>
+    <div class="form-msg" id="sealedAddMsg"></div>
+
+    <div class="footnote">
+      Looks up the closest matching sealed product via TCG API and adds it straight into your tracked inventory below with the quantity and price paid you enter here. If a product with the same name and set is already tracked, this updates its quantity and price paid instead of duplicating it. To browse several matches before picking one, use the search box above and click "Track" on the one you want instead.
+    </div>
+  </div>
+
+  <div id="sealedSearchResults" style="margin-top:20px;"></div>
+
+  <div class="panel" id="sealedWatchlistPanel" style="max-width:960px;margin-top:24px;">
+    <div class="toolbar">
+      <h2 style="margin:0;border:none;padding:0;">Tracked Sealed Products</h2>
+      <div class="toolbar-right">
+        <button id="sealedRefreshBtn">Refresh prices</button>
+      </div>
+    </div>
+    <div class="form-msg" id="sealedWatchlistMsg"></div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th class="num">Qty</th>
+            <th class="num">Paid</th>
+            <th class="num">Price</th>
+            <th class="num">24h</th>
+            <th class="num">7d</th>
+            <th class="num">30d</th>
+            <th class="num">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="sealedWatchlistBody">
+          <tr class="loading-row"><td colspan="9">Use "Add to Inventory" above, or search and click "Track," to add products here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const TAB_KEYS = ['collection', 'popularity', 'decks', 'sealed'];
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    TAB_KEYS.forEach(key => {
+      document.getElementById('tab-' + key).style.display = (key === target) ? '' : 'none';
+    });
+  });
+});
+</script>
+<script>
+const STORAGE_KEY = 'collection';
+let collection = [];
+let sortKey = 'name';
+let sortDir = 1;
+
+const hasCloudStorage = (typeof window !== 'undefined') && !!window.storage;
+
+async function storageGet(key){
+  if(hasCloudStorage){
+    try{
+      const r = await window.storage.get(key, false);
+      return r ? r.value : null;
+    }catch(e){ return null; }
+  }
+  try{ return window.localStorage.getItem(key); }catch(e){ return null; }
+}
+
+async function storageSet(key, value){
+  if(hasCloudStorage){
+    try{ await window.storage.set(key, value, false); return true; }
+    catch(e){ console.error('Cloud storage save failed', e); return false; }
+  }
+  try{ window.localStorage.setItem(key, value); return true; }
+  catch(e){ console.error('localStorage save failed', e); return false; }
+}
+
+const $ = (id) => document.getElementById(id);
+const tableBody = $('tableBody');
+const emptyState = $('emptyState');
+const formMsg = $('formMsg');
+
+function fmtMoney(n){
+  if(n === null || n === undefined || isNaN(n)) return '—';
+  return '$' + Number(n).toFixed(2);
+}
+
+function rarityClass(r){
+  if(!r) return 'rarity-common';
+  const key = r.toLowerCase();
+  return ['common','uncommon','rare','mythic','special','bonus'].includes(key) ? 'rarity-'+key : 'rarity-common';
+}
+
+async function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+// Scryfall's CORS setup reflects the browser's Origin header back, but the
+// sandboxed frame this app runs in sends an opaque origin, which Scryfall's
+// server can't match — that's the "failed to fetch" bug. Try the request
+// directly first (works in most normal browser tabs), and if the network
+// layer rejects it, retry through a CORS-friendly proxy.
+async function scryfallGet(url){
+  try{
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    return res;
+  }catch(directErr){
+    const proxied = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    return fetch(proxied, { headers: { 'Accept': 'application/json' } });
+  }
+}
+
+const TREATMENT_LABELS = {
+  normal: '', foil: 'FOIL', etched: 'FOIL-ETCHED', showcase: 'SHOWCASE',
+  borderless: 'BORDERLESS', prerelease: 'PRERELEASE', planeswalkerstamp: 'PW STAMP'
+};
+const TREATMENT_QUERY = {
+  etched: 'is:etched',
+  showcase: 'frame:showcase',
+  borderless: 'border:borderless',
+  prerelease: 'is:prerelease',
+  planeswalkerstamp: 'is:planeswalkerdeck'
+};
+
+function pickPrice(entry, treatment){
+  const p = entry.prices || {};
+  const finishes = entry.finishes || [];
+  const usd = (p.usd !== undefined && p.usd !== null) ? Number(p.usd) : null;
+  const foil = (p.usd_foil !== undefined && p.usd_foil !== null) ? Number(p.usd_foil) : null;
+  const etched = (p.usd_etched !== undefined && p.usd_etched !== null) ? Number(p.usd_etched) : null;
+
+  if(treatment === 'foil') return foil !== null ? foil : usd;
+  if(treatment === 'etched') return etched !== null ? etched : (foil !== null ? foil : usd);
+  if(treatment === 'prerelease' || treatment === 'planeswalkerstamp'){
+    // these promos are always distributed as foil-stamped cards
+    return foil !== null ? foil : usd;
+  }
+  if(treatment === 'showcase' || treatment === 'borderless'){
+    if(finishes.length && !finishes.includes('nonfoil') && finishes.includes('foil')){
+      return foil !== null ? foil : usd;
+    }
+    return usd !== null ? usd : foil;
+  }
+  return usd;
+}
+
+async function loadCollection(){
+  try{
+    const raw = await storageGet(STORAGE_KEY);
+    collection = raw ? JSON.parse(raw) : [];
+  }catch(e){
+    collection = [];
+  }
+  render();
+}
+
+async function saveCollection(){
+  await storageSet(STORAGE_KEY, JSON.stringify(collection));
+}
+
+function unitPrice(entry){
+  return pickPrice(entry, entry.treatment || (entry.foil ? 'foil' : 'normal'));
+}
+
+function findHistoricalUnit(history, daysAgo){
+  if(!history || !history.length) return null;
+  const targetDay = dayBucket(new Date(Date.now() - daysAgo*24*60*60*1000));
+  const exact = history.find(h => h.day === targetDay);
+  if(exact) return exact.usd;
+  const before = history.filter(h => h.day <= targetDay).sort((a,b) => a.day < b.day ? 1 : -1);
+  return before.length ? before[0].usd : null;
+}
+
+function trendPct(entry, daysAgo){
+  const current = unitPrice(entry);
+  const past = findHistoricalUnit(entry.priceHistory, daysAgo);
+  if(current === null || current === undefined || past === null || past === undefined || past <= 0) return null;
+  return ((current - past) / past) * 100;
+}
+
+function legalityPill(entry){
+  const s = entry.legality_standard;
+  if(s === 'legal') return '<span class="pill" style="color:#9fd6a3;border-color:#3f6b45;">Standard</span>';
+  if(s === 'banned') return '<span class="pill" style="color:var(--danger);border-color:var(--danger-dim);">Banned</span>';
+  if(s === 'restricted') return '<span class="pill" style="color:var(--gold);border-color:var(--gold-dim);">Restricted</span>';
+  return '<span class="pill">Not Standard</span>';
+}
+
+function gainLossPct(entry){
+  const current = unitPrice(entry);
+  const paid = entry.pricePaid;
+  if(current === null || current === undefined || paid === null || paid === undefined || paid <= 0) return null;
+  return ((current - paid) / paid) * 100;
+}
+
+function render(){
+  const filter = ($('filterInput').value || '').trim().toLowerCase();
+  const rows = collection
+    .map((c, idx) => ({ ...c, _idx: idx }))
+    .filter(c => !filter || c.name.toLowerCase().includes(filter));
+
+  rows.sort((a,b) => {
+    let av, bv;
+    if(sortKey === 'name'){ av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+    else if(sortKey === 'rarity'){ av = a.rarity||''; bv = b.rarity||''; }
+    else if(sortKey === 'qty'){ av = a.qty; bv = b.qty; }
+    else if(sortKey === 'paid'){ av = a.pricePaid ?? -1; bv = b.pricePaid ?? -1; }
+    else if(sortKey === 'unit'){ av = unitPrice(a) ?? -1; bv = unitPrice(b) ?? -1; }
+    else if(sortKey === 'gain'){ av = gainLossPct(a) ?? -9999; bv = gainLossPct(b) ?? -9999; }
+    else if(sortKey === 'total'){ av = (unitPrice(a)??0)*a.qty; bv = (unitPrice(b)??0)*b.qty; }
+    else if(sortKey === 'pop'){ av = a.edhrec_rank ?? 999999; bv = b.edhrec_rank ?? 999999; }
+    else if(sortKey === 'legal'){ av = a.legality_standard||''; bv = b.legality_standard||''; }
+    else if(sortKey === 'd3'){ av = trendPct(a,3) ?? -9999; bv = trendPct(b,3) ?? -9999; }
+    else if(sortKey === 'd7'){ av = trendPct(a,7) ?? -9999; bv = trendPct(b,7) ?? -9999; }
+    else if(sortKey === 'd30'){ av = trendPct(a,30) ?? -9999; bv = trendPct(b,30) ?? -9999; }
+    if(av < bv) return -1*sortDir;
+    if(av > bv) return 1*sortDir;
+    return 0;
+  });
+
+  tableBody.innerHTML = '';
+  if(rows.length === 0){
+    emptyState.style.display = collection.length === 0 ? 'block' : 'block';
+    if(collection.length > 0){
+      emptyState.querySelector('h3').textContent = 'No matching cards';
+      emptyState.querySelector('div').textContent = 'Try a different filter.';
+    }
+    tableBody.parentElement.parentElement.style.display = 'none';
+  } else {
+    emptyState.style.display = 'none';
+    tableBody.parentElement.parentElement.style.display = '';
+    rows.forEach(entry => {
+      const tr = document.createElement('tr');
+      const up = unitPrice(entry);
+      const total = up !== null ? up * entry.qty : null;
+      const img = entry.image || '';
+      const pop = entry.edhrec_rank;
+      const popLabel = pop ? '#' + pop.toLocaleString() : 'N/A';
+      const popClass = pop && pop < 3000 ? 'pill pop-hot' : 'pill';
+      const treatLabel = TREATMENT_LABELS[entry.treatment] || (entry.foil ? 'FOIL' : '');
+      const d3 = trendPct(entry, 3);
+      const d7 = trendPct(entry, 7);
+      const d30 = trendPct(entry, 30);
+      const gain = gainLossPct(entry);
+
+      tr.innerHTML = `
+        <td>
+          <div class="card-cell">
+            <div class="rarity-bar ${rarityClass(entry.rarity)}"></div>
+            ${img ? `<img src="${img}" alt="">` : ''}
+            <div>
+              <div class="card-name">${entry.name}${treatLabel ? ` <span style=\"color:var(--gold);font-size:11px;\">${treatLabel}</span>` : ''}</div>
+              <div class="card-set">${(entry.set||'').toUpperCase()} · ${entry.condition||''}</div>
+            </div>
+          </div>
+        </td>
+        <td class="mono" style="text-transform:capitalize;">${entry.rarity||'—'}</td>
+        <td>${legalityPill(entry)}</td>
+        <td class="num mono">${entry.qty}</td>
+        <td class="num mono">${fmtMoney(entry.pricePaid)}</td>
+        <td class="num mono">${fmtMoney(up)}</td>
+        <td class="num mono ${trendClass(gain)}">${fmtPct(gain)}</td>
+        <td class="num mono ${trendClass(d3)}">${fmtPct(d3)}</td>
+        <td class="num mono ${trendClass(d7)}">${fmtPct(d7)}</td>
+        <td class="num mono ${trendClass(d30)}">${fmtPct(d30)}</td>
+        <td class="num mono">${fmtMoney(total)}</td>
+        <td class="num"><span class="${popClass}">${popLabel}</span></td>
+        <td class="num"><button class="remove-btn" title="Remove" data-idx="${entry._idx}">✕</button></td>
+      `;
+      tableBody.appendChild(tr);
+    });
+  }
+
+  const totalCount = collection.reduce((s,c) => s + Number(c.qty||0), 0);
+  const totalValue = collection.reduce((s,c) => {
+    const up = unitPrice(c);
+    return s + (up !== null ? up*c.qty : 0);
+  }, 0);
+  $('statCount').textContent = totalCount;
+  $('statValue').textContent = fmtMoney(totalValue);
+
+  const pricedEntries = collection.filter(c => c.pricePaid !== null && c.pricePaid !== undefined && unitPrice(c) !== null);
+  const statGainEl = $('statGain');
+  if(pricedEntries.length === 0){
+    statGainEl.textContent = '—';
+    statGainEl.className = 'stat-value small';
+  } else {
+    const paidTotal = pricedEntries.reduce((s,c) => s + c.pricePaid*c.qty, 0);
+    const valueTotal = pricedEntries.reduce((s,c) => s + unitPrice(c)*c.qty, 0);
+    const gainDollar = valueTotal - paidTotal;
+    const gainPct = paidTotal > 0 ? (gainDollar/paidTotal)*100 : null;
+    statGainEl.textContent = (gainDollar >= 0 ? '+' : '') + fmtMoney(gainDollar) + (gainPct !== null ? ' (' + fmtPct(gainPct) + ')' : '');
+    statGainEl.className = 'stat-value small ' + trendClass(gainDollar);
+  }
+
+  tableBody.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeCard(Number(btn.dataset.idx)));
+  });
+}
+
+async function removeCard(idx){
+  collection.splice(idx, 1);
+  await saveCollection();
+  render();
+}
+
+function showMsg(text, kind){
+  formMsg.textContent = text;
+  formMsg.className = 'form-msg ' + (kind || '');
+}
+
+async function fetchCardByName(name, setCode){
+  let url = 'https://api.scryfall.com/cards/named?fuzzy=' + encodeURIComponent(name);
+  if(setCode) url += '&set=' + encodeURIComponent(setCode.trim().toLowerCase());
+  const res = await scryfallGet(url);
+  if(!res.ok){
+    if(res.status === 404) throw new Error('No card matched that name' + (setCode ? ' in that set.' : '.'));
+    throw new Error('Scryfall lookup failed (' + res.status + ').');
+  }
+  return res.json();
+}
+
+// For treatments that are actually distinct printings (showcase, borderless,
+// prerelease, planeswalker stamp), search for that specific print. Falls back
+// to the standard printing if no matching print exists, and flags that fact.
+async function fetchCardForTreatment(name, setCode, treatment){
+  if(treatment === 'normal' || treatment === 'foil'){
+    return fetchCardByName(name, setCode);
+  }
+  const modifier = TREATMENT_QUERY[treatment];
+  let q = '!"' + name + '" ' + modifier;
+  if(setCode) q += ' e:' + setCode.trim().toLowerCase();
+  const url = 'https://api.scryfall.com/cards/search?q=' + encodeURIComponent(q) + '&unique=prints';
+  const res = await scryfallGet(url);
+  if(res.ok){
+    const data = await res.json();
+    if(data.data && data.data.length) return data.data[0];
+  }
+  const fallback = await fetchCardByName(name, setCode);
+  fallback._treatmentNotFound = true;
+  return fallback;
+}
+
+function cardToEntry(card, qty, treatment, condition, pricePaid){
+  const imgSource = card.image_uris || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris) || {};
+  const paidNum = (pricePaid !== undefined && pricePaid !== null && pricePaid !== '' && !isNaN(pricePaid)) ? Number(pricePaid) : null;
+  const entry = {
+    name: card.name,
+    set: card.set,
+    scryfall_id: card.id,
+    rarity: card.rarity,
+    edhrec_rank: card.edhrec_rank ?? null,
+    legality_standard: card.legalities ? card.legalities.standard : null,
+    finishes: card.finishes || [],
+    image: imgSource.small || imgSource.normal || '',
+    prices: {
+      usd: card.prices ? card.prices.usd : null,
+      usd_foil: card.prices ? card.prices.usd_foil : null,
+      usd_etched: card.prices ? card.prices.usd_etched : null
+    },
+    qty: Number(qty) || 1,
+    treatment: treatment || 'normal',
+    condition: condition || 'Near Mint',
+    pricePaid: paidNum,
+    lastUpdated: new Date().toISOString(),
+    priceHistory: []
+  };
+  const initialUnit = pickPrice(entry, entry.treatment);
+  entry.priceHistory = [{ day: dayBucket(new Date()), usd: initialUnit }];
+  return entry;
+}
+
+$('addBtn').addEventListener('click', async () => {
+  const name = $('cardName').value.trim();
+  const setCode = $('setCode').value.trim();
+  const qty = $('qty').value;
+  const treatment = $('treatment').value;
+  const condition = $('condition').value;
+  const pricePaid = $('pricePaid').value;
+
+  if(!name){ showMsg('Enter a card name first.', 'error'); return; }
+
+  $('addBtn').disabled = true;
+  showMsg('Looking up "' + name + '"…');
+  try{
+    const card = await fetchCardForTreatment(name, setCode, treatment);
+    const entry = cardToEntry(card, qty, treatment, condition, pricePaid);
+    collection.push(entry);
+    await saveCollection();
+    render();
+    if(card._treatmentNotFound){
+      showMsg('Added ' + card.name + ', but no ' + (TREATMENT_LABELS[treatment]||treatment) + ' printing was found — used the standard printing\'s data instead.', 'ok');
+    } else {
+      showMsg('Added ' + card.name + ' (' + card.set.toUpperCase() + ').', 'ok');
+    }
+    $('cardName').value = '';
+    $('setCode').value = '';
+    $('qty').value = 1;
+    $('treatment').value = 'normal';
+    $('pricePaid').value = '';
+  }catch(e){
+    showMsg(e.message || 'Something went wrong looking up that card.', 'error');
+  }finally{
+    $('addBtn').disabled = false;
+  }
+});
+
+$('cardName').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ e.preventDefault(); $('addBtn').click(); }
+});
+
+let autocompleteTimer;
+$('cardName').addEventListener('input', () => {
+  clearTimeout(autocompleteTimer);
+  const q = $('cardName').value.trim();
+  if(q.length < 2) return;
+  autocompleteTimer = setTimeout(async () => {
+    try{
+      const res = await scryfallGet('https://api.scryfall.com/cards/autocomplete?q=' + encodeURIComponent(q));
+      if(!res.ok) return;
+      const data = await res.json();
+      const list = $('nameOptions');
+      list.innerHTML = '';
+      (data.data || []).slice(0, 12).forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        list.appendChild(opt);
+      });
+    }catch(e){ /* silent */ }
+  }, 220);
+});
+
+const PRICE_HISTORY_MAX_DAYS = 35;
+const COLLECTION_LAST_REFRESH_KEY = 'collection_last_refresh_day';
+
+async function refreshAllPrices(){
+  if(collection.length === 0) return;
+  $('refreshBtn').disabled = true;
+  $('refreshBtn').textContent = 'Refreshing…';
+  const todayKey = dayBucket(new Date());
+  for(let i = 0; i < collection.length; i++){
+    const entry = collection[i];
+    try{
+      const res = await scryfallGet('https://api.scryfall.com/cards/' + entry.scryfall_id);
+      if(res.ok){
+        const card = await res.json();
+        entry.prices = {
+          usd: card.prices ? card.prices.usd : null,
+          usd_foil: card.prices ? card.prices.usd_foil : null,
+          usd_etched: card.prices ? card.prices.usd_etched : null
+        };
+        entry.finishes = card.finishes || [];
+        entry.edhrec_rank = card.edhrec_rank ?? null;
+        entry.legality_standard = card.legalities ? card.legalities.standard : null;
+        entry.lastUpdated = new Date().toISOString();
+      }
+    }catch(e){ /* skip on failure, keep old cached data */ }
+
+    if(!Array.isArray(entry.priceHistory)) entry.priceHistory = [];
+    const todayUnit = pickPrice(entry, entry.treatment || (entry.foil ? 'foil' : 'normal'));
+    const existingIdx = entry.priceHistory.findIndex(h => h.day === todayKey);
+    if(existingIdx >= 0) entry.priceHistory[existingIdx] = { day: todayKey, usd: todayUnit };
+    else entry.priceHistory.push({ day: todayKey, usd: todayUnit });
+    entry.priceHistory.sort((a,b) => a.day < b.day ? -1 : 1);
+    while(entry.priceHistory.length > PRICE_HISTORY_MAX_DAYS) entry.priceHistory.shift();
+
+    await sleep(120); // be polite to Scryfall's rate limit
+  }
+  await saveCollection();
+  await storageSet(COLLECTION_LAST_REFRESH_KEY, todayKey);
+  render();
+  $('refreshBtn').disabled = false;
+  $('refreshBtn').textContent = 'Refresh prices';
+}
+
+async function autoRefreshCollectionIfNeeded(){
+  if(collection.length === 0) return;
+  const lastDay = await storageGet(COLLECTION_LAST_REFRESH_KEY);
+  const todayKey = dayBucket(new Date());
+  if(lastDay !== todayKey){
+    await refreshAllPrices();
+  }
+}
+
+$('refreshBtn').addEventListener('click', refreshAllPrices);
+
+$('filterInput').addEventListener('input', render);
+
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if(sortKey === key){ sortDir *= -1; } else { sortKey = key; sortDir = 1; }
+    render();
+  });
+});
+
+loadCollection().then(autoRefreshCollectionIfNeeded);
+
+// --- Bulk Import ---
+const VALID_TREATMENTS = ['normal','foil','etched','showcase','borderless','prerelease','planeswalkerstamp'];
+
+function parseCsvLine(line){
+  const fields = [];
+  let cur = '', inQuotes = false;
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(ch === '"'){
+      if(inQuotes && line[i+1] === '"'){ cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if(ch === ',' && !inQuotes){
+      fields.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  fields.push(cur);
+  return fields.map(f => f.trim());
+}
+
+function parseBulkText(text){
+  const rows = [];
+  text.split('\n').forEach(raw => {
+    const line = raw.trim();
+    if(!line || line.startsWith('#') || line.startsWith('//')) return;
+    if(line.includes(',')){
+      const fields = parseCsvLine(line);
+      if(fields[0] && fields[0].toLowerCase() === 'name') return; // header row
+      const name = fields[0] || '';
+      if(!name) return;
+      const set = (fields[1] || '').trim();
+      const qty = parseInt(fields[2], 10) || 1;
+      const condition = (fields[3] || '').trim() || 'Near Mint';
+      let treatment = (fields[4] || '').trim().toLowerCase() || 'normal';
+      if(!VALID_TREATMENTS.includes(treatment)) treatment = 'normal';
+      const pricePaidRaw = (fields[5] || '').trim();
+      const pricePaid = (pricePaidRaw !== '' && !isNaN(pricePaidRaw)) ? Number(pricePaidRaw) : null;
+      rows.push({ name, set, qty, condition, treatment, pricePaid });
+    } else {
+      const m = line.match(/^(\d+)x?\s+(.+)$/);
+      if(m){
+        rows.push({ name: m[2].trim(), set: '', qty: Number(m[1]), condition: 'Near Mint', treatment: 'normal', pricePaid: null });
+      } else {
+        rows.push({ name: line, set: '', qty: 1, condition: 'Near Mint', treatment: 'normal', pricePaid: null });
+      }
+    }
+  });
+  return rows;
+}
+
+$('bulkFile').addEventListener('change', () => {
+  const file = $('bulkFile').files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { $('bulkText').value = reader.result; };
+  reader.readAsText(file);
+});
+
+$('bulkImportBtn').addEventListener('click', async () => {
+  const rows = parseBulkText($('bulkText').value);
+  if(!rows.length){
+    $('bulkMsg').textContent = 'Nothing to import — paste or upload some rows first.';
+    $('bulkMsg').className = 'form-msg error';
+    return;
+  }
+
+  $('bulkImportBtn').disabled = true;
+  $('bulkResults').innerHTML = '';
+  $('bulkMsg').textContent = 'Importing ' + rows.length + ' row(s)…';
+  $('bulkMsg').className = 'form-msg';
+
+  const added = [];
+  const notFound = [];
+  const fallbackTreatment = [];
+
+  const simpleRows = rows.filter(r => r.treatment === 'normal' || r.treatment === 'foil');
+  const specialRows = rows.filter(r => r.treatment !== 'normal' && r.treatment !== 'foil');
+
+  for(let i = 0; i < simpleRows.length; i += 75){
+    const chunk = simpleRows.slice(i, i + 75);
+    try{
+      const identifiers = chunk.map(r => r.set ? { name: r.name, set: r.set.toLowerCase() } : { name: r.name });
+      const res = await scryfallPost('https://api.scryfall.com/cards/collection', { identifiers });
+      if(res.ok){
+        const data = await res.json();
+        const foundByName = {};
+        (data.data || []).forEach(card => { foundByName[card.name.toLowerCase()] = card; });
+        chunk.forEach(r => {
+          const card = foundByName[r.name.toLowerCase()];
+          if(card){
+            collection.push(cardToEntry(card, r.qty, r.treatment, r.condition, r.pricePaid));
+            added.push(r.name);
+          } else {
+            notFound.push(r.name);
+          }
+        });
+      } else {
+        chunk.forEach(r => notFound.push(r.name));
+      }
+    }catch(e){
+      chunk.forEach(r => notFound.push(r.name));
+    }
+  }
+
+  for(const r of specialRows){
+    try{
+      const card = await fetchCardForTreatment(r.name, r.set, r.treatment);
+      collection.push(cardToEntry(card, r.qty, r.treatment, r.condition, r.pricePaid));
+      added.push(r.name);
+      if(card._treatmentNotFound) fallbackTreatment.push(r.name);
+    }catch(e){
+      notFound.push(r.name);
+    }
+    await sleep(120);
+  }
+
+  await saveCollection();
+  render();
+
+  let summary = '<b>' + added.length + ' of ' + rows.length + ' row(s) added.</b>';
+  if(fallbackTreatment.length){
+    summary += '<br><span class="trend-flat">' + fallbackTreatment.length + ' used the standard printing instead of the requested treatment (no matching print found):</span> ' + fallbackTreatment.join(', ');
+  }
+  if(notFound.length){
+    summary += '<br><span class="trend-down">' + notFound.length + ' not found and skipped:</span> ' + notFound.join(', ');
+  }
+  $('bulkResults').innerHTML = summary;
+  $('bulkMsg').textContent = '';
+  $('bulkImportBtn').disabled = false;
+});
+
+// --- Card Popularity tab ---
+let popAutocompleteTimer;
+$('popCardName').addEventListener('input', () => {
+  clearTimeout(popAutocompleteTimer);
+  const q = $('popCardName').value.trim();
+  if(q.length < 2) return;
+  popAutocompleteTimer = setTimeout(async () => {
+    try{
+      const res = await scryfallGet('https://api.scryfall.com/cards/autocomplete?q=' + encodeURIComponent(q));
+      if(!res.ok) return;
+      const data = await res.json();
+      const list = $('popNameOptions');
+      list.innerHTML = '';
+      (data.data || []).slice(0, 12).forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        list.appendChild(opt);
+      });
+    }catch(e){ /* silent */ }
+  }, 220);
+});
+
+function popLegalPillHtml(legality){
+  if(legality === 'legal') return '<span class="pill" style="color:#9fd6a3;border-color:#3f6b45;">Standard Legal</span>';
+  if(legality === 'banned') return '<span class="pill" style="color:var(--danger);border-color:var(--danger-dim);">Banned in Standard</span>';
+  return '<span class="pill">Not in Standard</span>';
+}
+
+async function runPopularitySearch(){
+  const name = $('popCardName').value.trim();
+  if(!name){ $('popMsg').textContent = 'Enter a card name first.'; $('popMsg').className = 'form-msg error'; return; }
+  $('popSearchBtn').disabled = true;
+  $('popMsg').textContent = 'Looking up "' + name + '"…';
+  $('popMsg').className = 'form-msg';
+  try{
+    const card = await fetchCardByName(name, '');
+    const imgSource = card.image_uris || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris) || {};
+    $('popImg').src = imgSource.normal || imgSource.small || '';
+    $('popName').textContent = card.name;
+    $('popSetLine').textContent = (card.set_name || card.set.toUpperCase()) + ' · ' + (card.set||'').toUpperCase();
+    $('popRarityPill').textContent = card.rarity ? card.rarity.charAt(0).toUpperCase() + card.rarity.slice(1) : '—';
+    $('popLegalPill').innerHTML = popLegalPillHtml(card.legalities ? card.legalities.standard : null);
+    const rank = card.edhrec_rank;
+    $('popRankPill').textContent = rank ? 'EDHREC #' + rank.toLocaleString() : 'No EDHREC rank';
+    $('popRankPill').className = rank && rank < 3000 ? 'pill pop-hot' : 'pill';
+    $('popResult').style.display = '';
+    $('popMsg').textContent = '';
+  }catch(e){
+    $('popResult').style.display = 'none';
+    $('popMsg').textContent = e.message || 'Something went wrong looking up that card.';
+    $('popMsg').className = 'form-msg error';
+  }finally{
+    $('popSearchBtn').disabled = false;
+  }
+}
+
+$('popSearchBtn').addEventListener('click', runPopularitySearch);
+$('popCardName').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ e.preventDefault(); runPopularitySearch(); }
+});
+
+// --- Popularity Leaderboards (Standard + Commander), with daily history + auto-refresh ---
+const POP_WATCHLIST_SIZE = 40;
+const MAX_HISTORY_DAYS = 30;
+const LEADERBOARDS = {
+  standard: { query: 'f:standard', storageKey: 'popularity_history_standard_v1', prefix: 'pop', label: 'Standard' },
+  commander: { query: 'f:commander', storageKey: 'popularity_history_commander_v1', prefix: 'cmdr', label: 'Commander' }
+};
+
+function fmtPct(p){
+  if(p === null || p === undefined || isNaN(p)) return '—';
+  const sign = p > 0 ? '+' : '';
+  return sign + p.toFixed(1) + '%';
+}
+function trendClass(p){
+  if(p === null || p === undefined) return 'trend-flat';
+  return p > 0 ? 'trend-up' : (p < 0 ? 'trend-down' : 'trend-flat');
+}
+function rankDeltaLabel(delta){
+  if(delta === null || delta === undefined) return '<span class="trend-flat">New</span>';
+  if(delta > 0) return '<span class="trend-up">▲ ' + delta + '</span>';
+  if(delta < 0) return '<span class="trend-down">▼ ' + Math.abs(delta) + '</span>';
+  return '<span class="trend-flat">–</span>';
+}
+function miniCardHtml(c){
+  return '<div class="mini-card">' + (c.image ? '<img src="'+c.image+'" alt="">' : '') + '<span>'+c.name+'</span></div>';
+}
+
+// A "day" for this app's purposes runs from 3am to 3am, so shift the clock
+// back 3 hours before taking the date — matches the "reset at 3am" idea
+// without needing anything to actually run while nobody has the page open.
+function dayBucket(date){
+  const shifted = new Date(date.getTime() - 3*60*60*1000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+async function fetchWatchlist(query){
+  const url = 'https://api.scryfall.com/cards/search?q=' + encodeURIComponent(query) + '&order=edhrec&dir=asc&unique=cards';
+  const res = await scryfallGet(url);
+  if(!res.ok) throw new Error('Could not load the leaderboard (status ' + res.status + ').');
+  const data = await res.json();
+  return (data.data || []).slice(0, POP_WATCHLIST_SIZE).map(card => {
+    const imgSource = card.image_uris || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris) || {};
+    return {
+      id: card.id,
+      name: card.name,
+      set: card.set,
+      rarity: card.rarity,
+      edhrec_rank: card.edhrec_rank ?? null,
+      image: imgSource.small || imgSource.normal || '',
+      usd: (card.prices && card.prices.usd !== null && card.prices.usd !== undefined) ? Number(card.prices.usd) : null
+    };
+  });
+}
+
+async function loadHistory(storageKey){
+  try{
+    const raw = await storageGet(storageKey);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+async function saveHistory(storageKey, history){
+  await storageSet(storageKey, JSON.stringify(history));
+}
+
+function renderTop20(prefix, list){
+  const body = document.getElementById(prefix + 'Top20Body');
+  body.innerHTML = '';
+  list.slice(0, 20).forEach((c, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="num mono">${idx+1}</td>
+      <td>${miniCardHtml(c)}</td>
+      <td class="num mono">${c.edhrec_rank ? '#'+c.edhrec_rank.toLocaleString() : 'N/A'}</td>
+      <td class="num">${rankDeltaLabel(c.rankDelta)}</td>
+      <td class="num mono">${fmtMoney(c.usd)}</td>
+      <td class="num mono ${trendClass(c.priceDeltaPct)}">${c.isNew ? 'New' : fmtPct(c.priceDeltaPct)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function renderTrending(prefix, list){
+  const withDelta = list.filter(c => c.priceDeltaPct !== null && c.priceDeltaPct !== undefined && !isNaN(c.priceDeltaPct));
+  const up = [...withDelta].sort((a,b) => b.priceDeltaPct - a.priceDeltaPct).slice(0, 10);
+  const down = [...withDelta].sort((a,b) => a.priceDeltaPct - b.priceDeltaPct).slice(0, 10);
+
+  const upBody = document.getElementById(prefix + 'TrendUpBody');
+  const downBody = document.getElementById(prefix + 'TrendDownBody');
+
+  if(withDelta.length === 0){
+    upBody.innerHTML = '<tr class="loading-row"><td colspan="3">No trend data yet — check back once a second day has been recorded.</td></tr>';
+    downBody.innerHTML = '<tr class="loading-row"><td colspan="3">No trend data yet — check back once a second day has been recorded.</td></tr>';
+    return;
+  }
+
+  upBody.innerHTML = up.map(c => `
+    <tr>
+      <td>${miniCardHtml(c)}</td>
+      <td class="num mono">${fmtMoney(c.usd)}</td>
+      <td class="num mono trend-up">${fmtPct(c.priceDeltaPct)}</td>
+    </tr>`).join('');
+
+  downBody.innerHTML = down.map(c => `
+    <tr>
+      <td>${miniCardHtml(c)}</td>
+      <td class="num mono">${fmtMoney(c.usd)}</td>
+      <td class="num mono trend-down">${fmtPct(c.priceDeltaPct)}</td>
+    </tr>`).join('');
+}
+
+async function refreshLeaderboard(key){
+  const cfg = LEADERBOARDS[key];
+  const prefix = cfg.prefix;
+  const msgEl = document.getElementById(prefix + 'LeaderMsg');
+  const metaEl = document.getElementById(prefix + 'LeaderMeta');
+  const btn = document.getElementById(prefix + 'RefreshBtn');
+
+  if(btn) btn.disabled = true;
+  if(msgEl){ msgEl.textContent = 'Loading current ' + cfg.label + ' popularity leaderboard…'; msgEl.className = 'form-msg'; }
+
+  try{
+    const history = await loadHistory(cfg.storageKey);
+    const todayKey = dayBucket(new Date());
+    // Compare against the most recent recorded day that ISN'T today, so
+    // repeated refreshes within the same day don't erase yesterday's baseline.
+    const previousEntry = [...history].reverse().find(h => h.day !== todayKey) || null;
+
+    const current = await fetchWatchlist(cfg.query);
+    const prevMap = previousEntry ? previousEntry.cards : {};
+
+    const enriched = current.map(c => {
+      const prev = prevMap[c.id];
+      let rankDelta = null, priceDeltaPct = null;
+      if(prev){
+        if(prev.rank !== null && prev.rank !== undefined && c.edhrec_rank !== null && c.edhrec_rank !== undefined){
+          rankDelta = prev.rank - c.edhrec_rank; // positive = moved up in popularity
+        }
+        if(prev.usd !== null && prev.usd !== undefined && prev.usd > 0 && c.usd !== null && c.usd !== undefined){
+          priceDeltaPct = ((c.usd - prev.usd) / prev.usd) * 100;
+        }
+      }
+      return Object.assign({}, c, { rankDelta, priceDeltaPct, isNew: !prev });
+    });
+
+    renderTop20(prefix, enriched);
+    renderTrending(prefix, enriched);
+
+    const cardsMap = {};
+    current.forEach(c => { cardsMap[c.id] = { name: c.name, rank: c.edhrec_rank, usd: c.usd }; });
+    const newEntry = { day: todayKey, checkedAt: new Date().toISOString(), cards: cardsMap };
+    const existingIdx = history.findIndex(h => h.day === todayKey);
+    if(existingIdx >= 0) history[existingIdx] = newEntry; else history.push(newEntry);
+    history.sort((a,b) => a.day < b.day ? -1 : 1);
+    while(history.length > MAX_HISTORY_DAYS) history.shift();
+    await saveHistory(cfg.storageKey, history);
+
+    if(metaEl){
+      metaEl.textContent = previousEntry
+        ? 'Today\'s snapshot: ' + todayKey + ' · comparing to last recorded day: ' + previousEntry.day + ' · ' + history.length + ' day(s) of history saved'
+        : 'First recorded day (' + todayKey + ') — trends will appear once a second day is recorded.';
+    }
+    if(msgEl) msgEl.textContent = '';
+  }catch(e){
+    if(msgEl){ msgEl.textContent = e.message || 'Could not load the leaderboard.'; msgEl.className = 'form-msg error'; }
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
+document.getElementById('popRefreshBtn').addEventListener('click', () => refreshLeaderboard('standard'));
+document.getElementById('cmdrRefreshBtn').addEventListener('click', () => refreshLeaderboard('commander'));
+
+// Auto-refresh once per "day" (3am boundary) per leaderboard, but only ever
+// when this page actually happens to be open — a static file can't run
+// anything while closed, so this is opportunistic, not a true background cron.
+async function autoRefreshIfNeeded(key){
+  const cfg = LEADERBOARDS[key];
+  const history = await loadHistory(cfg.storageKey);
+  const todayKey = dayBucket(new Date());
+  const alreadyHaveToday = history.some(h => h.day === todayKey);
+  if(!alreadyHaveToday){
+    await refreshLeaderboard(key);
+  } else {
+    const metaEl = document.getElementById(cfg.prefix + 'LeaderMeta');
+    const previousEntry = [...history].reverse().find(h => h.day !== todayKey) || null;
+    if(metaEl){
+      metaEl.textContent = 'Already recorded today (' + todayKey + ')' +
+        (previousEntry ? ' · comparing to last recorded day: ' + previousEntry.day : '') +
+        ' · ' + history.length + ' day(s) of history saved. Click refresh to check for intraday price moves.';
+    }
+  }
+}
+autoRefreshIfNeeded('standard');
+autoRefreshIfNeeded('commander');
+
+// --- Recent Decks tab (TopDeck.gg results + Scryfall pricing) ---
+const TOPDECK_KEY_STORAGE = 'topdeck_api_key';
+let lastTournamentsData = [];
+
+(async () => {
+  const savedKey = await storageGet(TOPDECK_KEY_STORAGE);
+  if(savedKey) $('topdeckApiKey').value = savedKey;
+})();
+
+async function scryfallPost(url, body){
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function fetchRecentTournaments(apiKey, format, lastDays){
+  const res = await fetch('https://topdeck.gg/api/v2/tournaments', {
+    method: 'POST',
+    headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      game: 'Magic: The Gathering',
+      format: format,
+      last: Number(lastDays) || 14,
+      columns: ['name', 'decklist', 'wins', 'draws', 'losses']
+    })
+  });
+  if(!res.ok){
+    let msg = 'TopDeck.gg request failed (status ' + res.status + ').';
+    try{ const errBody = await res.json(); if(errBody && errBody.error) msg = errBody.error; }catch(e){}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+function parseDecklistEntries(standing){
+  if(standing.deckObj && typeof standing.deckObj === 'object'){
+    const entries = [];
+    Object.keys(standing.deckObj).forEach(section => {
+      const cards = standing.deckObj[section];
+      if(cards && typeof cards === 'object'){
+        Object.keys(cards).forEach(name => {
+          entries.push({ name, qty: Number(cards[name]) || 1, section });
+        });
+      }
+    });
+    if(entries.length) return entries;
+  }
+  const text = standing.decklist || standing.decklist_text || '';
+  if(!text || typeof text !== 'string' || /^https?:\/\//.test(text.trim())) return [];
+  const entries = [];
+  let section = 'Mainboard';
+  text.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if(!trimmed) return;
+    const sectionMatch = trimmed.match(/^~~(.+)~~$/);
+    if(sectionMatch){ section = sectionMatch[1]; return; }
+    const m = trimmed.match(/^(\d+)x?\s+(.+)$/);
+    if(m){ entries.push({ name: m[2].trim(), qty: Number(m[1]), section }); }
+  });
+  return entries;
+}
+
+async function priceEntries(entries){
+  const uniqueNames = [...new Set(entries.map(e => e.name))];
+  const priceMap = {};
+  for(let i = 0; i < uniqueNames.length; i += 75){
+    const chunk = uniqueNames.slice(i, i + 75);
+    try{
+      const res = await scryfallPost('https://api.scryfall.com/cards/collection', {
+        identifiers: chunk.map(name => ({ name }))
+      });
+      if(res.ok){
+        const data = await res.json();
+        (data.data || []).forEach(card => {
+          priceMap[card.name] = (card.prices && card.prices.usd !== null && card.prices.usd !== undefined) ? Number(card.prices.usd) : null;
+        });
+      }
+    }catch(e){ /* leave unmatched names unpriced */ }
+  }
+  return entries.map(e => Object.assign({}, e, {
+    unitPrice: priceMap.hasOwnProperty(e.name) ? priceMap[e.name] : null
+  }));
+}
+
+function renderTournaments(tournaments){
+  const container = $('deckResults');
+  if(!tournaments.length){
+    container.innerHTML = '<div class="panel empty-state"><h3>No results</h3><div>No completed tournaments found for that format and time window.</div></div>';
+    return;
+  }
+  container.innerHTML = tournaments.map((t, ti) => {
+    const date = t.startDate ? new Date(t.startDate * 1000).toLocaleDateString() : 'Unknown date';
+    const loc = (t.eventData && t.eventData.city) ? (t.eventData.city + (t.eventData.state ? ', ' + t.eventData.state : '')) : '';
+    const cutSize = t.topCut && t.topCut > 0 ? Math.min(t.topCut, 8) : 8;
+    const standings = (t.standings || []).slice(0, cutSize);
+    const rows = standings.map((s, si) => `
+      <tr>
+        <td class="num mono">${si+1}</td>
+        <td>${s.name || 'Unknown player'}</td>
+        <td class="num mono">${s.winsSwiss ?? s.wins ?? 0}-${s.lossesSwiss ?? s.losses ?? 0}-${s.draws ?? 0}</td>
+        <td class="num"><button class="deck-view-btn" data-ti="${ti}" data-si="${si}">View decklist &amp; prices</button></td>
+      </tr>
+      <tr id="deckDetail-${ti}-${si}" style="display:none;"><td colspan="4"></td></tr>
+    `).join('');
+    return `
+      <div class="panel" style="margin-bottom:20px;">
+        <h3 class="section-title" style="margin-top:0;">${t.tournamentName || 'Tournament'}</h3>
+        <div class="card-set" style="margin-bottom:12px;">${date}${loc ? ' · ' + loc : ''}${t.format ? ' · ' + t.format : ''}</div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th class="num">Finish</th><th>Player</th><th class="num">Record</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join('') + '<div class="footnote">Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a>.</div>';
+
+  container.querySelectorAll('.deck-view-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const ti = Number(btn.dataset.ti), si = Number(btn.dataset.si);
+      const detailRow = document.getElementById('deckDetail-' + ti + '-' + si);
+      const cell = detailRow.querySelector('td');
+      if(detailRow.style.display !== 'none'){ detailRow.style.display = 'none'; return; }
+      detailRow.style.display = '';
+      cell.innerHTML = 'Loading decklist &amp; prices…';
+      try{
+        const standing = lastTournamentsData[ti].standings[si];
+        const entries = parseDecklistEntries(standing);
+        if(!entries.length){
+          cell.innerHTML = 'No decklist text was returned for this player by TopDeck.gg (the organizer may not have enabled "Show Decks").';
+          return;
+        }
+        const priced = await priceEntries(entries);
+        const total = priced.reduce((sum, e) => sum + (e.unitPrice !== null ? e.unitPrice * e.qty : 0), 0);
+        const unpriced = priced.filter(e => e.unitPrice === null).length;
+        cell.innerHTML = '<div style="max-width:520px;"><div style="overflow-x:auto;"><table>' +
+          '<thead><tr><th class="num">Qty</th><th>Card</th><th class="card-set">Section</th><th class="num">Unit</th><th class="num">Line</th></tr></thead>' +
+          '<tbody>' + priced.map(e => `
+            <tr>
+              <td class="num mono">${e.qty}</td>
+              <td>${e.name}</td>
+              <td class="card-set">${e.section || ''}</td>
+              <td class="num mono">${fmtMoney(e.unitPrice)}</td>
+              <td class="num mono">${e.unitPrice !== null ? fmtMoney(e.unitPrice * e.qty) : '—'}</td>
+            </tr>`).join('') +
+          '</tbody></table></div>' +
+          '<div style="text-align:right;margin-top:8px;font-family:\'IBM Plex Mono\',monospace;color:var(--gold);">Deck total: ' + fmtMoney(total) + '</div>' +
+          (unpriced ? '<div style="text-align:right;font-size:11.5px;color:var(--text-dim);">' + unpriced + ' card(s) had no Scryfall price match.</div>' : '') +
+          '</div>';
+      }catch(e){
+        cell.innerHTML = 'Could not price this decklist: ' + (e.message || 'unknown error');
+      }
+    });
+  });
+}
+
+$('deckLoadBtn').addEventListener('click', async () => {
+  const apiKey = $('topdeckApiKey').value.trim();
+  if(!apiKey){
+    $('deckMsg').textContent = 'Paste your free TopDeck.gg API key first (see note below).';
+    $('deckMsg').className = 'form-msg error';
+    return;
+  }
+  await storageSet(TOPDECK_KEY_STORAGE, apiKey);
+  $('deckLoadBtn').disabled = true;
+  $('deckMsg').textContent = 'Loading recent tournaments…';
+  $('deckMsg').className = 'form-msg';
+  try{
+    const format = $('deckFormat').value;
+    const lastDays = $('deckLastDays').value;
+    const tournaments = await fetchRecentTournaments(apiKey, format, lastDays);
+    lastTournamentsData = tournaments;
+    renderTournaments(tournaments);
+    $('deckMsg').textContent = 'Loaded ' + tournaments.length + ' tournament(s).';
+  }catch(e){
+    $('deckMsg').textContent = e.message || 'Something went wrong loading tournaments.';
+    $('deckMsg').className = 'form-msg error';
+  }finally{
+    $('deckLoadBtn').disabled = false;
+  }
+});
+
+// --- Sealed Products tab (TCG API) ---
+const TCGAPI_KEY_STORAGE = 'tcgapi_api_key';
+const SEALED_WATCHLIST_KEY = 'sealed_watchlist_v1';
+const SEALED_KEYWORDS = /booster box|booster pack|collector booster|set booster|draft booster|play booster|bundle|prerelease pack|starter kit|gift bundle/i;
+let sealedWatchlist = [];
+let lastSealedSearchResults = [];
+
+(async () => {
+  const savedKey = await storageGet(TCGAPI_KEY_STORAGE);
+  if(savedKey) $('tcgApiKey').value = savedKey;
+  try{
+    const raw = await storageGet(SEALED_WATCHLIST_KEY);
+    sealedWatchlist = raw ? JSON.parse(raw) : [];
+  }catch(e){ sealedWatchlist = []; }
+  renderSealedWatchlist();
+})();
+
+async function saveSealedWatchlist(){
+  await storageSet(SEALED_WATCHLIST_KEY, JSON.stringify(sealedWatchlist));
+}
+
+async function tcgApiGet(path, apiKey){
+  const res = await fetch('https://api.tcgapi.dev' + path, {
+    headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }
+  });
+  if(!res.ok){
+    let msg = 'TCG API request failed (status ' + res.status + ').';
+    try{ const body = await res.json(); if(body && (body.error || body.message)) msg = body.error || body.message; }catch(e){}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+// The exact response shape is documented inconsistently across TCG API's own
+// pages, so this unwraps defensively rather than assuming one fixed format.
+function unwrapList(body){
+  if(Array.isArray(body)) return body;
+  if(Array.isArray(body.data)) return body.data;
+  if(Array.isArray(body.results)) return body.results;
+  if(Array.isArray(body.cards)) return body.cards;
+  return [];
+}
+function unwrapItem(body){
+  if(body && body.data && !Array.isArray(body.data)) return body.data;
+  return body;
+}
+
+function extractPriceInfo(item){
+  const prices = item.prices || {};
+  const key = ['Sealed','Normal','Holofoil'].find(k => prices[k]) || Object.keys(prices)[0];
+  const p = key ? prices[key] : item; // fall back to flat fields like item.price directly
+  const num = (v) => (v === null || v === undefined || isNaN(v)) ? null : Number(v);
+  return {
+    market: num(p && (p.market_price ?? p.price)) ?? num(item.price),
+    change24h: num(p && p.change_24h),
+    change7d: num(p && p.change_7d),
+    change30d: num(p && p.change_30d)
+  };
+}
+
+function pctFromChange(market, change){
+  if(market === null || change === null || market === undefined || change === undefined) return null;
+  const past = market - change;
+  if(past <= 0) return null;
+  return (change / past) * 100;
+}
+
+$('sealedSearchBtn').addEventListener('click', async () => {
+  const apiKey = $('tcgApiKey').value.trim();
+  const query = $('sealedSearchInput').value.trim();
+  if(!apiKey){ $('sealedSearchMsg').textContent = 'Paste your free TCG API key first.'; $('sealedSearchMsg').className = 'form-msg error'; return; }
+  if(!query){ $('sealedSearchMsg').textContent = 'Type a set name to search.'; $('sealedSearchMsg').className = 'form-msg error'; return; }
+  await storageSet(TCGAPI_KEY_STORAGE, apiKey);
+
+  $('sealedSearchBtn').disabled = true;
+  $('sealedSearchMsg').textContent = 'Searching…';
+  $('sealedSearchMsg').className = 'form-msg';
+  try{
+    const body = await tcgApiGet('/v1/games/magic/search?q=' + encodeURIComponent(query) + '&per_page=50', apiKey);
+    const all = unwrapList(body);
+    const sealedOnly = all.filter(item => {
+      const printing = (item.printing || item.product_type || '').toString();
+      return printing.toLowerCase() === 'sealed' || SEALED_KEYWORDS.test(item.name || '');
+    });
+    lastSealedSearchResults = sealedOnly;
+    renderSealedSearchResults(sealedOnly);
+    $('sealedSearchMsg').textContent = sealedOnly.length
+      ? 'Found ' + sealedOnly.length + ' sealed product(s).'
+      : 'No sealed products matched that search — try just the set name on its own.';
+  }catch(e){
+    $('sealedSearchMsg').textContent = e.message || 'Something went wrong searching.';
+    $('sealedSearchMsg').className = 'form-msg error';
+  }finally{
+    $('sealedSearchBtn').disabled = false;
+  }
+});
+
+function renderSealedSearchResults(items){
+  const container = $('sealedSearchResults');
+  if(!items.length){ container.innerHTML = ''; return; }
+  container.innerHTML = '<div class="panel"><div style="overflow-x:auto;"><table>' +
+    '<thead><tr><th>Product</th><th>Set</th><th class="num">Price</th><th></th></tr></thead>' +
+    '<tbody>' + items.map((item, idx) => {
+      const info = extractPriceInfo(item);
+      const alreadyTracked = sealedWatchlist.some(w => String(w.id) === String(item.id));
+      return `
+        <tr>
+          <td>${item.name || 'Unknown product'}</td>
+          <td class="card-set">${item.set || ''}</td>
+          <td class="num mono">${fmtMoney(info.market)}</td>
+          <td class="num"><button class="sealed-track-btn" data-idx="${idx}" ${alreadyTracked ? 'disabled' : ''}>${alreadyTracked ? 'Tracked' : 'Track'}</button></td>
+        </tr>`;
+    }).join('') +
+    '</tbody></table></div></div>';
+
+  container.querySelectorAll('.sealed-track-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const item = lastSealedSearchResults[Number(btn.dataset.idx)];
+      const info = extractPriceInfo(item);
+      sealedWatchlist.push({
+        id: item.id,
+        name: item.name || 'Unknown product',
+        set: item.set || '',
+        qty: 1,
+        pricePaid: null,
+        market: info.market,
+        change24h: info.change24h,
+        change7d: info.change7d,
+        change30d: info.change30d,
+        lastUpdated: new Date().toISOString()
+      });
+      await saveSealedWatchlist();
+      renderSealedWatchlist();
+      btn.disabled = true;
+      btn.textContent = 'Tracked';
+    });
+  });
+}
+
+function editableNumberInput(cls, idx, value){
+  const safeValue = (value === null || value === undefined) ? '' : value;
+  return `<input type="number" min="0" step="0.01" class="${cls}" data-idx="${idx}" value="${safeValue}" style="width:64px;text-align:right;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:4px 6px;font-family:'IBM Plex Mono',monospace;">`;
+}
+
+function sealedGainLossPct(w){
+  const current = w.market;
+  const paid = w.pricePaid;
+  if(current === null || current === undefined || paid === null || paid === undefined || paid <= 0) return null;
+  return ((current - paid) / paid) * 100;
+}
+
+function renderSealedWatchlist(){
+  const body = $('sealedWatchlistBody');
+  if(!sealedWatchlist.length){
+    body.innerHTML = '<tr class="loading-row"><td colspan="9">Search above, or use "Add to Inventory," to add products here.</td></tr>';
+    return;
+  }
+  body.innerHTML = sealedWatchlist.map((w, idx) => {
+    const total = (w.market !== null && w.market !== undefined) ? w.market * (w.qty || 1) : null;
+    const pct24 = pctFromChange(w.market, w.change24h);
+    const pct7 = pctFromChange(w.market, w.change7d);
+    const pct30 = pctFromChange(w.market, w.change30d);
+    return `
+      <tr>
+        <td>${w.name}<div class="card-set">${w.set||''}</div></td>
+        <td class="num">${editableNumberInput('sealed-qty-input', idx, w.qty||1)}</td>
+        <td class="num">${editableNumberInput('sealed-paid-input', idx, w.pricePaid)}</td>
+        <td class="num mono">${fmtMoney(w.market)}</td>
+        <td class="num mono ${trendClass(pct24)}">${fmtPct(pct24)}</td>
+        <td class="num mono ${trendClass(pct7)}">${fmtPct(pct7)}</td>
+        <td class="num mono ${trendClass(pct30)}">${fmtPct(pct30)}</td>
+        <td class="num mono">${fmtMoney(total)}</td>
+        <td class="num"><button class="remove-btn sealed-remove-btn" title="Remove" data-idx="${idx}">✕</button></td>
+      </tr>`;
+  }).join('');
+
+  body.querySelectorAll('.sealed-qty-input').forEach(input => {
+    input.addEventListener('change', async () => {
+      const idx = Number(input.dataset.idx);
+      sealedWatchlist[idx].qty = Number(input.value) || 0;
+      await saveSealedWatchlist();
+      renderSealedWatchlist();
+    });
+  });
+  body.querySelectorAll('.sealed-paid-input').forEach(input => {
+    input.addEventListener('change', async () => {
+      const idx = Number(input.dataset.idx);
+      const v = input.value.trim();
+      sealedWatchlist[idx].pricePaid = (v !== '' && !isNaN(v)) ? Number(v) : null;
+      await saveSealedWatchlist();
+      renderSealedWatchlist();
+    });
+  });
+  body.querySelectorAll('.sealed-remove-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      sealedWatchlist.splice(Number(btn.dataset.idx), 1);
+      await saveSealedWatchlist();
+      renderSealedWatchlist();
+    });
+  });
+}
+
+$('sealedAddBtn').addEventListener('click', async () => {
+  const apiKey = $('tcgApiKey').value.trim();
+  const name = $('sealedAddName').value.trim();
+  const setName = $('sealedAddSet').value.trim();
+  const qty = Number($('sealedAddQty').value) || 1;
+  const paidRaw = $('sealedAddPaid').value.trim();
+  const pricePaid = (paidRaw !== '' && !isNaN(paidRaw)) ? Number(paidRaw) : null;
+
+  if(!apiKey){ $('sealedAddMsg').textContent = 'Paste your free TCG API key first.'; $('sealedAddMsg').className = 'form-msg error'; return; }
+  if(!name){ $('sealedAddMsg').textContent = 'Enter a product name first.'; $('sealedAddMsg').className = 'form-msg error'; return; }
+  await storageSet(TCGAPI_KEY_STORAGE, apiKey);
+
+  $('sealedAddBtn').disabled = true;
+  $('sealedAddMsg').textContent = 'Looking up "' + name + '"…';
+  $('sealedAddMsg').className = 'form-msg';
+  try{
+    const query = setName ? (name + ' ' + setName) : name;
+    const body = await tcgApiGet('/v1/games/magic/search?q=' + encodeURIComponent(query) + '&per_page=50', apiKey);
+    const all = unwrapList(body);
+    const sealedOnly = all.filter(item => {
+      const printing = (item.printing || item.product_type || '').toString();
+      return printing.toLowerCase() === 'sealed' || SEALED_KEYWORDS.test(item.name || '');
+    });
+    if(!sealedOnly.length){
+      $('sealedAddMsg').textContent = 'No sealed product matched that name — try the search box below for more options, or adjust the wording.';
+      $('sealedAddMsg').className = 'form-msg error';
+      return;
+    }
+    const match = sealedOnly[0];
+    const info = extractPriceInfo(match);
+    const existingIdx = sealedWatchlist.findIndex(w => String(w.id) === String(match.id));
+    if(existingIdx >= 0){
+      sealedWatchlist[existingIdx].qty = qty;
+      sealedWatchlist[existingIdx].pricePaid = pricePaid;
+      sealedWatchlist[existingIdx].market = info.market;
+      sealedWatchlist[existingIdx].change24h = info.change24h;
+      sealedWatchlist[existingIdx].change7d = info.change7d;
+      sealedWatchlist[existingIdx].change30d = info.change30d;
+      sealedWatchlist[existingIdx].lastUpdated = new Date().toISOString();
+    } else {
+      sealedWatchlist.push({
+        id: match.id,
+        name: match.name || name,
+        set: match.set || setName,
+        qty: qty,
+        pricePaid: pricePaid,
+        market: info.market,
+        change24h: info.change24h,
+        change7d: info.change7d,
+        change30d: info.change30d,
+        lastUpdated: new Date().toISOString()
+      });
+    }
+    await saveSealedWatchlist();
+    renderSealedWatchlist();
+    $('sealedAddMsg').textContent = (existingIdx >= 0 ? 'Updated ' : 'Added ') + (match.name || name) + ' to your inventory.';
+    $('sealedAddName').value = '';
+    $('sealedAddSet').value = '';
+    $('sealedAddQty').value = 1;
+    $('sealedAddPaid').value = '';
+  }catch(e){
+    $('sealedAddMsg').textContent = e.message || 'Something went wrong looking that up.';
+    $('sealedAddMsg').className = 'form-msg error';
+  }finally{
+    $('sealedAddBtn').disabled = false;
+  }
+});
+
+
+$('sealedRefreshBtn').addEventListener('click', async () => {
+  const apiKey = $('tcgApiKey').value.trim();
+  if(!apiKey || sealedWatchlist.length === 0) return;
+  $('sealedRefreshBtn').disabled = true;
+  $('sealedWatchlistMsg').textContent = 'Refreshing tracked prices…';
+  $('sealedWatchlistMsg').className = 'form-msg';
+  for(const w of sealedWatchlist){
+    try{
+      const body = await tcgApiGet('/v1/cards/' + encodeURIComponent(w.id), apiKey);
+      const item = unwrapItem(body);
+      const info = extractPriceInfo(item);
+      w.market = info.market;
+      w.change24h = info.change24h;
+      w.change7d = info.change7d;
+      w.change30d = info.change30d;
+      w.lastUpdated = new Date().toISOString();
+    }catch(e){ /* keep last known values on failure */ }
+    await sleep(150);
+  }
+  await saveSealedWatchlist();
+  renderSealedWatchlist();
+  $('sealedWatchlistMsg').textContent = '';
+  $('sealedRefreshBtn').disabled = false;
+});
+</script>
+</body>
+</html>
