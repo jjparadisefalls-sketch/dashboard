@@ -88,6 +88,8 @@
   }
   .trend-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
   @media (max-width:700px){.trend-grid{grid-template-columns:1fr;}}
+  .decks-top-layout{display:grid;grid-template-columns:640px 1fr;gap:24px;align-items:start;}
+  @media (max-width:1040px){.decks-top-layout{grid-template-columns:1fr;}}
   .mini-card{display:flex;align-items:center;gap:8px;}
   .mini-card img{width:26px;border-radius:2px;}
   code{font-family:'IBM Plex Mono', monospace;background:var(--panel-2);padding:1px 5px;border-radius:2px;font-size:11.5px;}
@@ -479,42 +481,58 @@ Consider,mkm,3,,,0.25"></textarea>
   </div>
 
 <div id="tab-decks" class="tab-panel" style="display:none;">
-  <div class="panel" style="max-width:640px;">
-    <h2>Recent Tournament Results</h2>
-    <label for="topdeckApiKey">TopDeck.gg API key</label>
-    <input type="text" id="topdeckApiKey" placeholder="paste your free API key" autocomplete="off">
+  <div class="decks-top-layout">
+    <div class="panel" style="max-width:640px;">
+      <h2>Recent Tournament Results</h2>
+      <label for="topdeckApiKey">TopDeck.gg API key</label>
+      <input type="text" id="topdeckApiKey" placeholder="paste your free API key" autocomplete="off">
 
-    <label for="deckFormat">Format</label>
-    <select id="deckFormat">
-      <option value="Standard">Standard</option>
-      <option value="Pioneer">Pioneer</option>
-      <option value="Modern">Modern</option>
-      <option value="Legacy">Legacy</option>
-      <option value="Vintage">Vintage</option>
-      <option value="Pauper">Pauper</option>
-      <option value="EDH">Commander (EDH)</option>
-      <option value="Pauper EDH">Pauper EDH</option>
-      <option value="Duel Commander">Duel Commander</option>
-      <option value="Oathbreaker">Oathbreaker</option>
-    </select>
+      <label for="deckFormat">Format</label>
+      <select id="deckFormat">
+        <option value="Standard">Standard</option>
+        <option value="Pioneer">Pioneer</option>
+        <option value="Modern">Modern</option>
+        <option value="Legacy">Legacy</option>
+        <option value="Vintage">Vintage</option>
+        <option value="Pauper">Pauper</option>
+        <option value="EDH">Commander (EDH)</option>
+        <option value="Pauper EDH">Pauper EDH</option>
+        <option value="Duel Commander">Duel Commander</option>
+        <option value="Oathbreaker">Oathbreaker</option>
+      </select>
 
-    <label for="deckDateInput">Filter to specific date(s) (optional)</label>
-    <div style="display:flex;gap:8px;">
-      <input type="date" id="deckDateInput" style="flex:1;">
-      <button type="button" id="deckDateAddBtn">Add date</button>
+      <label for="deckDateInput">Filter to specific date(s) (optional)</label>
+      <div style="display:flex;gap:8px;">
+        <input type="date" id="deckDateInput" style="flex:1;">
+        <button type="button" id="deckDateAddBtn">Add date</button>
+      </div>
+      <div id="deckDateChips" style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0;"></div>
+
+      <label for="deckLastDays" style="margin-top:18px;">Last N days (used only if no dates are added above)</label>
+      <input type="number" id="deckLastDays" min="1" value="14">
+
+      <button class="btn-primary" id="deckLoadBtn">Load recent results</button>
+      <div class="form-msg" id="deckMsg"></div>
+
+      <div class="footnote">
+        This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API, routed through <b>corsproxy.io</b> since TopDeck.gg doesn't allow direct browser requests — so your API key does pass through that relay, not just TopDeck.gg. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
+        <br><br>
+        TopDeck.gg's API itself only supports "days back from today," not picking specific dates, so adding date(s) above fetches a wide-enough window under the hood and then filters down to just the day(s) you picked, here in the browser. Tournament dates are compared using your browser's local timezone against TopDeck.gg's recorded start time, so an event right around midnight could occasionally land on the adjacent day.
+      </div>
     </div>
-    <div id="deckDateChips" style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0;"></div>
 
-    <label for="deckLastDays" style="margin-top:18px;">Last N days (used only if no dates are added above)</label>
-    <input type="number" id="deckLastDays" min="1" value="14">
-
-    <button class="btn-primary" id="deckLoadBtn">Load recent results</button>
-    <div class="form-msg" id="deckMsg"></div>
-
-    <div class="footnote">
-      This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API, routed through <b>corsproxy.io</b> since TopDeck.gg doesn't allow direct browser requests — so your API key does pass through that relay, not just TopDeck.gg. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
-      <br><br>
-      TopDeck.gg's API itself only supports "days back from today," not picking specific dates, so adding date(s) above fetches a wide-enough window under the hood and then filters down to just the day(s) you picked, here in the browser. Tournament dates are compared using your browser's local timezone against TopDeck.gg's recorded start time, so an event right around midnight could occasionally land on the adjacent day.
+    <div class="panel" id="viewedCardsPanel">
+      <div class="toolbar">
+        <h2 style="margin:0;border:none;padding:0;">Cards You've Reviewed</h2>
+        <div class="toolbar-right">
+          <button id="viewedCardsClearBtn">Clear history</button>
+        </div>
+      </div>
+      <div class="card-set" id="viewedCardsMeta" style="margin-top:8px;">No decklists viewed yet.</div>
+      <div id="viewedCardsBody"></div>
+      <div class="footnote">
+        This builds up from every decklist you click "View decklist &amp; prices" on, across all your sessions on this device — it isn't tied to any single search. Cards are grouped by type (a card counts as <b>Commander</b> if it appeared in a Commanders section, ahead of its normal type), ranked by how many different viewed decks they showed up in, capped to the top 15 per group to keep this readable. <b>Avg Finish</b> is the mean tournament placement across the decks you've viewed containing that card — lower is better — and only counts decks that had a numeric finish recorded. Price is the most recent Scryfall price seen for that card, not a running average.
+      </div>
     </div>
   </div>
 
@@ -1513,9 +1531,22 @@ function parseDecklistEntries(standing){
   return entries;
 }
 
+function classifyCardType(typeLine, section){
+  if(section && /commander/i.test(section)) return 'Commander';
+  const t = (typeLine || '').toLowerCase();
+  if(t.includes('creature')) return 'Creature';
+  if(t.includes('planeswalker')) return 'Planeswalker';
+  if(t.includes('land')) return 'Land';
+  if(t.includes('instant') || t.includes('sorcery')) return 'Instant/Sorcery';
+  if(t.includes('artifact')) return 'Artifact';
+  if(t.includes('enchantment')) return 'Enchantment';
+  return 'Other';
+}
+
 async function priceEntries(entries){
   const uniqueNames = [...new Set(entries.map(e => e.name))];
   const priceMap = {};
+  const typeMap = {};
   for(let i = 0; i < uniqueNames.length; i += 75){
     const chunk = uniqueNames.slice(i, i + 75);
     try{
@@ -1526,12 +1557,14 @@ async function priceEntries(entries){
         const data = await res.json();
         (data.data || []).forEach(card => {
           priceMap[card.name] = (card.prices && card.prices.usd !== null && card.prices.usd !== undefined) ? Number(card.prices.usd) : null;
+          typeMap[card.name] = card.type_line || (card.card_faces && card.card_faces[0] && card.card_faces[0].type_line) || '';
         });
       }
     }catch(e){ /* leave unmatched names unpriced */ }
   }
   return entries.map(e => Object.assign({}, e, {
-    unitPrice: priceMap.hasOwnProperty(e.name) ? priceMap[e.name] : null
+    unitPrice: priceMap.hasOwnProperty(e.name) ? priceMap[e.name] : null,
+    typeCategory: classifyCardType(typeMap[e.name], e.section)
   }));
 }
 
@@ -1615,6 +1648,7 @@ function renderTournaments(tournaments){
         const priced = await priceEntries(entries);
         const total = priced.reduce((sum, e) => sum + (e.unitPrice !== null ? e.unitPrice * e.qty : 0), 0);
         const unpriced = priced.filter(e => e.unitPrice === null).length;
+        recordViewedCards(priced, si + 1);
         cell.innerHTML = '<div style="max-width:520px;"><div style="overflow-x:auto;"><table>' +
           '<thead><tr><th class="num">Qty</th><th>Card</th><th class="card-set">Section</th><th class="num">Unit</th><th class="num">Line</th></tr></thead>' +
           '<tbody>' + priced.map(e => `
@@ -1637,6 +1671,97 @@ function renderTournaments(tournaments){
 }
 
 let deckSelectedDates = []; // 'YYYY-MM-DD' strings, sorted ascending
+
+// --- Cards You've Reviewed panel ---
+const VIEWED_CARDS_KEY = 'viewed_decklist_cards_v1';
+const CARD_CATEGORY_ORDER = ['Commander', 'Creature', 'Instant/Sorcery', 'Enchantment', 'Artifact', 'Planeswalker', 'Land', 'Other'];
+const CARDS_PER_CATEGORY = 15;
+let viewedCardStats = {};
+
+async function loadViewedCardStats(){
+  try{
+    const raw = await storageGet(VIEWED_CARDS_KEY);
+    viewedCardStats = raw ? JSON.parse(raw) : {};
+  }catch(e){ viewedCardStats = {}; }
+}
+async function saveViewedCardStats(){
+  await storageSet(VIEWED_CARDS_KEY, JSON.stringify(viewedCardStats));
+}
+
+function recordViewedCards(pricedEntries, finish){
+  // One increment per unique card per decklist viewed, not per copy —
+  // "frequency" here means how many viewed decks a card showed up in.
+  const seen = new Map();
+  pricedEntries.forEach(e => { if(!seen.has(e.name)) seen.set(e.name, e); });
+
+  seen.forEach((e, name) => {
+    if(!viewedCardStats[name]){
+      viewedCardStats[name] = { count: 0, finishSum: 0, finishCount: 0, type: e.typeCategory, price: e.unitPrice };
+    }
+    const stat = viewedCardStats[name];
+    stat.count += 1;
+    if(finish){ stat.finishSum += finish; stat.finishCount += 1; }
+    stat.type = e.typeCategory;
+    stat.price = e.unitPrice;
+  });
+
+  saveViewedCardStats();
+  renderViewedCardsPanel();
+}
+
+function renderViewedCardsPanel(){
+  const body = $('viewedCardsBody');
+  const meta = $('viewedCardsMeta');
+  const names = Object.keys(viewedCardStats);
+  if(!names.length){
+    meta.textContent = 'No decklists viewed yet — click "View decklist & prices" on any player below to start building this up.';
+    body.innerHTML = '';
+    return;
+  }
+
+  const totalDeckViews = names.reduce((s, n) => Math.max(s, viewedCardStats[n].count), 0);
+  meta.textContent = names.length + ' unique card(s) seen across decklists you\'ve viewed.';
+
+  const grouped = {};
+  CARD_CATEGORY_ORDER.forEach(cat => grouped[cat] = []);
+  names.forEach(name => {
+    const stat = viewedCardStats[name];
+    const cat = CARD_CATEGORY_ORDER.includes(stat.type) ? stat.type : 'Other';
+    grouped[cat].push(Object.assign({ name }, stat));
+  });
+
+  body.innerHTML = CARD_CATEGORY_ORDER.filter(cat => grouped[cat].length > 0).map(cat => {
+    const list = grouped[cat].slice().sort((a, b) => b.count - a.count).slice(0, CARDS_PER_CATEGORY);
+    const rows = list.map(c => {
+      const avgFinish = c.finishCount > 0 ? (c.finishSum / c.finishCount).toFixed(1) : '—';
+      return `
+        <tr>
+          <td>${c.name}</td>
+          <td class="num mono">${c.count}</td>
+          <td class="num mono">${avgFinish}</td>
+          <td class="num mono">${fmtMoney(c.price)}</td>
+        </tr>`;
+    }).join('');
+    return `
+      <h3 class="section-title" style="margin-top:20px;">${cat} <span style="color:var(--text-dim);font-family:'IBM Plex Mono',monospace;font-size:11px;">(${grouped[cat].length})</span></h3>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Card</th><th class="num">Freq</th><th class="num">Avg Finish</th><th class="num">Price</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
+}
+
+$('viewedCardsClearBtn').addEventListener('click', async () => {
+  viewedCardStats = {};
+  await saveViewedCardStats();
+  renderViewedCardsPanel();
+});
+
+loadViewedCardStats().then(renderViewedCardsPanel);
+
 
 function renderDeckDateChips(){
   const container = $('deckDateChips');
