@@ -92,15 +92,8 @@
   @media (max-width:1040px){.decks-top-layout{grid-template-columns:1fr;}}
   .mini-card{display:flex;align-items:center;gap:8px;}
   .mini-card img{width:26px;border-radius:2px;}
-  tbody tr.set-group-header td{
-    background: var(--panel-2);
-    font-family:'IBM Plex Mono', monospace;
-    font-size:11px;
-    letter-spacing:.08em;
-    text-transform:uppercase;
-    color: var(--gold);
-    padding:9px 10px;
-    border-bottom:1px solid var(--border);
+  tbody tr.set-group-start td{
+    border-top: 1px solid var(--gold-dim);
   }
   code{font-family:'IBM Plex Mono', monospace;background:var(--panel-2);padding:1px 5px;border-radius:2px;font-size:11.5px;}
   textarea.bulk-textarea{
@@ -334,8 +327,18 @@
   </div>
 
   <div class="panel" id="soldCardsPanel" style="margin-top:24px;">
-    <h2>Sold Cards</h2>
-    <div class="card-set" style="margin-bottom:12px;">Cards you've marked "Sold" from the table above — kept separate from active inventory.</div>
+    <div class="toolbar">
+      <div>
+        <h2 style="margin:0;border:none;padding:0;">Sold Cards</h2>
+        <div class="card-set" style="margin-top:6px;">Cards you've marked "Sold" from the table above — kept separate from active inventory.</div>
+      </div>
+      <div class="toolbar-right">
+        <div>
+          <div class="stat-label">Total Net Sales</div>
+          <div class="stat-value small" id="soldCardsTotalNet" style="color:var(--gold);">$0.00</div>
+        </div>
+      </div>
+    </div>
     <div style="overflow-x:auto;">
       <table>
         <thead>
@@ -344,13 +347,14 @@
             <th>List</th>
             <th class="num">Qty</th>
             <th class="num">Paid</th>
-            <th class="num">Price</th>
+            <th class="num">Sold For</th>
+            <th class="num">Net</th>
             <th>Sold Date</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="soldCardsBody">
-          <tr class="loading-row"><td colspan="7">No sold cards yet — click "Sold" on any card above to move it here.</td></tr>
+          <tr class="loading-row"><td colspan="8">No sold cards yet — click "Sold" on any card above to move it here.</td></tr>
         </tbody>
       </table>
     </div>
@@ -657,8 +661,18 @@ Consider,mkm,3,,,0.25"></textarea>
   </div>
 
   <div class="panel" id="soldSealedPanel" style="margin-top:20px;">
-    <h2>Sold Sealed Products</h2>
-    <div class="card-set" style="margin-bottom:12px;">Sealed products you've marked "Sold" above — kept separate from active inventory.</div>
+    <div class="toolbar">
+      <div>
+        <h2 style="margin:0;border:none;padding:0;">Sold Sealed Products</h2>
+        <div class="card-set" style="margin-top:6px;">Sealed products you've marked "Sold" above — kept separate from active inventory.</div>
+      </div>
+      <div class="toolbar-right">
+        <div>
+          <div class="stat-label">Total Net Sales</div>
+          <div class="stat-value small" id="soldSealedTotalNet" style="color:var(--gold);">$0.00</div>
+        </div>
+      </div>
+    </div>
     <div style="overflow-x:auto;">
       <table>
         <thead>
@@ -666,18 +680,34 @@ Consider,mkm,3,,,0.25"></textarea>
             <th>Product</th>
             <th class="num">Qty</th>
             <th class="num">Paid</th>
-            <th class="num">Price</th>
+            <th class="num">Sold For</th>
+            <th class="num">Net</th>
             <th>Sold Date</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="soldSealedBody">
-          <tr class="loading-row"><td colspan="6">No sold sealed products yet — click "Sold" on any tracked product above to move it here.</td></tr>
+          <tr class="loading-row"><td colspan="7">No sold sealed products yet — click "Sold" on any tracked product above to move it here.</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 </div>
+</div>
+
+<div id="soldModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1000;align-items:center;justify-content:center;">
+  <div class="panel" style="max-width:360px;width:90%;">
+    <h2>Mark as Sold</h2>
+    <label for="soldModalPrice">Total sold for</label>
+    <input type="number" id="soldModalPrice" min="0" step="0.01" placeholder="e.g. 45.00">
+    <label for="soldModalNet">Total net received (after fees/shipping)</label>
+    <input type="number" id="soldModalNet" min="0" step="0.01" placeholder="e.g. 40.00">
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn-primary" id="soldModalConfirm" style="margin-top:0;flex:1;">Confirm</button>
+      <button id="soldModalCancel" style="flex:1;">Cancel</button>
+    </div>
+    <div class="form-msg" id="soldModalMsg"></div>
+  </div>
 </div>
 
 <script>
@@ -728,6 +758,47 @@ function fmtMoney(n){
   if(n === null || n === undefined || isNaN(n)) return '—';
   return '$' + Number(n).toFixed(2);
 }
+
+// --- Sold price/net modal, shared by both cards and sealed products ---
+let soldModalContext = null; // { type: 'card' | 'sealed', idx: number }
+
+function openSoldModal(type, idx){
+  soldModalContext = { type, idx };
+  $('soldModalPrice').value = '';
+  $('soldModalNet').value = '';
+  $('soldModalMsg').textContent = '';
+  $('soldModalOverlay').style.display = 'flex';
+  $('soldModalPrice').focus();
+}
+function closeSoldModal(){
+  $('soldModalOverlay').style.display = 'none';
+  soldModalContext = null;
+}
+$('soldModalCancel').addEventListener('click', closeSoldModal);
+$('soldModalOverlay').addEventListener('click', (e) => {
+  if(e.target.id === 'soldModalOverlay') closeSoldModal();
+});
+$('soldModalConfirm').addEventListener('click', async () => {
+  if(!soldModalContext) return;
+  const priceRaw = $('soldModalPrice').value.trim();
+  const netRaw = $('soldModalNet').value.trim();
+  if(priceRaw === '' || isNaN(priceRaw)){
+    $('soldModalMsg').textContent = 'Enter what it sold for.';
+    $('soldModalMsg').className = 'form-msg error';
+    return;
+  }
+  if(netRaw === '' || isNaN(netRaw)){
+    $('soldModalMsg').textContent = 'Enter what you actually netted.';
+    $('soldModalMsg').className = 'form-msg error';
+    return;
+  }
+  const soldPrice = Number(priceRaw);
+  const soldNet = Number(netRaw);
+  const { type, idx } = soldModalContext;
+  if(type === 'card') await markCardSold(idx, soldPrice, soldNet);
+  else await markSealedSold(idx, soldPrice, soldNet);
+  closeSoldModal();
+});
 
 function rarityClass(r){
   if(!r) return 'rarity-common';
@@ -935,17 +1006,10 @@ function render(){
 
     groupOrder.forEach(setKey => {
       const groupRows = groups[setKey];
-      const groupValue = groupRows.reduce((s,r) => {
-        const up = unitPrice(r);
-        return s + (up !== null ? up*r.qty : 0);
-      }, 0);
-      const headerTr = document.createElement('tr');
-      headerTr.className = 'set-group-header';
-      headerTr.innerHTML = `<td colspan="14">${setKey} <span style="color:var(--text-dim);font-weight:400;">· ${groupRows.length} card(s) · ${fmtMoney(groupValue)}</span></td>`;
-      tableBody.appendChild(headerTr);
 
-      groupRows.forEach(entry => {
+      groupRows.forEach((entry, rowIdxInGroup) => {
         const tr = document.createElement('tr');
+        if(rowIdxInGroup === 0) tr.classList.add('set-group-start');
         const up = unitPrice(entry);
         const total = up !== null ? up * entry.qty : null;
         const img = entry.image || '';
@@ -1019,7 +1083,7 @@ function render(){
     btn.addEventListener('click', () => removeCard(Number(btn.dataset.idx)));
   });
   tableBody.querySelectorAll('.sold-btn').forEach(btn => {
-    btn.addEventListener('click', () => markCardSold(Number(btn.dataset.idx)));
+    btn.addEventListener('click', () => openSoldModal('card', Number(btn.dataset.idx)));
   });
   tableBody.querySelectorAll('.row-list-select').forEach(select => {
     select.addEventListener('change', async () => {
@@ -1034,9 +1098,11 @@ function render(){
   renderSoldCards();
 }
 
-async function markCardSold(idx){
+async function markCardSold(idx, soldPrice, soldNet){
   collection[idx].sold = true;
   collection[idx].soldDate = new Date().toISOString();
+  collection[idx].soldPrice = soldPrice;
+  collection[idx].soldNet = soldNet;
   await saveCollection();
   render();
 }
@@ -1044,6 +1110,8 @@ async function markCardSold(idx){
 async function restoreCard(idx){
   collection[idx].sold = false;
   collection[idx].soldDate = null;
+  collection[idx].soldPrice = null;
+  collection[idx].soldNet = null;
   await saveCollection();
   render();
 }
@@ -1056,13 +1124,18 @@ function renderSoldCards(){
     .filter(c => c.sold)
     .sort((a,b) => (b.soldDate||'').localeCompare(a.soldDate||''));
 
+  const totalNetEl = $('soldCardsTotalNet');
+  if(totalNetEl){
+    const totalNet = sold.reduce((s,c) => s + (Number(c.soldNet) || 0), 0);
+    totalNetEl.textContent = fmtMoney(totalNet);
+  }
+
   if(!sold.length){
-    body.innerHTML = '<tr class="loading-row"><td colspan="7">No sold cards yet — click "Sold" on any card above to move it here.</td></tr>';
+    body.innerHTML = '<tr class="loading-row"><td colspan="8">No sold cards yet — click "Sold" on any card above to move it here.</td></tr>';
     return;
   }
 
   body.innerHTML = sold.map(entry => {
-    const up = unitPrice(entry);
     const soldDateLabel = entry.soldDate ? new Date(entry.soldDate).toLocaleDateString() : '—';
     return `
       <tr>
@@ -1070,7 +1143,8 @@ function renderSoldCards(){
         <td>${entry.list || '—'}</td>
         <td class="num mono">${entry.qty}</td>
         <td class="num mono">${fmtMoney(entry.pricePaid)}</td>
-        <td class="num mono">${fmtMoney(up)}</td>
+        <td class="num mono">${fmtMoney(entry.soldPrice)}</td>
+        <td class="num mono" style="color:var(--gold);">${fmtMoney(entry.soldNet)}</td>
         <td class="mono">${soldDateLabel}</td>
         <td class="num"><button class="restore-card-btn" data-idx="${entry._idx}">Restore</button></td>
       </tr>`;
@@ -2281,15 +2355,17 @@ function renderSealedWatchlist(){
     });
   });
   body.querySelectorAll('.sealed-sold-btn').forEach(btn => {
-    btn.addEventListener('click', () => markSealedSold(Number(btn.dataset.idx)));
+    btn.addEventListener('click', () => openSoldModal('sealed', Number(btn.dataset.idx)));
   });
 
   renderSoldSealed();
 }
 
-async function markSealedSold(idx){
+async function markSealedSold(idx, soldPrice, soldNet){
   sealedWatchlist[idx].sold = true;
   sealedWatchlist[idx].soldDate = new Date().toISOString();
+  sealedWatchlist[idx].soldPrice = soldPrice;
+  sealedWatchlist[idx].soldNet = soldNet;
   await saveSealedWatchlist();
   renderSealedWatchlist();
 }
@@ -2297,6 +2373,8 @@ async function markSealedSold(idx){
 async function restoreSealed(idx){
   sealedWatchlist[idx].sold = false;
   sealedWatchlist[idx].soldDate = null;
+  sealedWatchlist[idx].soldPrice = null;
+  sealedWatchlist[idx].soldNet = null;
   await saveSealedWatchlist();
   renderSealedWatchlist();
 }
@@ -2309,8 +2387,14 @@ function renderSoldSealed(){
     .filter(w => w.sold)
     .sort((a,b) => (b.soldDate||'').localeCompare(a.soldDate||''));
 
+  const totalNetEl = $('soldSealedTotalNet');
+  if(totalNetEl){
+    const totalNet = sold.reduce((s,w) => s + (Number(w.soldNet) || 0), 0);
+    totalNetEl.textContent = fmtMoney(totalNet);
+  }
+
   if(!sold.length){
-    body.innerHTML = '<tr class="loading-row"><td colspan="6">No sold sealed products yet — click "Sold" on any tracked product above to move it here.</td></tr>';
+    body.innerHTML = '<tr class="loading-row"><td colspan="7">No sold sealed products yet — click "Sold" on any tracked product above to move it here.</td></tr>';
     return;
   }
 
@@ -2321,7 +2405,8 @@ function renderSoldSealed(){
         <td>${w.name}<div class="card-set">${w.set||''}</div></td>
         <td class="num mono">${w.qty || 1}</td>
         <td class="num mono">${fmtMoney(w.pricePaid)}</td>
-        <td class="num mono">${fmtMoney(w.market)}</td>
+        <td class="num mono">${fmtMoney(w.soldPrice)}</td>
+        <td class="num mono" style="color:var(--gold);">${fmtMoney(w.soldNet)}</td>
         <td class="mono">${soldDateLabel}</td>
         <td class="num"><button class="restore-sealed-btn" data-idx="${w._idx}">Restore</button></td>
       </tr>`;
