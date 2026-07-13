@@ -267,6 +267,7 @@
         <option value="borderless">Borderless / Extended Art</option>
         <option value="prerelease">Prerelease Stamp</option>
         <option value="planeswalkerstamp">Planeswalker Stamp</option>
+        <option value="thelist">The List</option>
       </select>
 
       <label for="pricePaid">Price paid per card (optional)</label>
@@ -286,7 +287,7 @@
 
       <div class="footnote">
         <b>This needs to run as its own page, not inside Claude's preview pane</b> — the preview sandboxes network access to Anthropic's own API only, which is why card lookups fail there no matter what. Download this file and open it on its own (see chat for the easiest ways), and lookups will work normally. Once running standalone, your collection saves to this browser via local storage.<br><br>
-        Prices and card data come from <b>Scryfall's</b> free public API. Standard legality comes from the same source's per-card <b>legalities</b> field, which mirrors Wizards' official rotation and updates itself — no rotation list to maintain by hand. For showcase, borderless, prerelease, and planeswalker-stamp treatments, if that exact printing can't be found we fall back to the standard printing's data and let you know. Head to the <b>Card Popularity</b> tab for EDHREC rank and Standard metagame context.
+        Prices and card data come from <b>Scryfall's</b> free public API. Standard legality comes from the same source's per-card <b>legalities</b> field, which mirrors Wizards' official rotation and updates itself — no rotation list to maintain by hand. For showcase, borderless, prerelease, planeswalker-stamp, and The List treatments, if that exact printing can't be found we fall back to the standard printing's data and let you know. When The List is selected, the Set code field is ignored, since that treatment already pins the printing to The List's own set (PLST). Head to the <b>Card Popularity</b> tab for EDHREC rank and Standard metagame context.
         <br><br>
         <b>Collector # lookup:</b> if you fill in Set code + Collector #, that pins one exact printing directly — the Card name field is ignored and the Treatment dropdown only affects which price gets used, not which print gets found, since the collector number already picks the specific one.
         <br><br>
@@ -393,7 +394,7 @@ Consider,mkm,3,,,0.25"></textarea>
 
     <div class="footnote">
       One entry per line, either format, mixed freely:<br>
-      <b>CSV</b>: <code>Card Name,Set Code,Quantity,Condition,Treatment,Price Paid</code> — only the name is required; leave the rest blank for defaults (qty 1, Near Mint, Normal, no price paid). Treatment must be one of <code>normal</code>, <code>foil</code>, <code>etched</code>, <code>showcase</code>, <code>borderless</code>, <code>prerelease</code>, <code>planeswalkerstamp</code>. Price Paid is per card, not per line total.<br>
+      <b>CSV</b>: <code>Card Name,Set Code,Quantity,Condition,Treatment,Price Paid</code> — only the name is required; leave the rest blank for defaults (qty 1, Near Mint, Normal, no price paid). Treatment must be one of <code>normal</code>, <code>foil</code>, <code>etched</code>, <code>showcase</code>, <code>borderless</code>, <code>prerelease</code>, <code>planeswalkerstamp</code>, <code>thelist</code>. Price Paid is per card, not per line total.<br>
       <b>Plain decklist line</b>: <code>4 Lightning Bolt</code> — just quantity and name, everything else defaults.<br>
       Blank lines and lines starting with <code>#</code> are skipped, and a header row starting with "name" is detected and skipped automatically. Cards priced as Normal or Foil are looked up in one fast batch; Showcase, Borderless, Prerelease, Foil-Etched, and Planeswalker Stamp rows are looked up one at a time (same specific-print search used by the single Add form), so very large imports with lots of special treatments will take a bit longer. As always, this needs to be running as its own hosted page, not Claude's preview pane, for the lookups to work.
     </div>
@@ -874,14 +875,16 @@ async function scryfallGet(url){
 
 const TREATMENT_LABELS = {
   normal: '', foil: 'FOIL', etched: 'FOIL-ETCHED', showcase: 'SHOWCASE',
-  borderless: 'BORDERLESS', prerelease: 'PRERELEASE', planeswalkerstamp: 'PW STAMP'
+  borderless: 'BORDERLESS', prerelease: 'PRERELEASE', planeswalkerstamp: 'PW STAMP',
+  thelist: 'THE LIST'
 };
 const TREATMENT_QUERY = {
   etched: 'is:etched',
   showcase: 'frame:showcase',
   borderless: 'border:borderless',
   prerelease: 'is:prerelease',
-  planeswalkerstamp: 'is:planeswalkerdeck'
+  planeswalkerstamp: 'is:planeswalkerdeck',
+  thelist: 'e:plst'
 };
 
 function pickPrice(entry, treatment){
@@ -897,7 +900,10 @@ function pickPrice(entry, treatment){
     // these promos are always distributed as foil-stamped cards
     return foil !== null ? foil : usd;
   }
-  if(treatment === 'showcase' || treatment === 'borderless'){
+  if(treatment === 'showcase' || treatment === 'borderless' || treatment === 'thelist'){
+    // The List cards are printed nonfoil the vast majority of the time, same
+    // finish-availability check as showcase/borderless covers the rare
+    // foil-only exception too.
     if(finishes.length && !finishes.includes('nonfoil') && finishes.includes('foil')){
       return foil !== null ? foil : usd;
     }
@@ -1256,7 +1262,9 @@ async function fetchCardForTreatment(name, setCode, treatment){
   }
   const modifier = TREATMENT_QUERY[treatment];
   let q = '!"' + name + '" ' + modifier;
-  if(setCode) q += ' e:' + setCode.trim().toLowerCase();
+  // "thelist" already pins the set to PLST via its modifier — appending a
+  // user-entered set code here would conflict with that and match nothing.
+  if(setCode && treatment !== 'thelist') q += ' e:' + setCode.trim().toLowerCase();
   const url = 'https://api.scryfall.com/cards/search?q=' + encodeURIComponent(q) + '&unique=prints';
   const res = await scryfallGet(url);
   if(res.ok){
@@ -1447,7 +1455,7 @@ loadCollection().then(autoRefreshCollectionIfNeeded);
 loadCollectionLists();
 
 // --- Bulk Import ---
-const VALID_TREATMENTS = ['normal','foil','etched','showcase','borderless','prerelease','planeswalkerstamp'];
+const VALID_TREATMENTS = ['normal','foil','etched','showcase','borderless','prerelease','planeswalkerstamp','thelist'];
 
 function parseCsvLine(line){
   const fields = [];
