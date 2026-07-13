@@ -166,6 +166,12 @@
   .card-cell{display:flex;align-items:center;gap:10px;}
   .card-cell img{width:34px;height:auto;border-radius:2px;flex-shrink:0;}
   .card-name{font-weight:500;}
+  .card-name-hoverable{cursor:help;border-bottom:1px dotted var(--text-dim);}
+  #cardHoverPreview{
+    display:none;position:fixed;z-index:2000;width:220px;border-radius:8px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.6);border:1px solid var(--border);
+    pointer-events:none;
+  }
   .card-set{color:var(--text-dim);font-size:11.5px;font-family:'IBM Plex Mono', monospace;}
   .rarity-bar{width:3px;height:34px;border-radius:2px;flex-shrink:0;}
   .rarity-common{background:var(--common);}
@@ -702,6 +708,8 @@ Consider,mkm,3,,,0.25"></textarea>
 </div>
 </div>
 
+<img id="cardHoverPreview" alt="">
+
 <div id="soldModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1000;align-items:center;justify-content:center;">
   <div class="panel" style="max-width:360px;width:90%;">
     <h2>Mark as Sold</h2>
@@ -764,6 +772,40 @@ const formMsg = $('formMsg');
 function fmtMoney(n){
   if(n === null || n === undefined || isNaN(n)) return '—';
   return '$' + Number(n).toFixed(2);
+}
+
+// --- Card image hover preview (Collection Tracker table) ---
+// Uses one shared fixed-position <img>, since fixed positioning escapes the
+// table's overflow-x:auto wrapper — an absolutely-positioned tooltip inside
+// that wrapper would get clipped vertically.
+const cardHoverPreview = document.getElementById('cardHoverPreview');
+
+function showCardHoverPreview(el, imgUrl){
+  if(!imgUrl) return;
+  if(cardHoverPreview.src !== imgUrl) cardHoverPreview.src = imgUrl;
+  const rect = el.getBoundingClientRect();
+  const previewWidth = 220;
+  const previewHeight = 306;
+  let left = rect.right + 12;
+  let top = rect.top;
+  if(left + previewWidth > window.innerWidth - 8) left = rect.left - previewWidth - 12;
+  if(left < 8) left = 8;
+  if(top + previewHeight > window.innerHeight - 8) top = window.innerHeight - previewHeight - 8;
+  if(top < 8) top = 8;
+  cardHoverPreview.style.left = left + 'px';
+  cardHoverPreview.style.top = top + 'px';
+  cardHoverPreview.style.display = 'block';
+}
+function hideCardHoverPreview(){
+  cardHoverPreview.style.display = 'none';
+}
+function wireCardHoverPreviews(container){
+  container.querySelectorAll('.card-name-hoverable').forEach(el => {
+    const imgUrl = el.dataset.img;
+    if(!imgUrl) return;
+    el.addEventListener('mouseenter', () => showCardHoverPreview(el, imgUrl));
+    el.addEventListener('mouseleave', hideCardHoverPreview);
+  });
 }
 
 // --- Sold price/net modal, shared by both cards and sealed products ---
@@ -1035,9 +1077,8 @@ function render(){
           <td>
             <div class="card-cell">
               <div class="rarity-bar ${rarityClass(entry.rarity)}"></div>
-              ${img ? `<img src="${img}" alt="">` : ''}
               <div>
-                <div class="card-name">${entry.name}${treatLabel ? ` <span style=\"color:var(--gold);font-size:11px;\">${treatLabel}</span>` : ''}</div>
+                <div class="card-name${img ? ' card-name-hoverable' : ''}" ${img ? `data-img="${img}"` : ''}>${entry.name}${treatLabel ? ` <span style=\"color:var(--gold);font-size:11px;\">${treatLabel}</span>` : ''}</div>
                 <div class="card-set">${(entry.set||'').toUpperCase()} · ${entry.condition||''}</div>
               </div>
             </div>
@@ -1109,6 +1150,7 @@ function render(){
       render();
     });
   });
+  wireCardHoverPreviews(tableBody);
 
   renderListOptions();
   renderSoldCards();
@@ -1237,7 +1279,7 @@ function cardToEntry(card, qty, treatment, condition, pricePaid, list){
     edhrec_rank: card.edhrec_rank ?? null,
     legality_standard: card.legalities ? card.legalities.standard : null,
     finishes: card.finishes || [],
-    image: imgSource.small || imgSource.normal || '',
+    image: imgSource.normal || imgSource.small || '',
     prices: {
       usd: card.prices ? card.prices.usd : null,
       usd_foil: card.prices ? card.prices.usd_foil : null,
