@@ -260,6 +260,15 @@
       <label for="pricePaid">Price paid per card (optional)</label>
       <input type="number" id="pricePaid" min="0" step="0.01" placeholder="e.g. 4.50">
 
+      <label for="cardListSelect">List</label>
+      <select id="cardListSelect" class="list-select" data-no-list-label="No list">
+        <option value="">No list</option>
+      </select>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input type="text" id="newListName" placeholder="New list name…" style="flex:1;">
+        <button type="button" id="createListBtn">Create list</button>
+      </div>
+
       <button class="btn-primary" id="addBtn">Add card</button>
       <div class="form-msg" id="formMsg"></div>
 
@@ -275,6 +284,9 @@
       <div class="toolbar">
         <input type="text" id="filterInput" placeholder="Filter by name…">
         <div class="toolbar-right">
+          <select id="listFilterSelect" class="list-select" data-no-list-label="All lists" style="width:auto;">
+            <option value="">All lists</option>
+          </select>
           <button id="refreshBtn">Refresh prices</button>
         </div>
       </div>
@@ -285,6 +297,7 @@
               <th data-sort="name">Card</th>
               <th data-sort="rarity">Rarity</th>
               <th data-sort="legal">Standard</th>
+              <th data-sort="list">List</th>
               <th data-sort="qty" class="num">Qty</th>
               <th data-sort="paid" class="num">Paid</th>
               <th data-sort="unit" class="num">Unit Price</th>
@@ -298,7 +311,7 @@
             </tr>
           </thead>
           <tbody id="tableBody">
-            <tr class="loading-row"><td colspan="13">Loading your collection…</td></tr>
+            <tr class="loading-row"><td colspan="14">Loading your collection…</td></tr>
           </tbody>
         </table>
       </div>
@@ -306,6 +319,29 @@
         <h3>Your binder is empty</h3>
         <div>Add your first card on the left. Prices and popularity fill in automatically from Scryfall.</div>
       </div>
+    </div>
+  </div>
+
+  <div class="panel" id="soldCardsPanel" style="margin-top:24px;">
+    <h2>Sold Cards</h2>
+    <div class="card-set" style="margin-bottom:12px;">Cards you've marked "Sold" from the table above — kept separate from active inventory.</div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Card</th>
+            <th>List</th>
+            <th class="num">Qty</th>
+            <th class="num">Paid</th>
+            <th class="num">Price</th>
+            <th>Sold Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="soldCardsBody">
+          <tr class="loading-row"><td colspan="7">No sold cards yet — click "Sold" on any card above to move it here.</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -608,6 +644,28 @@ Consider,mkm,3,,,0.25"></textarea>
       </table>
     </div>
   </div>
+
+  <div class="panel" id="soldSealedPanel" style="margin-top:20px;">
+    <h2>Sold Sealed Products</h2>
+    <div class="card-set" style="margin-bottom:12px;">Sealed products you've marked "Sold" above — kept separate from active inventory.</div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th class="num">Qty</th>
+            <th class="num">Paid</th>
+            <th class="num">Price</th>
+            <th>Sold Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="soldSealedBody">
+          <tr class="loading-row"><td colspan="6">No sold sealed products yet — click "Sold" on any tracked product above to move it here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 </div>
 
@@ -731,6 +789,47 @@ async function saveCollection(){
   await storageSet(STORAGE_KEY, JSON.stringify(collection));
 }
 
+const LISTS_STORAGE_KEY = 'collection_lists_v1';
+let collectionLists = [];
+
+async function loadCollectionLists(){
+  try{
+    const raw = await storageGet(LISTS_STORAGE_KEY);
+    collectionLists = raw ? JSON.parse(raw) : [];
+  }catch(e){
+    collectionLists = [];
+  }
+  renderListOptions();
+}
+async function saveCollectionLists(){
+  await storageSet(LISTS_STORAGE_KEY, JSON.stringify(collectionLists));
+}
+
+// Populates every <select> in the app that offers a list to choose from,
+// keeping them all in sync with the single collectionLists array.
+function renderListOptions(){
+  document.querySelectorAll('.list-select').forEach(select => {
+    const current = select.value;
+    const noListLabel = select.dataset.noListLabel || 'No list';
+    select.innerHTML = '<option value="">' + noListLabel + '</option>' +
+      collectionLists.map(l => `<option value="${l}">${l}</option>`).join('');
+    if(collectionLists.includes(current) || current === '') select.value = current;
+  });
+}
+
+$('createListBtn').addEventListener('click', async () => {
+  const name = $('newListName').value.trim();
+  if(!name) return;
+  if(!collectionLists.includes(name)){
+    collectionLists.push(name);
+    collectionLists.sort((a,b) => a.localeCompare(b));
+    await saveCollectionLists();
+    renderListOptions();
+  }
+  $('cardListSelect').value = name;
+  $('newListName').value = '';
+});
+
 function unitPrice(entry){
   return pickPrice(entry, entry.treatment || (entry.foil ? 'foil' : 'normal'));
 }
@@ -768,14 +867,18 @@ function gainLossPct(entry){
 
 function render(){
   const filter = ($('filterInput').value || '').trim().toLowerCase();
-  const rows = collection
-    .map((c, idx) => ({ ...c, _idx: idx }))
-    .filter(c => !filter || c.name.toLowerCase().includes(filter));
+  const listFilter = $('listFilterSelect').value;
+  const activeCollection = collection.filter(c => !c.sold);
+  const rows = activeCollection
+    .map(c => ({ ...c, _idx: collection.indexOf(c) }))
+    .filter(c => !filter || c.name.toLowerCase().includes(filter))
+    .filter(c => !listFilter || c.list === listFilter);
 
   rows.sort((a,b) => {
     let av, bv;
     if(sortKey === 'name'){ av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
     else if(sortKey === 'rarity'){ av = a.rarity||''; bv = b.rarity||''; }
+    else if(sortKey === 'list'){ av = a.list||''; bv = b.list||''; }
     else if(sortKey === 'qty'){ av = a.qty; bv = b.qty; }
     else if(sortKey === 'paid'){ av = a.pricePaid ?? -1; bv = b.pricePaid ?? -1; }
     else if(sortKey === 'unit'){ av = unitPrice(a) ?? -1; bv = unitPrice(b) ?? -1; }
@@ -793,10 +896,13 @@ function render(){
 
   tableBody.innerHTML = '';
   if(rows.length === 0){
-    emptyState.style.display = collection.length === 0 ? 'block' : 'block';
-    if(collection.length > 0){
+    emptyState.style.display = 'block';
+    if(activeCollection.length > 0){
       emptyState.querySelector('h3').textContent = 'No matching cards';
       emptyState.querySelector('div').textContent = 'Try a different filter.';
+    } else {
+      emptyState.querySelector('h3').textContent = 'Your binder is empty';
+      emptyState.querySelector('div').textContent = 'Add your first card on the left. Prices and popularity fill in automatically from Scryfall.';
     }
     tableBody.parentElement.parentElement.style.display = 'none';
   } else {
@@ -815,6 +921,8 @@ function render(){
       const d7 = trendPct(entry, 7);
       const d30 = trendPct(entry, 30);
       const gain = gainLossPct(entry);
+      const listOptions = '<option value="">No list</option>' + collectionLists.map(l =>
+        `<option value="${l}" ${entry.list === l ? 'selected' : ''}>${l}</option>`).join('');
 
       tr.innerHTML = `
         <td>
@@ -829,6 +937,7 @@ function render(){
         </td>
         <td class="mono" style="text-transform:capitalize;">${entry.rarity||'—'}</td>
         <td>${legalityPill(entry)}</td>
+        <td><select class="row-list-select" data-idx="${entry._idx}" style="width:auto;">${listOptions}</select></td>
         <td class="num mono">${entry.qty}</td>
         <td class="num mono">${fmtMoney(entry.pricePaid)}</td>
         <td class="num mono">${fmtMoney(up)}</td>
@@ -838,21 +947,24 @@ function render(){
         <td class="num mono ${trendClass(d30)}">${fmtPct(d30)}</td>
         <td class="num mono">${fmtMoney(total)}</td>
         <td class="num"><span class="${popClass}">${popLabel}</span></td>
-        <td class="num"><button class="remove-btn" title="Remove" data-idx="${entry._idx}">✕</button></td>
+        <td class="num" style="white-space:nowrap;">
+          <button class="sold-btn" title="Mark sold" data-idx="${entry._idx}">Sold</button>
+          <button class="remove-btn" title="Remove" data-idx="${entry._idx}">✕</button>
+        </td>
       `;
       tableBody.appendChild(tr);
     });
   }
 
-  const totalCount = collection.reduce((s,c) => s + Number(c.qty||0), 0);
-  const totalValue = collection.reduce((s,c) => {
+  const totalCount = activeCollection.reduce((s,c) => s + Number(c.qty||0), 0);
+  const totalValue = activeCollection.reduce((s,c) => {
     const up = unitPrice(c);
     return s + (up !== null ? up*c.qty : 0);
   }, 0);
   $('statCount').textContent = totalCount;
   $('statValue').textContent = fmtMoney(totalValue);
 
-  const pricedEntries = collection.filter(c => c.pricePaid !== null && c.pricePaid !== undefined && unitPrice(c) !== null);
+  const pricedEntries = activeCollection.filter(c => c.pricePaid !== null && c.pricePaid !== undefined && unitPrice(c) !== null);
   const statGainEl = $('statGain');
   if(pricedEntries.length === 0){
     statGainEl.textContent = '—';
@@ -868,6 +980,67 @@ function render(){
 
   tableBody.querySelectorAll('.remove-btn').forEach(btn => {
     btn.addEventListener('click', () => removeCard(Number(btn.dataset.idx)));
+  });
+  tableBody.querySelectorAll('.sold-btn').forEach(btn => {
+    btn.addEventListener('click', () => markCardSold(Number(btn.dataset.idx)));
+  });
+  tableBody.querySelectorAll('.row-list-select').forEach(select => {
+    select.addEventListener('change', async () => {
+      const idx = Number(select.dataset.idx);
+      collection[idx].list = select.value;
+      await saveCollection();
+      render();
+    });
+  });
+
+  renderListOptions();
+  renderSoldCards();
+}
+
+async function markCardSold(idx){
+  collection[idx].sold = true;
+  collection[idx].soldDate = new Date().toISOString();
+  await saveCollection();
+  render();
+}
+
+async function restoreCard(idx){
+  collection[idx].sold = false;
+  collection[idx].soldDate = null;
+  await saveCollection();
+  render();
+}
+
+function renderSoldCards(){
+  const body = $('soldCardsBody');
+  if(!body) return;
+  const sold = collection
+    .map((c, idx) => ({ ...c, _idx: idx }))
+    .filter(c => c.sold)
+    .sort((a,b) => (b.soldDate||'').localeCompare(a.soldDate||''));
+
+  if(!sold.length){
+    body.innerHTML = '<tr class="loading-row"><td colspan="7">No sold cards yet — click "Sold" on any card above to move it here.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = sold.map(entry => {
+    const up = unitPrice(entry);
+    const soldDateLabel = entry.soldDate ? new Date(entry.soldDate).toLocaleDateString() : '—';
+    return `
+      <tr>
+        <td>${entry.name}<div class="card-set">${(entry.set||'').toUpperCase()}</div></td>
+        <td>${entry.list || '—'}</td>
+        <td class="num mono">${entry.qty}</td>
+        <td class="num mono">${fmtMoney(entry.pricePaid)}</td>
+        <td class="num mono">${fmtMoney(up)}</td>
+        <td class="mono">${soldDateLabel}</td>
+        <td class="num"><button class="restore-card-btn" data-idx="${entry._idx}">Restore</button></td>
+      </tr>`;
+  }).join('');
+
+  body.querySelectorAll('.restore-card-btn').forEach(btn => {
+    btn.addEventListener('click', () => restoreCard(Number(btn.dataset.idx)));
   });
 }
 
@@ -914,7 +1087,7 @@ async function fetchCardForTreatment(name, setCode, treatment){
   return fallback;
 }
 
-function cardToEntry(card, qty, treatment, condition, pricePaid){
+function cardToEntry(card, qty, treatment, condition, pricePaid, list){
   const imgSource = card.image_uris || (card.card_faces && card.card_faces[0] && card.card_faces[0].image_uris) || {};
   const paidNum = (pricePaid !== undefined && pricePaid !== null && pricePaid !== '' && !isNaN(pricePaid)) ? Number(pricePaid) : null;
   const entry = {
@@ -935,6 +1108,9 @@ function cardToEntry(card, qty, treatment, condition, pricePaid){
     treatment: treatment || 'normal',
     condition: condition || 'Near Mint',
     pricePaid: paidNum,
+    list: list || '',
+    sold: false,
+    soldDate: null,
     lastUpdated: new Date().toISOString(),
     priceHistory: []
   };
@@ -950,6 +1126,7 @@ $('addBtn').addEventListener('click', async () => {
   const treatment = $('treatment').value;
   const condition = $('condition').value;
   const pricePaid = $('pricePaid').value;
+  const list = $('cardListSelect').value;
 
   if(!name){ showMsg('Enter a card name first.', 'error'); return; }
 
@@ -957,7 +1134,7 @@ $('addBtn').addEventListener('click', async () => {
   showMsg('Looking up "' + name + '"…');
   try{
     const card = await fetchCardForTreatment(name, setCode, treatment);
-    const entry = cardToEntry(card, qty, treatment, condition, pricePaid);
+    const entry = cardToEntry(card, qty, treatment, condition, pricePaid, list);
     collection.push(entry);
     await saveCollection();
     render();
@@ -1058,6 +1235,7 @@ async function autoRefreshCollectionIfNeeded(){
 $('refreshBtn').addEventListener('click', refreshAllPrices);
 
 $('filterInput').addEventListener('input', render);
+$('listFilterSelect').addEventListener('change', render);
 
 document.querySelectorAll('th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
@@ -1068,6 +1246,7 @@ document.querySelectorAll('th[data-sort]').forEach(th => {
 });
 
 loadCollection().then(autoRefreshCollectionIfNeeded);
+loadCollectionLists();
 
 // --- Bulk Import ---
 const VALID_TREATMENTS = ['normal','foil','etched','showcase','borderless','prerelease','planeswalkerstamp'];
@@ -1983,6 +2162,8 @@ function renderSealedSearchResults(items){
         change24h: null,
         change7d: null,
         change30d: null,
+        sold: false,
+        soldDate: null,
         lastUpdated: new Date().toISOString()
       });
       await saveSealedWatchlist();
@@ -2007,28 +2188,36 @@ function sealedGainLossPct(w){
 
 function renderSealedWatchlist(){
   const body = $('sealedWatchlistBody');
-  if(!sealedWatchlist.length){
+  const active = sealedWatchlist
+    .map((w, i) => Object.assign({}, w, { _idx: i }))
+    .filter(w => !w.sold);
+
+  if(!active.length){
     body.innerHTML = '<tr class="loading-row"><td colspan="9">Search above, or use "Add to Inventory," to add products here.</td></tr>';
-    return;
+  } else {
+    body.innerHTML = active.map(w => {
+      const idx = w._idx;
+      const total = (w.market !== null && w.market !== undefined) ? w.market * (w.qty || 1) : null;
+      const pct24 = pctFromChange(w.market, w.change24h);
+      const pct7 = pctFromChange(w.market, w.change7d);
+      const pct30 = pctFromChange(w.market, w.change30d);
+      return `
+        <tr>
+          <td>${w.name}<div class="card-set">${w.set||''}</div></td>
+          <td class="num">${editableNumberInput('sealed-qty-input', idx, w.qty||1)}</td>
+          <td class="num">${editableNumberInput('sealed-paid-input', idx, w.pricePaid)}</td>
+          <td class="num mono">${fmtMoney(w.market)}</td>
+          <td class="num mono ${trendClass(pct24)}">${fmtPct(pct24)}</td>
+          <td class="num mono ${trendClass(pct7)}">${fmtPct(pct7)}</td>
+          <td class="num mono ${trendClass(pct30)}">${fmtPct(pct30)}</td>
+          <td class="num mono">${fmtMoney(total)}</td>
+          <td class="num" style="white-space:nowrap;">
+            <button class="sealed-sold-btn" title="Mark sold" data-idx="${idx}">Sold</button>
+            <button class="remove-btn sealed-remove-btn" title="Remove" data-idx="${idx}">✕</button>
+          </td>
+        </tr>`;
+    }).join('');
   }
-  body.innerHTML = sealedWatchlist.map((w, idx) => {
-    const total = (w.market !== null && w.market !== undefined) ? w.market * (w.qty || 1) : null;
-    const pct24 = pctFromChange(w.market, w.change24h);
-    const pct7 = pctFromChange(w.market, w.change7d);
-    const pct30 = pctFromChange(w.market, w.change30d);
-    return `
-      <tr>
-        <td>${w.name}<div class="card-set">${w.set||''}</div></td>
-        <td class="num">${editableNumberInput('sealed-qty-input', idx, w.qty||1)}</td>
-        <td class="num">${editableNumberInput('sealed-paid-input', idx, w.pricePaid)}</td>
-        <td class="num mono">${fmtMoney(w.market)}</td>
-        <td class="num mono ${trendClass(pct24)}">${fmtPct(pct24)}</td>
-        <td class="num mono ${trendClass(pct7)}">${fmtPct(pct7)}</td>
-        <td class="num mono ${trendClass(pct30)}">${fmtPct(pct30)}</td>
-        <td class="num mono">${fmtMoney(total)}</td>
-        <td class="num"><button class="remove-btn sealed-remove-btn" title="Remove" data-idx="${idx}">✕</button></td>
-      </tr>`;
-  }).join('');
 
   body.querySelectorAll('.sealed-qty-input').forEach(input => {
     input.addEventListener('change', async () => {
@@ -2053,6 +2242,56 @@ function renderSealedWatchlist(){
       await saveSealedWatchlist();
       renderSealedWatchlist();
     });
+  });
+  body.querySelectorAll('.sealed-sold-btn').forEach(btn => {
+    btn.addEventListener('click', () => markSealedSold(Number(btn.dataset.idx)));
+  });
+
+  renderSoldSealed();
+}
+
+async function markSealedSold(idx){
+  sealedWatchlist[idx].sold = true;
+  sealedWatchlist[idx].soldDate = new Date().toISOString();
+  await saveSealedWatchlist();
+  renderSealedWatchlist();
+}
+
+async function restoreSealed(idx){
+  sealedWatchlist[idx].sold = false;
+  sealedWatchlist[idx].soldDate = null;
+  await saveSealedWatchlist();
+  renderSealedWatchlist();
+}
+
+function renderSoldSealed(){
+  const body = $('soldSealedBody');
+  if(!body) return;
+  const sold = sealedWatchlist
+    .map((w, idx) => Object.assign({}, w, { _idx: idx }))
+    .filter(w => w.sold)
+    .sort((a,b) => (b.soldDate||'').localeCompare(a.soldDate||''));
+
+  if(!sold.length){
+    body.innerHTML = '<tr class="loading-row"><td colspan="6">No sold sealed products yet — click "Sold" on any tracked product above to move it here.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = sold.map(w => {
+    const soldDateLabel = w.soldDate ? new Date(w.soldDate).toLocaleDateString() : '—';
+    return `
+      <tr>
+        <td>${w.name}<div class="card-set">${w.set||''}</div></td>
+        <td class="num mono">${w.qty || 1}</td>
+        <td class="num mono">${fmtMoney(w.pricePaid)}</td>
+        <td class="num mono">${fmtMoney(w.market)}</td>
+        <td class="mono">${soldDateLabel}</td>
+        <td class="num"><button class="restore-sealed-btn" data-idx="${w._idx}">Restore</button></td>
+      </tr>`;
+  }).join('');
+
+  body.querySelectorAll('.restore-sealed-btn').forEach(btn => {
+    btn.addEventListener('click', () => restoreSealed(Number(btn.dataset.idx)));
   });
 }
 
@@ -2104,6 +2343,8 @@ $('sealedAddBtn').addEventListener('click', async () => {
       sealedWatchlist[existingIdx].qty = qty;
       sealedWatchlist[existingIdx].pricePaid = pricePaid;
       sealedWatchlist[existingIdx].market = info.market;
+      sealedWatchlist[existingIdx].sold = false;
+      sealedWatchlist[existingIdx].soldDate = null;
       sealedWatchlist[existingIdx].lastUpdated = new Date().toISOString();
     } else {
       sealedWatchlist.push({
@@ -2116,6 +2357,8 @@ $('sealedAddBtn').addEventListener('click', async () => {
         change24h: null,
         change7d: null,
         change30d: null,
+        sold: false,
+        soldDate: null,
         lastUpdated: new Date().toISOString()
       });
     }
