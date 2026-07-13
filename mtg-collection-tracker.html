@@ -229,8 +229,11 @@
       <input type="text" id="cardName" list="nameOptions" placeholder="e.g. Lightning Bolt" autocomplete="off">
       <datalist id="nameOptions"></datalist>
 
-      <label for="setCode">Set code (optional)</label>
+      <label for="setCode">Set code</label>
       <input type="text" id="setCode" placeholder="e.g. lea, m19">
+
+      <label for="collectorNumber">Collector # in set (optional — skips the name above if filled in)</label>
+      <input type="text" id="collectorNumber" placeholder="e.g. 142">
 
       <div class="row2">
         <div>
@@ -278,6 +281,8 @@
       <div class="footnote">
         <b>This needs to run as its own page, not inside Claude's preview pane</b> — the preview sandboxes network access to Anthropic's own API only, which is why card lookups fail there no matter what. Download this file and open it on its own (see chat for the easiest ways), and lookups will work normally. Once running standalone, your collection saves to this browser via local storage.<br><br>
         Prices and card data come from <b>Scryfall's</b> free public API. Standard legality comes from the same source's per-card <b>legalities</b> field, which mirrors Wizards' official rotation and updates itself — no rotation list to maintain by hand. For showcase, borderless, prerelease, and planeswalker-stamp treatments, if that exact printing can't be found we fall back to the standard printing's data and let you know. Head to the <b>Card Popularity</b> tab for EDHREC rank and Standard metagame context.
+        <br><br>
+        <b>Collector # lookup:</b> if you fill in Set code + Collector #, that pins one exact printing directly — the Card name field is ignored and the Treatment dropdown only affects which price gets used, not which print gets found, since the collector number already picks the specific one.
         <br><br>
         <b>3d / 7d / 30d columns:</b> each card's price is recorded once per day (once this page has been opened that day — same "opportunistic daily snapshot" approach as the popularity leaderboards, since a static page can't run in the background). Those three columns compare today's price to the closest recorded day at or before 3, 7, and 30 days ago. A card needs to have been in your collection that long, with the page opened along the way, for a given column to show a number — otherwise it shows "—".
       </div>
@@ -1177,6 +1182,18 @@ async function fetchCardByName(name, setCode){
   return res.json();
 }
 
+// Looks a card up by its exact set + collector number, e.g. mkm/142 — this
+// pins down one specific printing directly, no name needed at all.
+async function fetchCardByCollectorNumber(setCode, collectorNumber){
+  const url = 'https://api.scryfall.com/cards/' + encodeURIComponent(setCode.trim().toLowerCase()) + '/' + encodeURIComponent(collectorNumber.trim());
+  const res = await scryfallGet(url);
+  if(!res.ok){
+    if(res.status === 404) throw new Error('No card found at collector number ' + collectorNumber + ' in set "' + setCode + '."');
+    throw new Error('Scryfall lookup failed (' + res.status + ').');
+  }
+  return res.json();
+}
+
 // For treatments that are actually distinct printings (showcase, borderless,
 // prerelease, planeswalker stamp), search for that specific print. Falls back
 // to the standard printing if no matching print exists, and flags that fact.
@@ -1233,18 +1250,30 @@ function cardToEntry(card, qty, treatment, condition, pricePaid, list){
 $('addBtn').addEventListener('click', async () => {
   const name = $('cardName').value.trim();
   const setCode = $('setCode').value.trim();
+  const collectorNumber = $('collectorNumber').value.trim();
   const qty = $('qty').value;
   const treatment = $('treatment').value;
   const condition = $('condition').value;
   const pricePaid = $('pricePaid').value;
   const list = $('cardListSelect').value;
 
-  if(!name){ showMsg('Enter a card name first.', 'error'); return; }
+  if(collectorNumber && !setCode){
+    showMsg('Enter the set code too — a collector number alone isn\'t enough to find one card.', 'error');
+    return;
+  }
+  if(!collectorNumber && !name){
+    showMsg('Enter a card name, or a set code + collector number.', 'error');
+    return;
+  }
 
   $('addBtn').disabled = true;
-  showMsg('Looking up "' + name + '"…');
+  showMsg(collectorNumber ? 'Looking up ' + setCode.toUpperCase() + ' #' + collectorNumber + '…' : 'Looking up "' + name + '"…');
   try{
-    const card = await fetchCardForTreatment(name, setCode, treatment);
+    // Collector number pins one exact printing directly, so it skips the
+    // name-based (and treatment-based) search entirely.
+    const card = collectorNumber
+      ? await fetchCardByCollectorNumber(setCode, collectorNumber)
+      : await fetchCardForTreatment(name, setCode, treatment);
     const entry = cardToEntry(card, qty, treatment, condition, pricePaid, list);
     collection.push(entry);
     await saveCollection();
@@ -1252,10 +1281,11 @@ $('addBtn').addEventListener('click', async () => {
     if(card._treatmentNotFound){
       showMsg('Added ' + card.name + ', but no ' + (TREATMENT_LABELS[treatment]||treatment) + ' printing was found — used the standard printing\'s data instead.', 'ok');
     } else {
-      showMsg('Added ' + card.name + ' (' + card.set.toUpperCase() + ').', 'ok');
+      showMsg('Added ' + card.name + ' (' + card.set.toUpperCase() + ' #' + card.collector_number + ').', 'ok');
     }
     $('cardName').value = '';
     $('setCode').value = '';
+    $('collectorNumber').value = '';
     $('qty').value = 1;
     $('treatment').value = 'normal';
     $('pricePaid').value = '';
@@ -1267,6 +1297,10 @@ $('addBtn').addEventListener('click', async () => {
 });
 
 $('cardName').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ e.preventDefault(); $('addBtn').click(); }
+});
+
+$('collectorNumber').addEventListener('keydown', (e) => {
   if(e.key === 'Enter'){ e.preventDefault(); $('addBtn').click(); }
 });
 
