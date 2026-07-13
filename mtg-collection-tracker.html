@@ -571,7 +571,9 @@ Consider,mkm,3,,,0.25"></textarea>
       <div class="form-msg" id="deckMsg"></div>
 
       <div class="footnote">
-        This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API, routed through <b>corsproxy.io</b> since TopDeck.gg doesn't allow direct browser requests — so your API key does pass through that relay, not just TopDeck.gg. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
+        This tab pulls real recent tournament results and decklists from <b>TopDeck.gg's</b> free tournament API, routed through <b>corsproxy.io</b> (falling back to <b>Corsfix</b> automatically if that fails or the response is too large) since TopDeck.gg doesn't allow direct browser requests — so your API key does pass through whichever relay handles the request, not just TopDeck.gg. Get a free key at <a href="https://topdeck.gg/developers" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">topdeck.gg/developers</a> and paste it above — it's saved only in this browser's local storage. Per their terms, this credit is required: <b>Data provided by <a href="https://topdeck.gg" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">TopDeck.gg</a></b>. Card prices for each decklist are looked up live from Scryfall when you click "View decklist &amp; prices," so nothing is priced until you ask for it.
+        <br><br>
+        If a search still fails on a large pull, it's likely hitting a free-tier size limit on both proxies at once — try a shorter "Last N days" window or a handful of specific dates instead of a wide range; that shrinks the response enough to get through.
         <br><br>
         TopDeck.gg's API itself only supports "days back from today," not picking specific dates, so adding date(s) above fetches a wide-enough window under the hood and then filters down to just the day(s) you picked, here in the browser. Tournament dates are compared using your browser's local timezone against TopDeck.gg's recorded start time, so an event right around midnight could occasionally land on the adjacent day.
       </div>
@@ -607,7 +609,7 @@ Consider,mkm,3,,,0.25"></textarea>
     <div class="form-msg" id="sealedSearchMsg"></div>
 
     <div class="footnote">
-      This tab uses <b>TCG API (tcgapi.dev)</b>, a third-party service built after TCGPlayer closed public API access to new developers, routed through <b>corsproxy.io</b> since TCG API doesn't allow direct browser requests either — so your API key passes through that relay too, not just TCG API. Get a free key at <a href="https://tcgapi.dev/signup" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">tcgapi.dev/signup</a> (no card required, 100 requests/day free). It's saved only in this browser's local storage. This is a newer, unofficial service, not TCGPlayer or Wizards themselves. One thing not fully confirmed: searches assume Magic's game slug is <code>magic</code> — if searches keep coming up empty, open <a href="https://api.tcgapi.dev/v1/games" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">api.tcgapi.dev/v1/games</a> directly in your browser (no key needed) and check the exact slug listed for Magic: The Gathering, then let us know if it's different.
+      This tab uses <b>TCG API (tcgapi.dev)</b>, a third-party service built after TCGPlayer closed public API access to new developers, routed through <b>corsproxy.io</b> (falling back to <b>Corsfix</b> automatically if needed) since TCG API doesn't allow direct browser requests either — so your API key passes through whichever relay handles the request, not just TCG API. Get a free key at <a href="https://tcgapi.dev/signup" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">tcgapi.dev/signup</a> (no card required, 100 requests/day free). It's saved only in this browser's local storage. This is a newer, unofficial service, not TCGPlayer or Wizards themselves. One thing not fully confirmed: searches assume Magic's game slug is <code>magic</code> — if searches keep coming up empty, open <a href="https://api.tcgapi.dev/v1/games" target="_blank" rel="noopener noreferrer" style="color:var(--gold);">api.tcgapi.dev/v1/games</a> directly in your browser (no key needed) and check the exact slug listed for Magic: The Gathering, then let us know if it's different.
     </div>
   </div>
 
@@ -1043,7 +1045,7 @@ function render(){
           <td class="mono" style="text-transform:capitalize;">${entry.rarity||'—'}</td>
           <td>${legalityPill(entry)}</td>
           <td><select class="row-list-select" data-idx="${entry._idx}" style="width:auto;">${listOptions}</select></td>
-          <td class="num mono">${entry.qty}</td>
+          <td class="num">${editableQtyInput('row-qty-input', entry._idx, entry.qty)}</td>
           <td class="num mono">${fmtMoney(entry.pricePaid)}</td>
           <td class="num mono">${fmtMoney(up)}</td>
           <td class="num mono ${trendClass(gain)}">${fmtPct(gain)}</td>
@@ -1094,6 +1096,15 @@ function render(){
     select.addEventListener('change', async () => {
       const idx = Number(select.dataset.idx);
       collection[idx].list = select.value;
+      await saveCollection();
+      render();
+    });
+  });
+  tableBody.querySelectorAll('.row-qty-input').forEach(input => {
+    input.addEventListener('change', async () => {
+      const idx = Number(input.dataset.idx);
+      const v = Math.max(0, Math.round(Number(input.value)) || 0);
+      collection[idx].qty = v;
       await saveCollection();
       render();
     });
@@ -1799,13 +1810,23 @@ async function scryfallPost(url, body){
 }
 
 // TopDeck.gg and TCG API don't support direct browser requests (confirmed via
-// console CORS errors), unlike Scryfall. corsproxy.io's free tier explicitly
-// allows github.io origins with no signup, and forwards custom headers and
-// POST bodies, so we route both APIs through it. This does mean each API key
-// passes through corsproxy.io's servers, not just the target API directly.
-const CORS_PROXY_PREFIX = 'https://corsproxy.io/?url=';
-function corsProxyFetch(url, options){
-  return fetch(CORS_PROXY_PREFIX + encodeURIComponent(url), options);
+// console CORS errors), unlike Scryfall. corsproxy.io's free tier allows
+// github.io origins with no signup and forwards custom headers/POST bodies,
+// but its free tier caps responses around ~1MB — a big "Load recent results"
+// pull can exceed that. Corsfix is a second free proxy with no documented
+// size cap (unlimited monthly requests, 60/min), used automatically as a
+// fallback when corsproxy.io fails or returns a non-OK response. Either way,
+// your API key passes through whichever proxy actually handles the request,
+// not just the target API directly.
+async function corsProxyFetch(url, options){
+  try{
+    const res = await fetch('https://corsproxy.io/?url=' + encodeURIComponent(url), options);
+    if(res.ok) return res;
+    const fallback = await fetch('https://proxy.corsfix.com/?' + url, options);
+    return fallback.ok ? fallback : res;
+  }catch(e){
+    return fetch('https://proxy.corsfix.com/?' + url, options);
+  }
 }
 
 async function fetchRecentTournaments(apiKey, format, lastDays){
@@ -2322,6 +2343,11 @@ function renderSealedSearchResults(items){
 function editableNumberInput(cls, idx, value){
   const safeValue = (value === null || value === undefined) ? '' : value;
   return `<input type="number" min="0" step="0.01" class="${cls}" data-idx="${idx}" value="${safeValue}" style="width:64px;text-align:right;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:4px 6px;font-family:'IBM Plex Mono',monospace;">`;
+}
+
+function editableQtyInput(cls, idx, value){
+  const safeValue = (value === null || value === undefined) ? '' : value;
+  return `<input type="number" min="0" step="1" class="${cls}" data-idx="${idx}" value="${safeValue}" style="width:56px;text-align:right;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:4px 6px;font-family:'IBM Plex Mono',monospace;">`;
 }
 
 function sealedGainLossPct(w){
