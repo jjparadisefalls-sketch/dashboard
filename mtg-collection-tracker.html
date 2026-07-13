@@ -531,7 +531,7 @@ Consider,mkm,3,,,0.25"></textarea>
       <div class="card-set" id="viewedCardsMeta" style="margin-top:8px;">No decklists viewed yet.</div>
       <div id="viewedCardsBody"></div>
       <div class="footnote">
-        This builds up from every decklist you click "View decklist &amp; prices" on, across all your sessions on this device — it isn't tied to any single search. Cards are grouped by type (a card counts as <b>Commander</b> if it appeared in a Commanders section, ahead of its normal type), ranked by how many different viewed decks they showed up in, capped to the top 15 per group to keep this readable. <b>Avg Finish</b> is the mean tournament placement across the decks you've viewed containing that card — lower is better — and only counts decks that had a numeric finish recorded. Price is the most recent Scryfall price seen for that card, not a running average.
+        This builds up from every decklist you click "View decklist &amp; prices" on, across all your sessions on this device — it isn't tied to any single search. Cards are grouped by type: <b>Commander</b> takes priority if a card appeared in a Commanders section, then <b>Dual-Sided</b> for any split/transform/modal card whose name contains "//", then the normal type groups. Ranked by how many different viewed decks they showed up in, capped to the top 15 per group to keep this readable. <b>Avg Finish</b> is the mean tournament placement across the decks you've viewed containing that card — lower is better — and only counts decks that had a numeric finish recorded. Price is the most recent Scryfall price seen for that card, not a running average.
       </div>
     </div>
   </div>
@@ -1531,8 +1531,9 @@ function parseDecklistEntries(standing){
   return entries;
 }
 
-function classifyCardType(typeLine, section){
+function classifyCardType(typeLine, section, name){
   if(section && /commander/i.test(section)) return 'Commander';
+  if(name && name.includes('//')) return 'Dual-Sided';
   const t = (typeLine || '').toLowerCase();
   if(t.includes('creature')) return 'Creature';
   if(t.includes('planeswalker')) return 'Planeswalker';
@@ -1564,7 +1565,7 @@ async function priceEntries(entries){
   }
   return entries.map(e => Object.assign({}, e, {
     unitPrice: priceMap.hasOwnProperty(e.name) ? priceMap[e.name] : null,
-    typeCategory: classifyCardType(typeMap[e.name], e.section)
+    typeCategory: classifyCardType(typeMap[e.name], e.section, e.name)
   }));
 }
 
@@ -1650,12 +1651,11 @@ function renderTournaments(tournaments){
         const unpriced = priced.filter(e => e.unitPrice === null).length;
         recordViewedCards(priced, si + 1);
         cell.innerHTML = '<div style="max-width:520px;"><div style="overflow-x:auto;"><table>' +
-          '<thead><tr><th class="num">Qty</th><th>Card</th><th class="card-set">Section</th><th class="num">Unit</th><th class="num">Line</th></tr></thead>' +
+          '<thead><tr><th class="num">Qty</th><th>Card</th><th class="num">Unit</th><th class="num">Line</th></tr></thead>' +
           '<tbody>' + priced.map(e => `
             <tr>
               <td class="num mono">${e.qty}</td>
               <td>${e.name}</td>
-              <td class="card-set">${e.section || ''}</td>
               <td class="num mono">${fmtMoney(e.unitPrice)}</td>
               <td class="num mono">${e.unitPrice !== null ? fmtMoney(e.unitPrice * e.qty) : '—'}</td>
             </tr>`).join('') +
@@ -1674,7 +1674,7 @@ let deckSelectedDates = []; // 'YYYY-MM-DD' strings, sorted ascending
 
 // --- Cards You've Reviewed panel ---
 const VIEWED_CARDS_KEY = 'viewed_decklist_cards_v1';
-const CARD_CATEGORY_ORDER = ['Commander', 'Creature', 'Instant/Sorcery', 'Enchantment', 'Artifact', 'Planeswalker', 'Land', 'Other'];
+const CARD_CATEGORY_ORDER = ['Commander', 'Dual-Sided', 'Creature', 'Instant/Sorcery', 'Enchantment', 'Artifact', 'Planeswalker', 'Land', 'Other'];
 const CARDS_PER_CATEGORY = 15;
 let viewedCardStats = {};
 
