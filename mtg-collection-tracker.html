@@ -92,6 +92,16 @@
   @media (max-width:1040px){.decks-top-layout{grid-template-columns:1fr;}}
   .mini-card{display:flex;align-items:center;gap:8px;}
   .mini-card img{width:26px;border-radius:2px;}
+  tbody tr.set-group-header td{
+    background: var(--panel-2);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color: var(--gold);
+    padding:9px 10px;
+    border-bottom:1px solid var(--border);
+  }
   code{font-family:'IBM Plex Mono', monospace;background:var(--panel-2);padding:1px 5px;border-radius:2px;font-size:11.5px;}
   textarea.bulk-textarea{
     width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
@@ -290,6 +300,7 @@
           <button id="refreshBtn">Refresh prices</button>
         </div>
       </div>
+      <div class="card-set" style="margin-bottom:10px;">Grouped by set, alphabetically. Within each set, cards default to most valuable first — click any column header to re-sort within groups.</div>
       <div style="overflow-x:auto;">
         <table>
           <thead>
@@ -684,8 +695,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 <script>
 const STORAGE_KEY = 'collection';
 let collection = [];
-let sortKey = 'name';
-let sortDir = 1;
+let sortKey = 'unit';
+let sortDir = -1;
 
 const hasCloudStorage = (typeof window !== 'undefined') && !!window.storage;
 
@@ -799,7 +810,7 @@ async function loadCollectionLists(){
   }catch(e){
     collectionLists = [];
   }
-  renderListOptions();
+  render(); // covers the case where this resolves after the table's first render
 }
 async function saveCollectionLists(){
   await storageSet(LISTS_STORAGE_KEY, JSON.stringify(collectionLists));
@@ -824,7 +835,7 @@ $('createListBtn').addEventListener('click', async () => {
     collectionLists.push(name);
     collectionLists.sort((a,b) => a.localeCompare(b));
     await saveCollectionLists();
-    renderListOptions();
+    render(); // refreshes every list dropdown, including each row's, via renderListOptions() inside render()
   }
   $('cardListSelect').value = name;
   $('newListName').value = '';
@@ -908,51 +919,77 @@ function render(){
   } else {
     emptyState.style.display = 'none';
     tableBody.parentElement.parentElement.style.display = '';
-    rows.forEach(entry => {
-      const tr = document.createElement('tr');
-      const up = unitPrice(entry);
-      const total = up !== null ? up * entry.qty : null;
-      const img = entry.image || '';
-      const pop = entry.edhrec_rank;
-      const popLabel = pop ? '#' + pop.toLocaleString() : 'N/A';
-      const popClass = pop && pop < 3000 ? 'pill pop-hot' : 'pill';
-      const treatLabel = TREATMENT_LABELS[entry.treatment] || (entry.foil ? 'FOIL' : '');
-      const d3 = trendPct(entry, 3);
-      const d7 = trendPct(entry, 7);
-      const d30 = trendPct(entry, 30);
-      const gain = gainLossPct(entry);
-      const listOptions = '<option value="">No list</option>' + collectionLists.map(l =>
-        `<option value="${l}" ${entry.list === l ? 'selected' : ''}>${l}</option>`).join('');
 
-      tr.innerHTML = `
-        <td>
-          <div class="card-cell">
-            <div class="rarity-bar ${rarityClass(entry.rarity)}"></div>
-            ${img ? `<img src="${img}" alt="">` : ''}
-            <div>
-              <div class="card-name">${entry.name}${treatLabel ? ` <span style=\"color:var(--gold);font-size:11px;\">${treatLabel}</span>` : ''}</div>
-              <div class="card-set">${(entry.set||'').toUpperCase()} · ${entry.condition||''}</div>
+    // Group by set, preserving whatever sort order was just applied above —
+    // that's what keeps "most valuable first" (the default) holding true
+    // within each group, and lets clicking other column headers re-sort
+    // within groups too, not just flatten everything.
+    const groups = {};
+    const groupOrder = [];
+    rows.forEach(r => {
+      const key = (r.set || '').toUpperCase() || 'UNKNOWN';
+      if(!groups[key]){ groups[key] = []; groupOrder.push(key); }
+      groups[key].push(r);
+    });
+    groupOrder.sort((a,b) => a.localeCompare(b));
+
+    groupOrder.forEach(setKey => {
+      const groupRows = groups[setKey];
+      const groupValue = groupRows.reduce((s,r) => {
+        const up = unitPrice(r);
+        return s + (up !== null ? up*r.qty : 0);
+      }, 0);
+      const headerTr = document.createElement('tr');
+      headerTr.className = 'set-group-header';
+      headerTr.innerHTML = `<td colspan="14">${setKey} <span style="color:var(--text-dim);font-weight:400;">· ${groupRows.length} card(s) · ${fmtMoney(groupValue)}</span></td>`;
+      tableBody.appendChild(headerTr);
+
+      groupRows.forEach(entry => {
+        const tr = document.createElement('tr');
+        const up = unitPrice(entry);
+        const total = up !== null ? up * entry.qty : null;
+        const img = entry.image || '';
+        const pop = entry.edhrec_rank;
+        const popLabel = pop ? '#' + pop.toLocaleString() : 'N/A';
+        const popClass = pop && pop < 3000 ? 'pill pop-hot' : 'pill';
+        const treatLabel = TREATMENT_LABELS[entry.treatment] || (entry.foil ? 'FOIL' : '');
+        const d3 = trendPct(entry, 3);
+        const d7 = trendPct(entry, 7);
+        const d30 = trendPct(entry, 30);
+        const gain = gainLossPct(entry);
+        const listOptions = '<option value="">No list</option>' + collectionLists.map(l =>
+          `<option value="${l}" ${entry.list === l ? 'selected' : ''}>${l}</option>`).join('');
+
+        tr.innerHTML = `
+          <td>
+            <div class="card-cell">
+              <div class="rarity-bar ${rarityClass(entry.rarity)}"></div>
+              ${img ? `<img src="${img}" alt="">` : ''}
+              <div>
+                <div class="card-name">${entry.name}${treatLabel ? ` <span style=\"color:var(--gold);font-size:11px;\">${treatLabel}</span>` : ''}</div>
+                <div class="card-set">${(entry.set||'').toUpperCase()} · ${entry.condition||''}</div>
+              </div>
             </div>
-          </div>
-        </td>
-        <td class="mono" style="text-transform:capitalize;">${entry.rarity||'—'}</td>
-        <td>${legalityPill(entry)}</td>
-        <td><select class="row-list-select" data-idx="${entry._idx}" style="width:auto;">${listOptions}</select></td>
-        <td class="num mono">${entry.qty}</td>
-        <td class="num mono">${fmtMoney(entry.pricePaid)}</td>
-        <td class="num mono">${fmtMoney(up)}</td>
-        <td class="num mono ${trendClass(gain)}">${fmtPct(gain)}</td>
-        <td class="num mono ${trendClass(d3)}">${fmtPct(d3)}</td>
-        <td class="num mono ${trendClass(d7)}">${fmtPct(d7)}</td>
-        <td class="num mono ${trendClass(d30)}">${fmtPct(d30)}</td>
-        <td class="num mono">${fmtMoney(total)}</td>
-        <td class="num"><span class="${popClass}">${popLabel}</span></td>
-        <td class="num" style="white-space:nowrap;">
-          <button class="sold-btn" title="Mark sold" data-idx="${entry._idx}">Sold</button>
-          <button class="remove-btn" title="Remove" data-idx="${entry._idx}">✕</button>
-        </td>
-      `;
-      tableBody.appendChild(tr);
+          </td>
+          <td class="mono" style="text-transform:capitalize;">${entry.rarity||'—'}</td>
+          <td>${legalityPill(entry)}</td>
+          <td><select class="row-list-select" data-idx="${entry._idx}" style="width:auto;">${listOptions}</select></td>
+          <td class="num mono">${entry.qty}</td>
+          <td class="num mono">${fmtMoney(entry.pricePaid)}</td>
+          <td class="num mono">${fmtMoney(up)}</td>
+          <td class="num mono ${trendClass(gain)}">${fmtPct(gain)}</td>
+          <td class="num mono ${trendClass(d3)}">${fmtPct(d3)}</td>
+          <td class="num mono ${trendClass(d7)}">${fmtPct(d7)}</td>
+          <td class="num mono ${trendClass(d30)}">${fmtPct(d30)}</td>
+          <td class="num mono">${fmtMoney(total)}</td>
+          <td class="num"><span class="${popClass}">${popLabel}</span></td>
+          <td class="num" style="white-space:nowrap;">
+            <button class="sold-btn" title="Mark sold" data-idx="${entry._idx}">Sold</button>
+            <button class="remove-btn" title="Remove" data-idx="${entry._idx}">✕</button>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
     });
   }
 
