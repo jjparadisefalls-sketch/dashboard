@@ -1780,6 +1780,31 @@ function PokeNews() {
 }
 
 
+// ── Special-variant detection ─────────────────────────────────────────────
+// A single source of truth for "this is not the plain card — it's a distinct,
+// separately-priced print" (stamps, Japanese Staff/"S-P" Stamp Box promos,
+// etc). Checked against both the notes field and the card-number field, since
+// people record variant markers in either place ("226 S-P", or a note that
+// says "Pokemon Center stamp"). Every place that groups, caches, searches, or
+// prices a card should call this instead of re-detecting variants itself —
+// that's what let the Magneton stamp bug happen (grouping didn't know about
+// stamps at all) and what caused Cramorant/Pikachu S-P promos to silently
+// price as the common card (matching didn't know "S-P" was significant).
+var VARIANT_PATTERNS = [
+  { tag: "pc",         label: "Pokemon Center", re: /pokemon\s*center|\bpc\s*stamp\b/i },
+  { tag: "pokeball",   label: "Pokeball",       re: /\bpoke\s*ball\b/i },
+  { tag: "masterball", label: "Masterball",     re: /\bmaster\s*ball\b/i },
+  { tag: "sp",         label: "Staff Promo (S-P)", re: /\bs[\s-]?p\b|staff\s*promo|stamp\s*box/i }
+];
+function detectVariant(card) {
+  var haystack = ((card && card.notes) || "") + " " + ((card && card.num) || "");
+  haystack = haystack.toLowerCase();
+  for (var i = 0; i < VARIANT_PATTERNS.length; i++) {
+    if (VARIANT_PATTERNS[i].re.test(haystack)) return VARIANT_PATTERNS[i];
+  }
+  return null;
+}
+
 // ── Price snapshot & history helpers ─────────────────────────────────────
 var SNAP_PFX   = "cc:snap:";
 var FETCH_PFX  = "cc:lastfetch:";
@@ -1825,60 +1850,85 @@ function getHistory(pdId, grader, grade) {
   return { latest: latest, p3d: find(3), p7d: find(7), p30d: find(30), count: snaps.length };
 }
 
-// Extract the best price for a card from PokeData pricing response
+// Extract the best price for a card from PokeData pricing response.
+// Returns { value, estimated }. `estimated` is true when there was no comp
+// at the exact requested grade and we fell back to the nearest grade that
+// does have one — that's flagged (never silently mixed with real exact-grade
+// prices) rather than showing a blank, which is what a brand-new/low-pop
+// graded card (e.g. a set released last week) would otherwise always show.
 function extractPrice(pricing, grader, grade) {
-  if (!pricing) return null;
+  if (!pricing) return { value: null, estimated: false };
   var g = (grader || "").toUpperCase().trim();
   var n = (grade  || "").toString().trim();
   var isGraded = g && g !== "RAW" && n;
 
-  if (isGraded) {
-    var nFloat = parseFloat(n);
-    // All key formats to try for graded cards
+  // Look up one specific grader+grade combo in the pricing object, trying
+  // every key format PokeData is known to use.
+  var readGrade = function(gr, gd) {
+    var nFloat = parseFloat(gd);
     var attempts = [
-      g + " " + nFloat.toFixed(1),           // "PSA 10.0"
-      g + " " + String(nFloat),              // "PSA 10"
-      g + " " + n,                           // "PSA 10" (raw string)
-      g + "-" + nFloat.toFixed(1),           // "PSA-10.0"
-      g.charAt(0).toUpperCase() + g.slice(1).toLowerCase() + " " + nFloat.toFixed(1), // "Psa 10.0"
-      // BGS half-grade formats
-      g + " " + n + ".0",                    // "BGS 9.50" -> "BGS 9.5.0" skip — but try "BGS 9.5"
-      g + " " + nFloat,                      // "BGS 9.5"
+      gr + " " + nFloat.toFixed(1),           // "PSA 10.0"
+      gr + " " + String(nFloat),              // "PSA 10"
+      gr + " " + gd,                          // "PSA 10" (raw string)
+      gr + "-" + nFloat.toFixed(1),           // "PSA-10.0"
+      gr.charAt(0).toUpperCase() + gr.slice(1).toLowerCase() + " " + nFloat.toFixed(1), // "Psa 10.0"
+      gr + " " + nFloat,                      // "BGS 9.5"
     ];
     for (var i = 0; i < attempts.length; i++) {
       if (pricing[attempts[i]] && pricing[attempts[i]].value > 0) return pricing[attempts[i]].value;
     }
     // Broad scan — any key containing the grader and grade number
     var keys = Object.keys(pricing);
-    var gradeStr = String(nFloat);          // "10", "9.5" etc
-    var gradeInt = String(Math.floor(nFloat)); // "10", "9" etc
+    var gradeStr = String(nFloat), gradeInt = String(Math.floor(nFloat));
     for (var j = 0; j < keys.length; j++) {
       var k = keys[j].toUpperCase();
-      if (k.indexOf(g) !== -1 && pricing[keys[j]].value > 0) {
+      if (k.indexOf(gr) !== -1 && pricing[keys[j]].value > 0) {
         if (k.indexOf(gradeStr.toUpperCase()) !== -1 || k.indexOf(gradeInt.toUpperCase()) !== -1) {
-          console.log("[PCT] Graded key found via scan:", keys[j], pricing[keys[j]].value);
           return pricing[keys[j]].value;
         }
       }
     }
-    // Log all available keys to help diagnose
-    console.warn("[PCT] No graded price for", g, n, "| Available keys:", JSON.stringify(Object.keys(pricing)));
-    // Last resort: for unrecognized graders, fall back to raw price
-    if (g !== "PSA" && g !== "BGS" && g !== "CGC") {
-      console.log("[PCT] Unknown grader", g, "— falling back to raw price");
-      return (pricing["TCGPlayer"] && pricing["TCGPlayer"].value > 0 ? pricing["TCGPlayer"].value : null) ||
-             (pricing["eBay Raw"]  && pricing["eBay Raw"].value  > 0 ? pricing["eBay Raw"].value  : null) ||
-             (pricing["Pokedata Raw"] && pricing["Pokedata Raw"].value > 0 ? pricing["Pokedata Raw"].value : null) ||
-             null;
-    }
     return null;
+  };
+
+  if (isGraded) {
+    var direct = readGrade(g, n);
+    if (direct != null) return { value: direct, estimated: false };
+
+    if (g === "PSA" || g === "BGS" || g === "CGC") {
+      // No comp at the exact grade — walk outward to the nearest grade that
+      // has one (closest first) instead of giving up. Common for cards from
+      // very recent sets/promos that don't have a full population yet.
+      var target = parseFloat(n);
+      var candidates = [];
+      for (var gr2 = 1; gr2 <= 10; gr2 += 0.5) { if (gr2 !== target) candidates.push(gr2); }
+      candidates.sort(function(a, b) { return Math.abs(a - target) - Math.abs(b - target); });
+      for (var c = 0; c < candidates.length; c++) {
+        var near = readGrade(g, String(candidates[c]));
+        if (near != null) {
+          console.log("[PCT] No exact " + g + " " + n + " comp — estimating from " + g + " " + candidates[c]);
+          return { value: near, estimated: true };
+        }
+      }
+      console.warn("[PCT] No graded price at any grade for", g, n, "| Available keys:", JSON.stringify(Object.keys(pricing)));
+      return { value: null, estimated: false };
+    }
+
+    // Unrecognized grader: fall back to raw price
+    console.log("[PCT] Unknown grader", g, "— falling back to raw price");
+    var rawFallback = (pricing["TCGPlayer"] && pricing["TCGPlayer"].value > 0 ? pricing["TCGPlayer"].value : null) ||
+           (pricing["eBay Raw"]  && pricing["eBay Raw"].value  > 0 ? pricing["eBay Raw"].value  : null) ||
+           (pricing["Pokedata Raw"] && pricing["Pokedata Raw"].value > 0 ? pricing["Pokedata Raw"].value : null) ||
+           null;
+    return { value: rawFallback, estimated: rawFallback != null };
   }
 
   // Raw card — prefer TCGPlayer, fall back through sources
-  return (pricing["TCGPlayer"]    && pricing["TCGPlayer"].value    > 0 ? pricing["TCGPlayer"].value    : null) ||
-         (pricing["eBay Raw"]     && pricing["eBay Raw"].value     > 0 ? pricing["eBay Raw"].value     : null) ||
-         (pricing["Pokedata Raw"] && pricing["Pokedata Raw"].value > 0 ? pricing["Pokedata Raw"].value : null) ||
-         null;
+  var rawVal = (pricing["TCGPlayer"]    && pricing["TCGPlayer"].value    > 0 ? pricing["TCGPlayer"].value    : null) ||
+               (pricing["eBay Raw"]     && pricing["eBay Raw"].value     > 0 ? pricing["eBay Raw"].value     : null) ||
+               (pricing["Pokedata Raw"] && pricing["Pokedata Raw"].value > 0 ? pricing["Pokedata Raw"].value : null) ||
+               null;
+  return { value: rawVal, estimated: false };
 }
 
 // Find best matching card from search results
@@ -2085,9 +2135,10 @@ function findBestMatch(results, card) {
     // Numeric-only comparison (handles leading zeros: "011" == "11")
     var ni = parseInt(num, 10), rni = parseInt(rn, 10);
     if (!isNaN(ni) && !isNaN(rni) && ni === rni) return true;
-    // Alpha-prefix promo numbers: "swsh134" matches "134", "sm210" matches "210"
-    // Strip known prefixes and compare the numeric part
-    var stripPrefix = function(s) { return s.replace(/^(gg|sv|swsh|smp|sm|xy|bw|dp|ex|pop)/, ""); };
+    // Alpha-prefix promo numbers: "swsh134" matches "134", "me038" matches "38"
+    // Strip ANY leading letters (not a hardcoded set-code list) so this keeps
+    // working for prefixes from sets that don't exist yet.
+    var stripPrefix = function(s) { return s.replace(/^[a-z]+-?/i, ""); };
     var numStripped = stripPrefix(num);
     var rnStripped  = stripPrefix(rn);
     if (numStripped && rnStripped && numStripped === rnStripped) return true;
@@ -2098,6 +2149,16 @@ function findBestMatch(results, card) {
   };
 
   var sameSet = function(r) { return set && setsMatch(r, set); };
+
+  // Loose name check: every significant word the user typed appears in the
+  // candidate's name (in any order). On its own this is too weak to trust —
+  // "Mega Charizard" would match both the X and Y forms. It's only used
+  // below, gated on the card number already narrowing things to one result.
+  var wordsMatch = function(r) {
+    var rn = (r.name || "").toLowerCase();
+    var words = name.split(/\s+/).filter(function(w) { return w.length > 2; });
+    return words.length > 0 && words.every(function(w) { return rn.includes(w); });
+  };
 
   // Number is the ultimate differentiator — NEVER drop it when present
   var m = eng.find(function(r) { return sameName(r) && sameNum(r) && sameSet(r); });
@@ -2111,6 +2172,18 @@ function findBestMatch(results, card) {
   // NOTE: Closest-number fallback removed — it caused wrong cards to be matched,
   // producing incorrect prices. If no exact match, return null for a clean "—".
 
+  // Last resort: the recorded name is missing a distinguishing word PokeData
+  // includes (e.g. "Mega Charizard" entered for the real "Mega Charizard X
+  // ex" — a two-word difference sameName()'s suffix-stripping doesn't cover).
+  // Trust this only when the number (+ set, if one candidate needs it) narrows
+  // the pool to exactly one card — an ambiguous pool is left unmatched rather
+  // than guessed at.
+  if (!m && num) {
+    var loose = eng.filter(function(r) { return wordsMatch(r) && sameNum(r); });
+    if (loose.length > 1 && set) loose = loose.filter(sameSet);
+    if (loose.length === 1) m = loose[0];
+  }
+
   if (m) console.log("[PCT] Matched:", card.name, card.num, card.set, "->", m.name, m.num, m.set_name, "id:", m.id);
   else console.warn("[PCT] No match for:", card.name, card.num, card.set);
   return m || null;
@@ -2122,16 +2195,13 @@ async function fetchCardPrice(card) {
   var rawNum = (card.num || "").toLowerCase().trim();
   var normNum = (!isNaN(parseInt(rawNum, 10)) && !/[a-z]/i.test(rawNum)) ? String(parseInt(rawNum, 10)) : rawNum;
 
-  // Detect Pokemon Center stamp from notes field
-  // Detect stamp type from notes field — "Pokemon Center", "Pokeball", or "Masterball"
-  var notesLower = (card.notes || "").toLowerCase();
-  var isPCStamp         = /pokemon\s*center|pc\s*stamp/.test(notesLower);
-  var isPokeballStamp   = /\bpokeball\b|\bpoke\s*ball\b/.test(notesLower);
-  var isMasterballStamp = /\bmasterball\b|\bmaster\s*ball\b/.test(notesLower);
-  var isAnyStamp = isPCStamp || isPokeballStamp || isMasterballStamp;
-  var stampType = isPCStamp ? "pc" : isPokeballStamp ? "pokeball" : isMasterballStamp ? "masterball" : "";
+  // Detect stamps/special-print markers via the single shared detector —
+  // checks both notes and the number field (e.g. "226 S-P").
+  var variant = detectVariant(card);
+  var isAnyStamp = !!variant;
+  var stampType = variant ? variant.tag : "";
 
-  // Include stamp in cache key so stamped and unstamped cards never share a cached ID
+  // Include variant in cache key so different prints never share a cached ID
   var graderKey = (card.grader && card.grader.toUpperCase() !== "RAW" && card.grade)
     ? (card.grader || "").toLowerCase().trim() + String(card.grade).replace(".", "") : "raw";
   var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, stampType, graderKey].join("|");
@@ -2153,69 +2223,66 @@ async function fetchCardPrice(card) {
       catch(e) { searchError = true; console.warn("[PCT] Proxy error:", e.message); return []; }
     };
     if (isAnyStamp) {
-      // PokeData names stamped variants as: "Magneton Pokemon Center 159", "Budew [Masterball]", etc.
-      // We bypass findBestMatch entirely for stamps and use a dedicated stamp matcher
-      var stampLabel = isPCStamp ? "Pokemon Center" : isPokeballStamp ? "Pokeball" : "Masterball";
-      var stampLabelLow = stampLabel.toLowerCase();
+      // PokeData names special prints as: "Magneton Pokemon Center 159",
+      // "Buneary Master Ball Holo", or (for Japanese Staff/"S-P" Stamp Box
+      // promos) something containing "S-P" / "Staff Promo" / "Stamp Box".
+      // We bypass findBestMatch entirely for these and use a dedicated matcher.
       var cardNameLow = (card.name || "").toLowerCase().trim();
 
-      // PokeData naming conventions for stamp variants:
-      // Pokemon Center: "Magneton Pokemon Center 159"
-      // Pokeball:       "Buneary Poke ball Holo"  (two words, lowercase b)
-      // Masterball:     "Buneary Master Ball Holo" (two words, capital B)
-      // Search WITHOUT stamp label — search by card name + set for broad results, then filter
-      var pdStampPattern = isPCStamp
-        ? "pokemon center"
-        : isPokeballStamp
-        ? "poke ball"     // PokeData uses "Poke ball" (space, lowercase b)
-        : "master ball";  // PokeData uses "Master Ball" (space, capital B)
+      // How to recognize this variant in a PokeData result name. "sp" has no
+      // single fixed phrase (unlike the ball stamps), so it uses a looser test.
+      var isTypedMatch =
+        variant.tag === "pc"         ? function(rn){ return rn.includes("pokemon center"); } :
+        variant.tag === "pokeball"   ? function(rn){ return rn.includes("poke ball") && !rn.includes("master ball"); } :
+        variant.tag === "masterball" ? function(rn){ return rn.includes("master ball"); } :
+        /* "sp" */                      function(rn){ return /\bs[\s-]?p\b/.test(rn) || rn.includes("staff promo") || rn.includes("stamp box"); };
+
+      var pdStampPattern =
+        variant.tag === "pc"         ? "pokemon center" :
+        variant.tag === "pokeball"   ? "poke ball" :
+        variant.tag === "masterball" ? "master ball" :
+        "s-p";
 
       // Search strategies — use set name for precision
       var SET_NAME_MAP_STAMP = {
         "pre": "Prismatic Evolutions", "svp": "Scarlet & Violet Promos",
         "mep": "Mega Evolution Promos", "pfl": "Phantasmal Flames",
         "jtg": "Journey Together", "dri": "Destined Rivals",
-        "asc": "Ascended Heroes", "scr": "Stellar Crown", "ssp": "Surging Sparks"
+        "asc": "Ascended Heroes", "scr": "Stellar Crown", "ssp": "Surging Sparks",
+        "pbl": "Pitch Black"
       };
       var setNameForStamp = SET_NAME_MAP_STAMP[(card.set||"").toLowerCase()] || card.set || "";
-      // Search by name + set (no stamp label) — PokeData returns all variants including stamped
+      // Numeric part of the card number, stripped of the variant tag itself
+      // (e.g. "227 S-P" -> "227") so it's a clean search/match term.
+      var numDigits = (normNum.match(/\d+/) || [""])[0];
       if (setNameForStamp) results = await safeSearch(card.name + " " + setNameForStamp);
-      if (!results.length && card.num) results = await safeSearch(card.name + " " + card.num);
+      if (!results.length && numDigits) results = await safeSearch(card.name + " " + numDigits);
       if (!results.length) results = await safeSearch(card.name + " " + pdStampPattern);
 
-      console.log("[PCT] Stamp search (" + stampLabel + ") for", card.name, "->", results.length, "raw results, looking for:", pdStampPattern);
+      console.log("[PCT] Variant search (" + variant.label + ") for", card.name, "->", results.length, "raw results, looking for:", pdStampPattern);
 
-      // --- Dedicated stamp matcher ---
-      // Filter by PokeData's actual stamp naming pattern, then match name+number
+      // --- Dedicated variant matcher ---
+      // Filter to results that actually carry this variant's marker, then
+      // match by name+number. Deliberately does NOT fall back to a
+      // same-numbered result without the marker — that would silently price
+      // a rare special print (e.g. an S-P Stamp Box promo) as the ordinary
+      // card sharing its number, which is exactly the bug this replaces.
       var findStampMatch = function(pool) {
         var english = pool.filter(function(r){ return r.language === "ENGLISH"; });
         var searchPool = english.length ? english : pool;
-
-        // Filter to correct stamp type using PokeData's naming convention
-        var typed = searchPool.filter(function(r) {
-          var rn = (r.name || "").toLowerCase();
-          if (!rn.includes(pdStampPattern)) return false;
-          // Reject wrong stamp types — "poke ball" must not match "master ball" entries
-          if (pdStampPattern === "poke ball"     && rn.includes("master ball")) return false;
-          if (pdStampPattern === "master ball"   && !rn.includes("master ball")) return false;
-          if (pdStampPattern === "pokemon center" && (rn.includes("poke ball") || rn.includes("master ball"))) return false;
-          return true;
-        });
-
+        var typed = searchPool.filter(function(r) { return isTypedMatch((r.name || "").toLowerCase()); });
         if (!typed.length) return null;
 
-        // Match by card name + number
         var best = typed.find(function(r) {
           var rn = (r.name || "").toLowerCase();
           var rnum = (r.num || "").toString();
-          var cardnum = (card.num || "").toString();
           var nameOk = rn.includes(cardNameLow) || cardNameLow.split(" ").filter(function(w){return w.length>2;}).every(function(w){ return rn.includes(w); });
-          var numOk = !card.num || rnum === cardnum || parseInt(rnum) === parseInt(cardnum);
+          var numOk = !numDigits || rnum === numDigits || parseInt(rnum, 10) === parseInt(numDigits, 10);
           return nameOk && numOk;
         });
         if (best) return best;
 
-        // Fallback: name only (number format may differ)
+        // Fallback: name only (number format may differ) — still requires the variant marker
         return typed.find(function(r) {
           var rn = (r.name || "").toLowerCase();
           return rn.includes(cardNameLow) || cardNameLow.split(" ").filter(function(w){return w.length>2;}).every(function(w){ return rn.includes(w); });
@@ -2225,16 +2292,16 @@ async function fetchCardPrice(card) {
       var stampMatch = findStampMatch(results);
 
       if (stampMatch) {
-        console.log("[PCT] Stamp match (" + stampLabel + "):", stampMatch.name, stampMatch.id);
+        console.log("[PCT] Variant match (" + variant.label + "):", stampMatch.name, stampMatch.id);
         pdId = String(stampMatch.id);
         try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
         try { localStorage.setItem(SEARCH_PFX + cacheKey + ":name", [stampMatch.name, stampMatch.set_name||"", stampMatch.num||""].filter(Boolean).join(" · ")); } catch(e) {}
         var pdStamp = await pdPricing(pdId);
-        var valStamp = extractPrice(pdStamp && pdStamp.pricing, card.grader, card.grade);
-        if (valStamp) saveSnap(pdId, valStamp, card.grader, card.grade);
-        return { pdId: pdId, value: valStamp };
+        var stampPrice = extractPrice(pdStamp && pdStamp.pricing, card.grader, card.grade);
+        if (stampPrice.value != null) saveSnap(pdId, stampPrice.value, card.grader, card.grade);
+        return { pdId: pdId, value: stampPrice.value, estimated: stampPrice.estimated };
       } else {
-        console.warn("[PCT] No stamp match (" + stampLabel + ") for:", card.name, card.num);
+        console.warn("[PCT] No " + variant.label + " match for:", card.name, card.num, "— refusing to guess to avoid mispricing it as the common card");
         return { pdId: null, value: null };
       }
     } else {
@@ -2252,6 +2319,7 @@ async function fetchCardPrice(card) {
         "cre": "Chilling Reign",        "bst": "Battle Styles",
         "brs": "Brilliant Stars",       "asr": "Astral Radiance",
         "hif": "Hidden Fates",          "shf": "Shining Fates",        "crg": "Chaos Rising",
+        "pbl": "Pitch Black",
         "viv": "Vivid Voltage",         "bst": "Battle Styles",
         "cri": "Chaos Rising",
         "lor": "Lost Origin",           "pal": "Paldea Evolved",
@@ -2312,12 +2380,12 @@ async function fetchCardPrice(card) {
 
   // Fresh fetch
   var pd = await pdPricing(pdId);
-  var value = extractPrice(pd && pd.pricing, card.grader, card.grade);
-  if (value) {
+  var priced = extractPrice(pd && pd.pricing, card.grader, card.grade);
+  if (priced.value != null) {
     try { localStorage.setItem(FETCH_PFX + pdId, String(Date.now())); } catch(e) {}
-    saveSnap(pdId, value, card.grader, card.grade);
+    saveSnap(pdId, priced.value, card.grader, card.grade);
   }
-  return { pdId: pdId, value: value };
+  return { pdId: pdId, value: priced.value, estimated: priced.estimated };
 }
 
 // ── Sport map (used by App and InventoryTab) ──────────────────────────────
@@ -2512,11 +2580,14 @@ function InvSection(_ref_inv) {
   var _sm = useState("value"); var sortMode = _sm[0]; var setSortMode = _sm[1];
   var _mm = useState("$"); var moveMode = _mm[0]; var setMoveMode = _mm[1];
 
-  // Group duplicate cards (same name+set+num+grader+grade) into single rows
+  // Group duplicate cards (same name+set+num+grader+grade+variant) into single rows.
+  // Variant (stamp/S-P/etc, via the shared detectVariant()) is part of the key so a
+  // Pokemon Center stamp copy, say, never gets merged into the same row/price as a
+  // plain copy of the same card — that merge is what caused the Magneton bug.
   var grouped = (function() {
     var map = {}, order = [];
     cards.forEach(function(c) {
-      var key = [c.name, c.set, c.num, (c.grader||'raw').toLowerCase(), c.grade||''].join('|');
+      var key = [c.name, c.set, c.num, (c.grader||'raw').toLowerCase(), c.grade||'', (detectVariant(c)||{}).tag||''].join('|');
       if (!map[key]) {
         map[key] = Object.assign({}, c, { qty:0, totalPaid:0, _ids:[] });
         order.push(key);
@@ -2525,7 +2596,7 @@ function InvSection(_ref_inv) {
       map[key].totalPaid += (c.paid||0) * (c.qty||1);
       map[key]._ids.push(c.id);
       if (c.pokedataId && !map[key].pokedataId) map[key].pokedataId = c.pokedataId;
-      if (c.value       && !map[key].value)      map[key].value      = c.value;
+      if (c.value       && !map[key].value)    { map[key].value = c.value; map[key].estimated = c.estimated; }
     });
     return order.map(function(k){ return map[k]; });
   })();
@@ -2622,7 +2693,11 @@ function InvSection(_ref_inv) {
                               (item._ids||[item.id]).forEach(function(id){ update(id, { value: isNaN(v) ? null : v }); });
                             }
                           })
-                        : cur ? "$"+cur.toFixed(2) : "—"
+                        : cur
+                          ? React.createElement("span", { title: item.estimated ? "No comp at this exact grade — estimated from the nearest graded sale" : undefined },
+                              (item.estimated ? "~$" : "$") + cur.toFixed(2)
+                            )
+                          : "—"
                   ),
                   React.createElement("td", { className:plClass, style:{ fontSize:11 } },
                     pl!=null?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"—"
@@ -2681,6 +2756,7 @@ function InvSection(_ref_inv) {
                             var changes = { fetchingPrice:false };
                             if (result.pdId)        changes.pokedataId = result.pdId;
                             if (result.value != null) changes.value    = result.value;
+                            changes.estimated = !!result.estimated;
                             update(id, changes);
                           });
                         }).catch(function() {
@@ -2746,6 +2822,7 @@ function InventoryTab(_ref21) {
           var changes = { fetchingPrice: false };
           if (result.pdId)   changes.pokedataId = result.pdId;
           if (result.value != null) changes.value = result.value;
+          changes.estimated = !!result.estimated;
           return Object.assign({},x,changes);
         });
       } catch(e) {
@@ -2887,12 +2964,9 @@ function InventoryTab(_ref21) {
       var cn=cols[0], sn=cols[1], num=cols[2], grader=cols[3], grade=cols[4], paid=cols[5], qty=cols[6], notes=cols[7], status=cols[8], sourceCol=cols[9];
       if (!cn) continue;
       var count = parseInt(qty)||1;
-      // Cache lookup on import — try stamp-aware key first, fall back to base key
-      // This ensures stamped cards find their stamped cache entry, not the base card entry
-      var notesForKey = (notes||"").toLowerCase();
-      var stampTypeForKey = /pokemon\s*center|pc\s*stamp/.test(notesForKey) ? "pc"
-                          : /pokeball|poke\s*ball/.test(notesForKey) ? "pokeball"
-                          : /masterball|master\s*ball/.test(notesForKey) ? "masterball" : "";
+      // Cache lookup on import — try variant-aware key first, fall back to base key.
+      // This ensures stamped/S-P cards find their own cache entry, not the base card's.
+      var stampTypeForKey = (detectVariant({ notes: notes, num: num }) || {}).tag || "";
       var rawNumForKey = (num||"").toLowerCase().trim();
       var normNumForKey = (!isNaN(parseInt(rawNumForKey,10)) && !/[a-z]/i.test(rawNumForKey)) ? String(parseInt(rawNumForKey,10)) : rawNumForKey;
       var graderForKey = (grader && grader.toUpperCase() !== "RAW" && grade)
@@ -4480,11 +4554,11 @@ function useAutoSnapshot(wl, inv, setInv) {
         try {
           var pd = await pdPricing(card.pokedataId);
           if (pd && pd.pricing) {
-            var value = extractPrice(pd.pricing, card.grader, card.grade);
-            if (value) {
-              saveSnap(card.pokedataId, value, card.grader, card.grade);
+            var priced2 = extractPrice(pd.pricing, card.grader, card.grade);
+            if (priced2.value != null) {
+              saveSnap(card.pokedataId, priced2.value, card.grader, card.grade);
               try { localStorage.setItem(FETCH_PFX + card.pokedataId, String(Date.now())); } catch(e){}
-              if (setInv) setInv(function(prev){ return prev.map(function(x){ return x.id===card.id?Object.assign({},x,{value:value}):x; }); });
+              if (setInv) setInv(function(prev){ return prev.map(function(x){ return x.id===card.id?Object.assign({},x,{value:priced2.value,estimated:priced2.estimated}):x; }); });
             }
           }
         } catch(e) {}
