@@ -2206,9 +2206,15 @@ async function fetchCardPrice(card) {
     ? (card.grader || "").toLowerCase().trim() + String(card.grade).replace(".", "") : "raw";
   var cacheKey = [(card.name || "").toLowerCase().trim(), (card.set || "").toLowerCase().trim(), normNum, stampType, graderKey].join("|");
 
-  // Search cache — but validate the cached ID still matches this card's number
+  // Search cache — but validate the cached ID still matches this card's number.
+  // For variant cards (stamps/S-P/etc), don't fall back to a bare card.pokedataId
+  // as a shortcut: that field can be left over from before this card's variant was
+  // recognized (e.g. a Japanese S-P promo that had matched to the wrong, ordinary
+  // print) and "Refresh All" would otherwise just keep re-confirming that same old
+  // wrong ID forever without ever searching again. Plain (non-variant) cards keep
+  // the fast path since their matching was already reliable.
   var cachedId = localStorage.getItem(SEARCH_PFX + cacheKey) || null;
-  var pdId = cachedId || card.pokedataId || null;
+  var pdId = cachedId || (isAnyStamp ? null : card.pokedataId) || null;
 
   // If we have a cached/stored ID but also have a card number, verify it's correct
   // The search cache key encodes name+set+num, so it already uniquely identifies the card.
@@ -2229,13 +2235,19 @@ async function fetchCardPrice(card) {
       // We bypass findBestMatch entirely for these and use a dedicated matcher.
       var cardNameLow = (card.name || "").toLowerCase().trim();
 
-      // How to recognize this variant in a PokeData result name. "sp" has no
-      // single fixed phrase (unlike the ball stamps), so it uses a looser test.
+      // How to recognize this variant on a PokeData result. "sp" has no single
+      // fixed phrase (unlike the ball stamps) and — critically — these are
+      // Japanese-exclusive promos, so the marker is as likely to be in the
+      // set name/code as in the card name. Checked against the whole result,
+      // not just r.name.
       var isTypedMatch =
-        variant.tag === "pc"         ? function(rn){ return rn.includes("pokemon center"); } :
-        variant.tag === "pokeball"   ? function(rn){ return rn.includes("poke ball") && !rn.includes("master ball"); } :
-        variant.tag === "masterball" ? function(rn){ return rn.includes("master ball"); } :
-        /* "sp" */                      function(rn){ return /\bs[\s-]?p\b/.test(rn) || rn.includes("staff promo") || rn.includes("stamp box"); };
+        variant.tag === "pc"         ? function(r){ return (r.name||"").toLowerCase().includes("pokemon center"); } :
+        variant.tag === "pokeball"   ? function(r){ var rn=(r.name||"").toLowerCase(); return rn.includes("poke ball") && !rn.includes("master ball"); } :
+        variant.tag === "masterball" ? function(r){ return (r.name||"").toLowerCase().includes("master ball"); } :
+        /* "sp" */                      function(r){
+                                          var hay = ((r.name||"") + " " + (r.set_name||"") + " " + (r.set_code||"")).toLowerCase();
+                                          return /\bs[\s-]?p\b/.test(hay) || hay.includes("staff promo") || hay.includes("stamp box");
+                                        };
 
       var pdStampPattern =
         variant.tag === "pc"         ? "pokemon center" :
@@ -2255,7 +2267,13 @@ async function fetchCardPrice(card) {
       // Numeric part of the card number, stripped of the variant tag itself
       // (e.g. "227 S-P" -> "227") so it's a clean search/match term.
       var numDigits = (normNum.match(/\d+/) || [""])[0];
-      if (setNameForStamp) results = await safeSearch(card.name + " " + setNameForStamp);
+      // "S-P" IS effectively this card's set identifier (it's a Japanese
+      // promo pool, not a stamp applied within an ordinary set) — search for
+      // it directly first, rather than last, or a generic "<name> Promo"
+      // query returns a page of ordinary promo prints that never even
+      // includes the real S-P card.
+      if (variant.tag === "sp") results = await safeSearch(card.name + " " + pdStampPattern);
+      if (!results.length && setNameForStamp) results = await safeSearch(card.name + " " + setNameForStamp);
       if (!results.length && numDigits) results = await safeSearch(card.name + " " + numDigits);
       if (!results.length) results = await safeSearch(card.name + " " + pdStampPattern);
 
@@ -2268,9 +2286,16 @@ async function fetchCardPrice(card) {
       // a rare special print (e.g. an S-P Stamp Box promo) as the ordinary
       // card sharing its number, which is exactly the bug this replaces.
       var findStampMatch = function(pool) {
-        var english = pool.filter(function(r){ return r.language === "ENGLISH"; });
-        var searchPool = english.length ? english : pool;
-        var typed = searchPool.filter(function(r) { return isTypedMatch((r.name || "").toLowerCase()); });
+        // S-P promos are Japanese-exclusive — restricting to English (as the
+        // other stamp types reasonably do) would filter the real card out
+        // before it's ever considered. Only prefer English for variants that
+        // actually have English prints.
+        var searchPool = pool;
+        if (variant.tag !== "sp") {
+          var english = pool.filter(function(r){ return r.language === "ENGLISH"; });
+          searchPool = english.length ? english : pool;
+        }
+        var typed = searchPool.filter(isTypedMatch);
         if (!typed.length) return null;
 
         var best = typed.find(function(r) {
@@ -2323,7 +2348,8 @@ async function fetchCardPrice(card) {
         "viv": "Vivid Voltage",         "bst": "Battle Styles",
         "cri": "Chaos Rising",
         "lor": "Lost Origin",           "pal": "Paldea Evolved",
-        "svp": "Scarlet & Violet Promos", "pgo": "Pokemon GO"
+        "svp": "Scarlet & Violet Promos", "pgo": "Pokemon GO",
+        "smp": "SM-P Promos"
       };
       var setKey = (card.set || "").toLowerCase().trim();
       var searchSetName = SET_NAME_MAP[setKey] || card.set || "";
@@ -2359,7 +2385,7 @@ async function fetchCardPrice(card) {
     }
     if (!match) {
       console.warn("[PCT] No match for:", card.name, card.set, card.num);
-      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp|crg|cri|shf|hif|viv|bst|svp|smp|sm)$/i.test((card.set||"").trim());
+      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp|crg|cri|shf|hif|viv|bst|svp|smp|sm|pbl)$/i.test((card.set||"").trim());
       if (results.length > 0 && !skipNomatch) {
         try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
       }
