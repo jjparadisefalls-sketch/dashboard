@@ -2324,10 +2324,10 @@ async function fetchCardPrice(card) {
         var pdStamp = await pdPricing(pdId);
         var stampPrice = extractPrice(pdStamp && pdStamp.pricing, card.grader, card.grade);
         if (stampPrice.value != null) saveSnap(pdId, stampPrice.value, card.grader, card.grade);
-        return { pdId: pdId, value: stampPrice.value, estimated: stampPrice.estimated };
+        return { pdId: pdId, value: stampPrice.value, estimated: stampPrice.estimated, checked: true };
       } else {
         console.warn("[PCT] No " + variant.label + " match for:", card.name, card.num, "— refusing to guess to avoid mispricing it as the common card");
-        return { pdId: null, value: null };
+        return { pdId: null, value: null, checked: true };
       }
     } else {
       var SET_NAME_MAP = {
@@ -2366,7 +2366,7 @@ async function fetchCardPrice(card) {
     }
     if (searchError && !results.length) {
       console.warn("[PCT] Proxy unavailable for:", card.name, card.set, card.num);
-      return { pdId: null, value: null, proxyError: true };
+      return { pdId: null, value: null, proxyError: true, checked: false };
     }
     var match = findBestMatch(results, card);
     // Cardlookup: runs AFTER findBestMatch fails — direct PokeData API, bypasses stale Render index
@@ -2385,11 +2385,11 @@ async function fetchCardPrice(card) {
     }
     if (!match) {
       console.warn("[PCT] No match for:", card.name, card.set, card.num);
-      var skipNomatch = /^(mep|asc|pfl|dri|jtg|pre|ssp|crg|cri|shf|hif|viv|bst|svp|smp|sm|pbl)$/i.test((card.set||"").trim());
+      var skipNomatch = /^(mep|meg|asc|pfl|dri|jtg|pre|ssp|crg|cri|shf|hif|viv|bst|svp|smp|sm|pbl)$/i.test((card.set||"").trim());
       if (results.length > 0 && !skipNomatch) {
         try { localStorage.setItem(SEARCH_PFX + cacheKey, "NOMATCH"); } catch(e) {}
       }
-      return { pdId: null, value: null };
+      return { pdId: null, value: null, checked: true };
     }
     pdId = String(match.id);
     try { localStorage.setItem(SEARCH_PFX + cacheKey, pdId); } catch(e) {}
@@ -2398,7 +2398,7 @@ async function fetchCardPrice(card) {
   }
 
   // Skip NOMATCH sentinel — proxy was alive but card genuinely not in PokeData
-  if (pdId === "NOMATCH") return { pdId: null, value: null };
+  if (pdId === "NOMATCH") return { pdId: null, value: null, checked: true };
 
   var isGraded = card.grader && card.grader.toUpperCase() !== "RAW" && card.grade;
 
@@ -2411,7 +2411,7 @@ async function fetchCardPrice(card) {
     try { localStorage.setItem(FETCH_PFX + pdId, String(Date.now())); } catch(e) {}
     saveSnap(pdId, priced.value, card.grader, card.grade);
   }
-  return { pdId: pdId, value: priced.value, estimated: priced.estimated };
+  return { pdId: pdId, value: priced.value, estimated: priced.estimated, checked: true };
 }
 
 // ── Sport map (used by App and InventoryTab) ──────────────────────────────
@@ -2622,6 +2622,7 @@ function InvSection(_ref_inv) {
       map[key].totalPaid += (c.paid||0) * (c.qty||1);
       map[key]._ids.push(c.id);
       if (c.pokedataId && !map[key].pokedataId) map[key].pokedataId = c.pokedataId;
+      if (c.priceChecked) map[key].priceChecked = true;
       if (c.value       && !map[key].value)    { map[key].value = c.value; map[key].estimated = c.estimated; }
     });
     return order.map(function(k){ return map[k]; });
@@ -2723,7 +2724,9 @@ function InvSection(_ref_inv) {
                           ? React.createElement("span", { title: item.estimated ? "No comp at this exact grade — estimated from the nearest graded sale" : undefined },
                               (item.estimated ? "~$" : "$") + cur.toFixed(2)
                             )
-                          : "—"
+                          : item.priceChecked
+                            ? React.createElement("span", { title: "Searched PokeData — no matching card found. Verify the name/set/number, or the card may not be indexed yet.", style:{ color:"var(--muted)" } }, "—")
+                            : React.createElement("span", { title: "Not fetched yet — click Refresh All Prices or ↺", style:{ color:"var(--muted)", opacity:0.5 } }, "—")
                   ),
                   React.createElement("td", { className:plClass, style:{ fontSize:11 } },
                     pl!=null?(pl>=0?"+":"")+"$"+Math.abs(pl).toFixed(2):"—"
@@ -2783,6 +2786,7 @@ function InvSection(_ref_inv) {
                             if (result.pdId)        changes.pokedataId = result.pdId;
                             if (result.value != null) changes.value    = result.value;
                             changes.estimated = !!result.estimated;
+                            if (result.checked) changes.priceChecked = true;
                             update(id, changes);
                           });
                         }).catch(function() {
@@ -2849,6 +2853,7 @@ function InventoryTab(_ref21) {
           if (result.pdId)   changes.pokedataId = result.pdId;
           if (result.value != null) changes.value = result.value;
           changes.estimated = !!result.estimated;
+          if (result.checked) changes.priceChecked = true;
           return Object.assign({},x,changes);
         });
       } catch(e) {
