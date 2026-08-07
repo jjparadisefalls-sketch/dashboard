@@ -25,6 +25,7 @@
     --radius: 3px;
   }
   *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
   body{
     margin:0;
     background:
@@ -312,7 +313,10 @@
 
     <div class="panel">
       <div class="toolbar">
-        <input type="text" id="filterInput" placeholder="Filter by name…">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <input type="text" id="filterInput" placeholder="Filter by name…">
+          <a href="#soldCardsPanel" style="color:var(--gold);font-size:12px;font-family:'IBM Plex Mono', monospace;white-space:nowrap;">Sold cards ↓</a>
+        </div>
         <div class="toolbar-right">
           <select id="listFilterSelect" class="list-select" data-no-list-label="All lists" style="width:auto;">
             <option value="">All lists</option>
@@ -353,7 +357,7 @@
     </div>
   </div>
 
-  <div class="panel" id="soldCardsPanel" style="margin-top:24px;">
+  <div class="panel" id="soldCardsPanel" style="margin-top:24px;scroll-margin-top:24px;">
     <div class="toolbar">
       <div>
         <h2 style="margin:0;border:none;padding:0;">Sold Cards</h2>
