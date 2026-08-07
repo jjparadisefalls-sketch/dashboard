@@ -220,6 +220,21 @@
     </div>
   </header>
 
+  <div class="panel" id="dataSyncPanel" style="margin-bottom:20px;padding:14px 20px;">
+    <div class="toolbar" style="flex-wrap:wrap;">
+      <div>
+        <div style="font-family:'IBM Plex Mono', monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);">Move to another browser / computer</div>
+        <div class="card-set" style="margin-top:4px;">Everything here is saved only in this browser — export a backup file, then import it anywhere else to bring your data with you.</div>
+      </div>
+      <div class="toolbar-right" style="align-items:center;">
+        <button id="exportDataBtn">Export data</button>
+        <label for="importDataFile" style="background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:10px 14px;font-family:'IBM Plex Mono', monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;">Import data</label>
+        <input type="file" id="importDataFile" accept=".json" style="display:none;">
+      </div>
+    </div>
+    <div class="form-msg" id="dataSyncMsg"></div>
+  </div>
+
   <nav class="tabs">
     <button class="tab-btn active" data-tab="collection">Collection Tracker</button>
     <button class="tab-btn" data-tab="popularity">Card Popularity</button>
@@ -714,7 +729,10 @@ Consider,mkm,3,,,0.25"></textarea>
 <div id="soldModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1000;align-items:center;justify-content:center;">
   <div class="panel" style="max-width:360px;width:90%;">
     <h2>Mark as Sold</h2>
-    <label for="soldModalPrice">Total sold for</label>
+    <label for="soldModalQty">Quantity sold</label>
+    <input type="number" id="soldModalQty" min="1" step="1">
+    <div class="card-set" id="soldModalQtyHint" style="margin-top:4px;"></div>
+    <label for="soldModalPrice" style="margin-top:14px;">Total sold for</label>
     <input type="number" id="soldModalPrice" min="0" step="0.01" placeholder="e.g. 45.00">
     <label for="soldModalNet">Total net received (after fees/shipping)</label>
     <input type="number" id="soldModalNet" min="0" step="0.01" placeholder="e.g. 40.00">
@@ -770,6 +788,78 @@ const tableBody = $('tableBody');
 const emptyState = $('emptyState');
 const formMsg = $('formMsg');
 
+// --- Export / Import (move all data between browsers/computers) ---
+// Deliberately excludes API keys (TopDeck.gg, TCG API) — those stay local to
+// each browser and get re-pasted once per device, rather than living inside
+// a backup file that could end up shared or lost.
+const EXPORT_KEYS = {
+  collection: 'collection',
+  lists: 'collection_lists_v1',
+  sealed: 'sealed_watchlist_v1',
+  viewedCards: 'viewed_decklist_cards_v1',
+  popularityStandard: 'popularity_history_standard_v1',
+  popularityCommander: 'popularity_history_commander_v1'
+};
+
+$('exportDataBtn').addEventListener('click', async () => {
+  $('dataSyncMsg').textContent = 'Preparing backup…';
+  $('dataSyncMsg').className = 'form-msg';
+  try{
+    const payload = { app: 'mtg-collection-tracker', version: 1, exportedAt: new Date().toISOString(), data: {} };
+    for(const key of Object.values(EXPORT_KEYS)){
+      try{
+        const raw = await storageGet(key);
+        payload.data[key] = raw ? JSON.parse(raw) : null;
+      }catch(e){
+        payload.data[key] = null;
+      }
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mtg-collection-backup-' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    $('dataSyncMsg').textContent = 'Downloaded — bring this file to the other browser or computer and use "Import data" there.';
+    $('dataSyncMsg').className = 'form-msg ok';
+  }catch(e){
+    $('dataSyncMsg').textContent = 'Could not build the backup file: ' + (e.message || 'unknown error');
+    $('dataSyncMsg').className = 'form-msg error';
+  }
+});
+
+$('importDataFile').addEventListener('change', () => {
+  const file = $('importDataFile').files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(!parsed || typeof parsed.data !== 'object'){
+        throw new Error('This doesn\'t look like a backup file from this app.');
+      }
+      const ok = window.confirm('This replaces your current data on this browser with the backup file — cards, lists, sealed inventory, sold history, and popularity data. This can\'t be undone. Continue?');
+      if(!ok){ $('importDataFile').value = ''; return; }
+      for(const key of Object.values(EXPORT_KEYS)){
+        if(parsed.data[key] !== undefined && parsed.data[key] !== null){
+          await storageSet(key, JSON.stringify(parsed.data[key]));
+        }
+      }
+      $('dataSyncMsg').textContent = 'Import successful — reloading…';
+      $('dataSyncMsg').className = 'form-msg ok';
+      setTimeout(() => location.reload(), 700);
+    }catch(e){
+      $('dataSyncMsg').textContent = 'Could not import that file: ' + (e.message || 'invalid format.');
+      $('dataSyncMsg').className = 'form-msg error';
+      $('importDataFile').value = '';
+    }
+  };
+  reader.readAsText(file);
+});
+
 function fmtMoney(n){
   if(n === null || n === undefined || isNaN(n)) return '—';
   return '$' + Number(n).toFixed(2);
@@ -814,11 +904,16 @@ let soldModalContext = null; // { type: 'card' | 'sealed', idx: number }
 
 function openSoldModal(type, idx){
   soldModalContext = { type, idx };
+  const currentQty = (type === 'card' ? collection[idx] : sealedWatchlist[idx]).qty || 1;
+  $('soldModalQty').value = currentQty;
+  $('soldModalQty').max = currentQty;
+  $('soldModalQty').min = 1;
+  $('soldModalQtyHint').textContent = currentQty > 1 ? currentQty + ' currently in inventory — selling fewer keeps the rest active.' : '';
   $('soldModalPrice').value = '';
   $('soldModalNet').value = '';
   $('soldModalMsg').textContent = '';
   $('soldModalOverlay').style.display = 'flex';
-  $('soldModalPrice').focus();
+  $('soldModalQty').focus();
 }
 function closeSoldModal(){
   $('soldModalOverlay').style.display = 'none';
@@ -830,8 +925,16 @@ $('soldModalOverlay').addEventListener('click', (e) => {
 });
 $('soldModalConfirm').addEventListener('click', async () => {
   if(!soldModalContext) return;
+  const { type, idx } = soldModalContext;
+  const currentQty = (type === 'card' ? collection[idx] : sealedWatchlist[idx]).qty || 1;
+  const qtyRaw = $('soldModalQty').value.trim();
   const priceRaw = $('soldModalPrice').value.trim();
   const netRaw = $('soldModalNet').value.trim();
+  if(qtyRaw === '' || isNaN(qtyRaw) || Number(qtyRaw) < 1){
+    $('soldModalMsg').textContent = 'Enter how many you sold (at least 1).';
+    $('soldModalMsg').className = 'form-msg error';
+    return;
+  }
   if(priceRaw === '' || isNaN(priceRaw)){
     $('soldModalMsg').textContent = 'Enter what it sold for.';
     $('soldModalMsg').className = 'form-msg error';
@@ -842,11 +945,11 @@ $('soldModalConfirm').addEventListener('click', async () => {
     $('soldModalMsg').className = 'form-msg error';
     return;
   }
+  const qtySold = Math.min(Math.round(Number(qtyRaw)), currentQty);
   const soldPrice = Number(priceRaw);
   const soldNet = Number(netRaw);
-  const { type, idx } = soldModalContext;
-  if(type === 'card') await markCardSold(idx, soldPrice, soldNet);
-  else await markSealedSold(idx, soldPrice, soldNet);
+  if(type === 'card') await markCardSold(idx, soldPrice, soldNet, qtySold);
+  else await markSealedSold(idx, soldPrice, soldNet, qtySold);
   closeSoldModal();
 });
 
@@ -1162,11 +1265,29 @@ function render(){
   renderSoldCards();
 }
 
-async function markCardSold(idx, soldPrice, soldNet){
-  collection[idx].sold = true;
-  collection[idx].soldDate = new Date().toISOString();
-  collection[idx].soldPrice = soldPrice;
-  collection[idx].soldNet = soldNet;
+async function markCardSold(idx, soldPrice, soldNet, qtySold){
+  const entry = collection[idx];
+  const fullQty = entry.qty || 1;
+  const sellQty = Math.min(Math.max(1, Math.round(qtySold || fullQty)), fullQty);
+  const soldDate = new Date().toISOString();
+
+  if(sellQty >= fullQty){
+    entry.sold = true;
+    entry.soldDate = soldDate;
+    entry.soldPrice = soldPrice;
+    entry.soldNet = soldNet;
+  } else {
+    entry.qty = fullQty - sellQty;
+    const soldEntry = Object.assign({}, entry, {
+      qty: sellQty,
+      sold: true,
+      soldDate: soldDate,
+      soldPrice: soldPrice,
+      soldNet: soldNet,
+      priceHistory: (entry.priceHistory || []).slice()
+    });
+    collection.push(soldEntry);
+  }
   await saveCollection();
   render();
 }
@@ -2471,11 +2592,28 @@ function renderSealedWatchlist(){
   renderSoldSealed();
 }
 
-async function markSealedSold(idx, soldPrice, soldNet){
-  sealedWatchlist[idx].sold = true;
-  sealedWatchlist[idx].soldDate = new Date().toISOString();
-  sealedWatchlist[idx].soldPrice = soldPrice;
-  sealedWatchlist[idx].soldNet = soldNet;
+async function markSealedSold(idx, soldPrice, soldNet, qtySold){
+  const entry = sealedWatchlist[idx];
+  const fullQty = entry.qty || 1;
+  const sellQty = Math.min(Math.max(1, Math.round(qtySold || fullQty)), fullQty);
+  const soldDate = new Date().toISOString();
+
+  if(sellQty >= fullQty){
+    entry.sold = true;
+    entry.soldDate = soldDate;
+    entry.soldPrice = soldPrice;
+    entry.soldNet = soldNet;
+  } else {
+    entry.qty = fullQty - sellQty;
+    const soldEntry = Object.assign({}, entry, {
+      qty: sellQty,
+      sold: true,
+      soldDate: soldDate,
+      soldPrice: soldPrice,
+      soldNet: soldNet
+    });
+    sealedWatchlist.push(soldEntry);
+  }
   await saveSealedWatchlist();
   renderSealedWatchlist();
 }
