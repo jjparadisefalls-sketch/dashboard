@@ -25,7 +25,6 @@
     --radius: 3px;
   }
   *{box-sizing:border-box;}
-  html{scroll-behavior:smooth;}
   body{
     margin:0;
     background:
@@ -199,6 +198,7 @@
 </head>
 <body>
 <div class="wrap">
+  <a id="pageTop"></a>
 
   <header class="top">
     <div>
@@ -363,7 +363,8 @@
         <h2 style="margin:0;border:none;padding:0;">Sold Cards</h2>
         <div class="card-set" style="margin-top:6px;">Cards you've marked "Sold" from the table above — kept separate from active inventory.</div>
       </div>
-      <div class="toolbar-right">
+      <div class="toolbar-right" style="align-items:center;">
+        <a href="#pageTop" style="color:var(--gold);font-size:12px;font-family:'IBM Plex Mono', monospace;white-space:nowrap;">↑ Back to top</a>
         <div>
           <div class="stat-label">Total Net Sales</div>
           <div class="stat-value small" id="soldCardsTotalNet" style="color:var(--gold);">$0.00</div>
